@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SISCR{% endblock %}
+
+{% block page_title %}Visão Geral{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+
+        <div id="card-total" class="bg-blue-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-semibold opacity-80">Total de Envios</h3>
+                    <p class="text-3xl font-bold mt-1" id="total-envios">0</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M12 2a10 10 0 0 0-9.95 8.95A10 10 0 0 0 10 22.95V12"></path>
+                </svg>
+            </div>
+        </div>
+
+        <div id="card-em-transito" class="bg-yellow-500 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-semibold opacity-80">Em Trânsito</h3>
+                    <p class="text-3xl font-bold mt-1" id="em-transito">0</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+            </div>
+        </div>
+
+        <div id="card-entregues" class="bg-green-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-semibold opacity-80">Entregues</h3>
+                    <p class="text-3xl font-bold mt-1" id="entregues">0</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </div>
+        </div>
+
+        <div id="card-atrasados" class="bg-red-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-semibold opacity-80">Atrasados</h3>
+                    <p class="text-3xl font-bold mt-1" id="atrasados">0</p>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white p-8 rounded-xl shadow-2xl mt-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b-2 border-gray-200 pb-2">Movimentações Recentes</h2>
+        <div class="overflow-x-auto">
+            <table id="shipments-table" class="min-w-full leading-normal">
+                <thead>
+                    <tr class="bg-gray-100 text-gray-600 uppercase text-sm leading-normal">
+                        <th class="py-3 px-6 text-left">Processo</th>
+                        <th class="py-3 px-6 text-left">cliente</th>
+                        <th class="py-3 px-6 text-left">Origem</th>
+                        <th class="py-3 px-6 text-left">Destino</th>
+                        <th class="py-3 px-6 text-left">Status</th>
+                        <th class="py-3 px-6 text-left">Previsão Entrega</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-600 text-sm font-light">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Este array deve ser preenchido com dados reais do seu backend Django
+    // Por enquanto, usaremos um mock para o layout
+    const shipments = [
+        { id: 'PROC-1001', client: 'Empresa A', origin: 'Xangai', destination: 'Santos', status: 'Em Trânsito', estimatedArrival: new Date('2025-11-10') },
+        { id: 'PROC-1002', client: 'Empresa B', origin: 'Hamburg', destination: 'Manaus', status: 'Entregue', estimatedArrival: new Date('2025-10-20') },
+        { id: 'PROC-1003', client: 'Empresa C', origin: 'Nova Iorque', destination: 'Rio de Janeiro', status: 'Atrasado', estimatedArrival: new Date('2025-10-01') },
+        { id: 'PROC-1004', client: 'Empresa D', origin: 'Buenos Aires', destination: 'Porto Alegre', status: 'Em Trânsito', estimatedArrival: new Date('2025-11-25') },
+        { id: 'PROC-1005', client: 'Empresa E', origin: 'Tokyo', destination: 'Recife', status: 'Entregue', estimatedArrival: new Date('2025-09-15') },
+    ];
+
+    function updateDashboard(data) {
+        const total = data.length;
+        const emTransito = data.filter(s => s.status === 'Em Trânsito').length;
+        const entregues = data.filter(s => s.status === 'Entregue').length;
+        const atrasados = data.filter(s => s.status === 'Atrasado').length;
+
+        document.getElementById('total-envios').textContent = total;
+        document.getElementById('em-transito').textContent = emTransito;
+        document.getElementById('entregues').textContent = entregues;
+        document.getElementById('atrasados').textContent = atrasados;
+
+        renderTable(data);
+    }
+
+    function renderTable(shipments) {
+        const tableBody = document.querySelector('#shipments-table tbody');
+        tableBody.innerHTML = ''; // Limpa as linhas existentes
+
+        shipments.forEach(shipment => {
+            let statusClass = '';
+            switch (shipment.status) {
+                case 'Em Trânsito':
+                    statusClass = 'text-yellow-600 font-semibold';
+                    break;
+                case 'Entregue':
+                    statusClass = 'text-green-600 font-semibold';
+                    break;
+                case 'Atrasado':
+                    statusClass = 'text-red-600 font-semibold';
+                    break;
+                default:
+                    statusClass = 'text-gray-600';
+            }
+
+            const row = document.createElement('tr');
+            row.classList.add('border-b', 'border-gray-200', 'hover:bg-gray-100');
+            row.innerHTML = `
+                <td class="py-3 px-6 whitespace-nowrap">${shipment.id}</td>
+                <td class="py-3 px-6 whitespace-nowrap">${shipment.client}</td>   
+                <td class="py-3 px-6 whitespace-nowrap">${shipment.origin}</td>
+                <td class="py-3 px-6 whitespace-nowrap">${shipment.destination}</td>
+                <td class="py-3 px-6 whitespace-nowrap ${statusClass}">${shipment.status}</td>
+                <td class="py-3 px-6 whitespace-nowrap">${shipment.estimatedArrival.toLocaleDateString('pt-BR')}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function showShipmentsByStatus(status) {
+        const filteredData = status ? shipments.filter(s => s.status === status) : shipments;
+        renderTable(filteredData);
+    }
+
+    // Adiciona event listeners para os cards
+    document.getElementById('card-total').addEventListener('click', () => showShipmentsByStatus(null));
+    document.getElementById('card-em-transito').addEventListener('click', () => showShipmentsByStatus('Em Trânsito'));
+    document.getElementById('card-entregues').addEventListener('click', () => showShipmentsByStatus('Entregue'));
+    document.getElementById('card-atrasados').addEventListener('click', () => showShipmentsByStatus('Atrasado'));
+
+    // Inicializa o dashboard com todos os dados
+    updateDashboard(shipments);
+
+    // Lembrete: Na versão final, 'shipments' será carregado de forma assíncrona do backend via API/AJAX.
+    // O array 'shipments' mockado será removido.
+</script>
+{% endblock %}

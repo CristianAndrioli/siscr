@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro Geral{% endblock %}
+
+{% block page_title %}Cadastro Geral{% endblock %}
+
+{% block content %}
+<div class="bg-white p-8 rounded-xl shadow-2xl transition-all duration-300">
+    <h2 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-2 border-indigo-600 pb-2">
+        Cadastro Geral de Pessoas
+    </h2>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="bg-{{ message.tags }}-100 border-l-4 border-{{ message.tags }}-500 text-{{ message.tags }}-700 p-4 mb-4 rounded-md" role="alert">
+                <p>{{ message }}</p>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="POST" class="space-y-8">
+        {% csrf_token %}
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
+            <div class="col-span-1">
+                <label for="{{ form.codigo_cadastro.id_for_label }}" class="block text-sm font-medium text-gray-700">Código</label>
+                {{ form.codigo_cadastro }}
+                <p class="text-xs text-gray-500 mt-1">Gerado automaticamente.</p>
+            </div>
+
+            <div class="col-span-1">
+                <label for="{{ form.tipo.id_for_label }}" class="block text-sm font-medium text-gray-700">Tipo de Cadastro</label>
+                {{ form.tipo }}
+            </div>
+            
+            <div class="col-span-1" id="div_tipo_classificacao">
+                <label for="{{ form.tipo_classificacao.id_for_label }}" class="block text-sm font-medium text-gray-700">Classificação</label>
+                <select id="tipo_classificacao" name="tipo_classificacao" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2">
+                    <option value="PF" {% if form.tipo.value == 'PF' %}selected{% endif %}>Pessoa Física (PF)</option>
+                    <option value="PJ" {% if form.tipo.value == 'PJ' %}selected{% endif %}>Pessoa Jurídica (PJ)</option>
+                </select>
+            </div>
+
+            <div class="col-span-1">
+                <label for="{{ form.cpf_cnpj.id_for_label }}" class="block text-sm font-medium text-gray-700">CPF/CNPJ</label>
+                {{ form.cpf_cnpj }}
+            </div>
+
+            <div class="col-span-4 hidden" id="div_nome_completo">
+                <label for="{{ form.nome_completo.id_for_label }}" class="block text-sm font-medium text-gray-700">Nome Completo</label>
+                {{ form.nome_completo }}
+            </div>
+
+            <div class="col-span-2 hidden" id="div_razao_social">
+                <label for="{{ form.razao_social.id_for_label }}" class="block text-sm font-medium text-gray-700">Razão Social</label>
+                {{ form.razao_social }}
+            </div>
+            <div class="col-span-2 hidden" id="div_nome_fantasia">
+                <label for="{{ form.nome_fantasia.id_for_label }}" class="block text-sm font-medium text-gray-700">Nome Fantasia</label>
+                {{ form.nome_fantasia }}
+            </div>
+
+            <div class="col-span-4 hidden" id="div_contribuinte">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Contribuinte ICMS?</label>
+                <div class="flex space-x-4">
+                    <label class="inline-flex items-center">
+                        <input type="radio" name="contribuinte" value="True" {% if form.contribuinte.value or form.contribuinte.value is None %}checked{% endif %} class="form-radio text-indigo-600" onchange="toggleIE(true)">
+                        <span class="ml-2 text-gray-700">Sim</span>
+                    </label>
+                    <label class="inline-flex items-center">
+                        <input type="radio" name="contribuinte" value="False" {% if form.contribuinte.value == False %}checked{% endif %} class="form-radio text-indigo-600" onchange="toggleIE(false)">
+                        <span class="ml-2 text-gray-700">Não</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="col-span-4 hidden" id="div_inscricao_estadual">
+                <label for="{{ form.inscricao_estadual.id_for_label }}" class="block text-sm font-medium text-gray-700">Inscrição Estadual</label>
+                {{ form.inscricao_estadual }}
+            </div>
+
+        </div> 
+
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">Endereço</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="col-span-4 md:col-span-1">
+                    <label for="{{ form.cep.id_for_label }}" class="block text-sm font-medium text-gray-700">CEP</label>
+                    {{ form.cep }}
+                </div>
+                <div class="col-span-4 md:col-span-3">
+                    <label for="{{ form.logradouro.id_for_label }}" class="block text-sm font-medium text-gray-700">Logradouro</label>
+                    {{ form.logradouro }}
+                </div>
+
+                <div class="col-span-1">
+                    <label for="{{ form.numero.id_for_label }}" class="block text-sm font-medium text-gray-700">Número</label>
+                    {{ form.numero }}
+                </div>
+                <div class="col-span-1">
+                    <label for="{{ form.letra.id_for_label }}" class="block text-sm font-medium text-gray-700">Letra</label>
+                    {{ form.letra }}
+                </div>
+                <div class="col-span-2">
+                    <label for="{{ form.complemento.id_for_label }}" class="block text-sm font-medium text-gray-700">Complemento</label>
+                    {{ form.complemento }}
+                </div>
+
+                <div class="col-span-2">
+                    <label for="{{ form.bairro.id_for_label }}" class="block text-sm font-medium text-gray-700">Bairro</label>
+                    {{ form.bairro }}
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="{{ form.cidade.id_for_label }}" class="block text-sm font-medium text-gray-700">Cidade</label>
+                    {{ form.cidade }}
+                </div>
+                
+                <div class="col-span-2 md:col-span-1">
+                    <label for="{{ form.estado.id_for_label }}" class="block text-sm font-medium text-gray-700">Estado (UF)</label>
+                    {{ form.estado }}
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">Contato e Comercial</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="col-span-4 md:col-span-2">
+                    <label for="{{ form.nome_contato.id_for_label }}" class="block text-sm font-medium text-gray-700">Nome do Contato</label>
+                    {{ form.nome_contato }}
+                </div>
+                <div class="col-span-2">
+                    <label for="{{ form.telefone_fixo.id_for_label }}" class="block text-sm font-medium text-gray-700">Telefone Fixo</label>
+                    {{ form.telefone_fixo }}
+                </div>
+                <div class="col-span-2">
+                    <label for="{{ form.telefone_celular.id_for_label }}" class="block text-sm font-medium text-gray-700">Celular</label>
+                    {{ form.telefone_celular }}
+                </div>
+                <div class="col-span-4 md:col-span-2">
+                    <label for="{{ form.email.id_for_label }}" class="block text-sm font-medium text-gray-700">Email</label>
+                    {{ form.email }}
+                </div>
+                <div class="col-span-2">
+                    <label for="{{ form.cargo.id_for_label }}" class="block text-sm font-medium text-gray-700">Cargo</label>
+                    {{ form.cargo }}
+                </div>
+                <div class="col-span-2">
+                    <label for="{{ form.comissoes.id_for_label }}" class="block text-sm font-medium text-gray-700">Comissão (%)</label>
+                    {{ form.comissoes }}
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h3 class="text-2xl font-semibold text-gray-800 mb-4">Observações</h3>
+            <div class="col-span-4">
+                <label for="{{ form.observacoes.id_for_label }}" class="block text-sm font-medium text-gray-700">Detalhes Adicionais</label>
+                {{ form.observacoes }}
+            </div>
+        </div>
+
+        <div class="mt-8 pt-4 border-t border-gray-200 flex justify-start space-x-4">
+            <button type="submit" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300">
+                Salvar Cadastro
+            </button>
+            <button type="button" onclick="window.history.back()" class="px-6 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-400 transition duration-300">
+                Voltar
+            </button>
+            <button type="button" onclick="limparFormulario()" class="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 transition duration-300">
+                Limpar
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Inicializa o formulário e adiciona listeners
+        const tipoSelect = document.getElementById('id_tipo');
+        const classificacaoSelect = document.getElementById('tipo_classificacao');
+        const contribuinteRadios = document.querySelectorAll('input[name="contribuinte"]');
+        
+        if (tipoSelect) tipoSelect.addEventListener('change', () => toggleCampos(tipoSelect.value));
+        if (classificacaoSelect) classificacaoSelect.addEventListener('change', () => toggleCamposPF(classificacaoSelect.value));
+        contribuinteRadios.forEach(radio => radio.addEventListener('change', (e) => toggleIE(e.target.value === 'True')));
+
+        // Chamadas iniciais para configurar o estado do formulário
+        toggleCampos(tipoSelect ? tipoSelect.value : 'cliente');
+        toggleCamposPF(classificacaoSelect ? classificacaoSelect.value : 'PF');
+        
+        // Verifica o estado inicial do contribuinte (True por padrão se não definido)
+        const isContribuinte = document.querySelector('input[name="contribuinte"]:checked').value === 'True';
+        toggleIE(isContribuinte);
+
+        // Preenche o campo 'codigo_cadastro' com 'NOVO' se estiver vazio (apenas para exibição no frontend)
+        const codigoCadastroInput = document.getElementById('id_codigo_cadastro');
+        if (codigoCadastroInput && codigoCadastroInput.value === '') {
+            codigoCadastroInput.value = 'NOVO';
+        }
+    });
+
+    /**
+     * Alterna a visibilidade dos campos com base no Tipo de Pessoa (PF/PJ).
+     */
+    function toggleCamposPF(classificacao) {
+        const divNomeCompleto = document.getElementById('div_nome_completo');
+        const divRazaoSocial = document.getElementById('div_razao_social');
+        const divNomeFantasia = document.getElementById('div_nome_fantasia');
+        const divContribuinte = document.getElementById('div_contribuinte');
+
+        // Se o tipo for 'funcionario', não exibe campos de PF/PJ (apenas o nome completo básico deve ser usado)
+        if (document.getElementById('id_tipo').value === 'funcionario') {
+            divNomeCompleto.classList.remove('hidden');
+            divRazaoSocial.classList.add('hidden');
+            divNomeFantasia.classList.add('hidden');
+            divContribuinte.classList.add('hidden');
+            document.getElementById('div_inscricao_estadual').classList.add('hidden');
+            return;
+        }
+
+        if (classificacao === 'PF') {
+            divNomeCompleto.classList.remove('hidden');
+            divRazaoSocial.classList.add('hidden');
+            divNomeFantasia.classList.add('hidden');
+            divContribuinte.classList.add('hidden');
+            document.getElementById('div_inscricao_estadual').classList.add('hidden');
+        } else if (classificacao === 'PJ') {
+            divNomeCompleto.classList.add('hidden');
+            divRazaoSocial.classList.remove('hidden');
+            divNomeFantasia.classList.remove('hidden');
+            divContribuinte.classList.remove('hidden');
+            
+            // Verifica o estado atual dos radios de Contribuinte e chama toggleIE
+            const isContribuinte = document.querySelector('input[name="contribuinte"]:checked').value === 'True';
+            toggleIE(isContribuinte);
+        }
+    }
+
+    /**
+     * Alterna a visibilidade do campo Inscrição Estadual.
+     */
+    function toggleIE(isContribuinte) {
+        const divIE = document.getElementById('div_inscricao_estadual');
+        const classificacao = document.getElementById('tipo_classificacao').value;
+
+        // IE só aparece se for PJ E for Contribuinte
+        if (classificacao === 'PJ' && isContribuinte) {
+            divIE.classList.remove('hidden');
+        } else {
+            divIE.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Alterna visibilidade dos campos de comissão e cargo (Apenas para Funcionário).
+     */
+    function toggleCampos(tipo) {
+        const divCargo = document.getElementById('div_cargo');
+        const divComissoes = document.getElementById('div_comissoes');
+        
+        // Esconde a classificação PF/PJ se for funcionário
+        const divClassificacao = document.getElementById('div_tipo_classificacao');
+        if (divClassificacao) {
+            if (tipo === 'funcionario') {
+                divClassificacao.classList.add('hidden');
+                // Força a lógica de PF para funcionários
+                toggleCamposPF('PF'); 
+            } else {
+                divClassificacao.classList.remove('hidden');
+                // Aplica a lógica PF/PJ normal
+                toggleCamposPF(document.getElementById('tipo_classificacao').value);
+            }
+        }
+
+        // Exibe cargo e comissão apenas para funcionários
+        if (tipo === 'funcionario') {
+            // Supondo que você tenha divs para estes campos no seu HTML
+            // Como o form está sendo renderizado pelo Django, isso precisa ser ajustado
+        } else {
+            // Campos de Comissões e Cargo não estão agrupados em divs no HTML original, 
+            // então esta função não fará nada até que você os envolva em divs com IDs.
+        }
+    }
+
+    function limparFormulario() {
+        // Redireciona para o mesmo URL (GET), limpando dados POST anteriores
+        window.location.href = "{% url 'core:cadastrar_geral' %}"; 
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard - SISCR{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-300">
+    <div class="flex min-h-screen">
+        <aside class="w-64 bg-gray-800 text-white shadow-xl flex flex-col rounded-r-2xl">
+            <div class="p-6 border-b border-gray-700">
+                <h2 class="text-2xl font-bold text-center">SISCR</h2>
+            </div>
+            <nav class="flex-1 px-4 py-6">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="{% url 'core:dashboard' %}" class="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150">
+                            <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-10l-2-2m2 2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                            </svg>
+                            Dashboard
+                        </a>
+                    </li>
+                    
+                    <li>
+                        <a href="{% url 'core:servico_logistico' %}" class="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150">
+                            <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h.01M19 21H5a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2z"></path>
+                            </svg>
+                            Serviços Logísticos
+                        </a>
+                    </li>
+
+                    <li>
+                        <a href="#" id="menu-cadastros" class="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 justify-between">
+                            <span class="flex items-center">
+                                <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                                </svg>
+                                Cadastros
+                            </span>
+                            <svg id="arrow-cadastros" class="w-4 h-4 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <ul id="submenu-cadastros" class="pl-6 mt-2 space-y-1 hidden">
+                            <li><a href="{% url 'core:cadastrar_geral' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Geral (Pessoas/Empresas)</a></li>
+                            <li><a href="{% url 'core:cadastrar_produtos' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Produtos</a></li>
+                            <li><a href="{% url 'core:cadastrar_servicos' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Serviços</a></li>
+                        </ul>
+                    </li>
+
+                    <li>
+                        <a href="#" id="menu-financeiro" class="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 justify-between">
+                            <span class="flex items-center">
+                                <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 2v4m0 4v1m0-11c-2.21 0-4 1.343-4 3s1.79 3 4 3 4 1.343 4 3-1.79 3-4 3m0-14v2m0 8v2"></path>
+                                </svg>
+                                Financeiro
+                            </span>
+                            <svg id="arrow-financeiro" class="w-4 h-4 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <ul id="submenu-financeiro" class="pl-6 mt-2 space-y-1 hidden">
+                            <li><a href="{% url 'core:contas_a_receber' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Contas a Receber</a></li>
+                            <li><a href="{% url 'core:contas_a_pagar' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Contas a Pagar</a></li>
+                            <li><a href="{% url 'core:financeiro' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Visão Geral</a></li>
+                        </ul>
+                    </li>
+
+                    <li>
+                        <a href="#" id="menu-faturamento" class="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 justify-between">
+                            <span class="flex items-center">
+                                <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                Faturamento
+                            </span>
+                            <svg id="arrow-faturamento" class="w-4 h-4 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </a>
+                        <ul id="submenu-faturamento" class="pl-6 mt-2 space-y-1 hidden">
+                            <li><a href="{% url 'core:cotacoes' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">Cotações/Análise Frete</a></li>
+                            <li><a href="{% url 'core:nfvenda' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">NF Venda</a></li>
+                            <li><a href="{% url 'core:nfse' %}" class="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm">NFSe</a></li>
+                        </ul>
+                    </li>
+                    
+                    <li>
+                        <a href="{% url 'core:perfil' %}" class="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150">
+                            Meu Perfil
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="p-4 border-t border-gray-700">
+                <a href="{% url 'core:logout' %}" class="flex items-center p-2 rounded-lg bg-red-700 text-white hover:bg-red-600 transition duration-150 justify-center">
+                    <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    Sair
+                </a>
+            </div>
+        </aside>
+        
+        <main class="flex-1 p-8">
+            <header class="mb-4">
+                <h1 class="text-3xl font-bold text-gray-800">{% block page_title %}{% endblock %}</h1>
+            </header>
+            
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="p-4 mb-4 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-100 text-red-700{% elif message.tags == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}" role="alert">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% block content %}
+            {% endblock %}
+        </main>
+    </div>
+    
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Lógica para o menu de Cadastros
+        const cadastrosLink = document.getElementById('menu-cadastros');
+        const submenuCadastros = document.getElementById('submenu-cadastros');
+        const arrowCadastros = document.getElementById('arrow-cadastros');
+
+        cadastrosLink.addEventListener('click', function(event) {
+            event.preventDefault(); 
+            submenuCadastros.classList.toggle('hidden');
+            arrowCadastros.classList.toggle('rotate-180');
+        });
+
+        // Lógica para o menu de Financeiro
+        const financeiroLink = document.getElementById('menu-financeiro');
+        const submenuFinanceiro = document.getElementById('submenu-financeiro');
+        const arrowFinanceiro = document.getElementById('arrow-financeiro');
+
+        financeiroLink.addEventListener('click', function(event) {
+            event.preventDefault(); 
+            submenuFinanceiro.classList.toggle('hidden');
+            arrowFinanceiro.classList.toggle('rotate-180');
+        });
+        
+        // Lógica para o novo menu de Faturamento
+        const faturamentoLink = document.getElementById('menu-faturamento');
+        const submenuFaturamento = document.getElementById('submenu-faturamento');
+        const arrowFaturamento = document.getElementById('arrow-faturamento');
+
+        faturamentoLink.addEventListener('click', function(event) {
+            event.preventDefault();
+            submenuFaturamento.classList.toggle('hidden');
+            arrowFaturamento.classList.toggle('rotate-180');
+        });
+    });
+</script>
+    {% block scripts %}
+    {% endblock %}
+</body>
+</html>

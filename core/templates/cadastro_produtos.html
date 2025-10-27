@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Produtos{% endblock %}
+
+{% block page_title %}Cadastro de Produtos{% endblock %}
+
+{% block content %}
+<div class="bg-white p-8 rounded-xl shadow-2xl transition-all duration-300">
+    <h2 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-2 border-indigo-600 pb-2">Formulário de Cadastro de Produtos</h2>
+    
+    <form method="post" action="/cadastrar_produtos/">
+        {% csrf_token %}
+        
+        <div class="space-y-8">
+            
+            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">1. Dados Básicos e Valores</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group col-span-1">
+                        <label for="{{ form.codigo_produto.id_for_label }}" class="block text-sm font-medium text-gray-700">Código</label>
+                        {{ form.codigo_produto }}
+                    </div>
+                    
+                    <div class="form-group col-span-2">
+                        <label for="{{ form.nome.id_for_label }}" class="block text-sm font-medium text-gray-700">Nome do Produto <span class="text-red-500">*</span></label>
+                        {{ form.nome }}
+                    </div>
+                    
+                    <div class="form-group col-span-1 flex items-center pt-6">
+                         {{ form.ativo }}
+                         <label for="{{ form.ativo.id_for_label }}" class="ml-2 text-sm font-medium text-gray-700">Produto Ativo</label>
+                    </div>
+
+                    <div class="form-group md:col-span-4">
+                        <label for="{{ form.descricao.id_for_label }}" class="block text-sm font-medium text-gray-700">Descrição</label>
+                        {{ form.descricao }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.valor_custo.id_for_label }}" class="block text-sm font-medium text-gray-700">Valor Custo (R$) <span class="text-red-500">*</span></label>
+                        {{ form.valor_custo }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.valor_venda.id_for_label }}" class="block text-sm font-medium text-gray-700">Valor Venda (R$) <span class="text-red-500">*</span></label>
+                        {{ form.valor_venda }}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="{{ form.unidade_medida.id_for_label }}" class="block text-sm font-medium text-gray-700">Unidade</label>
+                        {{ form.unidade_medida }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.peso_liquido.id_for_label }}" class="block text-sm font-medium text-gray-700">Peso Líquido (Kg)</label>
+                        {{ form.peso_liquido }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.peso_bruto.id_for_label }}" class="block text-sm font-medium text-gray-700">Peso Bruto (Kg)</label>
+                        {{ form.peso_bruto }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">2. Tributação Nacional</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.codigo_ncm.id_for_label }}" class="block text-sm font-medium text-gray-700">NCM <span class="text-red-500">*</span></label>
+                        {{ form.codigo_ncm }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.cfop_interno.id_for_label }}" class="block text-sm font-medium text-gray-700">CFOP Interno</label>
+                        {{ form.cfop_interno }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.origem_mercadoria.id_for_label }}" class="block text-sm font-medium text-gray-700">Origem</label>
+                        {{ form.origem_mercadoria }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.cst_icms.id_for_label }}" class="block text-sm font-medium text-gray-700">CST/CSOSN ICMS</label>
+                        {{ form.cst_icms }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.aliquota_icms.id_for_label }}" class="block text-sm font-medium text-gray-700">Alíquota ICMS (%)</label>
+                        {{ form.aliquota_icms }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.aliquota_ipi.id_for_label }}" class="block text-sm font-medium text-gray-700">Alíquota IPI (%)</label>
+                        {{ form.aliquota_ipi }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">3. Comércio Exterior</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.codigo_di.id_for_label }}" class="block text-sm font-medium text-gray-700">DI (Decl. Importação)</label>
+                        {{ form.codigo_di }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.incoterm.id_for_label }}" class="block text-sm font-medium text-gray-700">Incoterm</label>
+                        {{ form.incoterm }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.moeda_negociacao.id_for_label }}" class="block text-sm font-medium text-gray-700">Moeda Padrão</label>
+                        {{ form.moeda_negociacao }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.aliquota_ii.id_for_label }}" class="block text-sm font-medium text-gray-700">Alíquota Imp. Imp. (II) (%)</label>
+                        {{ form.aliquota_ii }}
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        </div> <div class="mt-8 pt-4 border-t border-gray-200 flex justify-start space-x-4">
+            
+            {% if editando %}
+                <button type="submit" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-xl hover:bg-indigo-700 transition duration-300">
+                    Salvar Alterações
+                </button>
+                
+                <a href="{% url 'core:listagem_produtos' %}" class="px-6 py-3 bg-gray-500 text-white font-bold rounded-lg shadow-xl hover:bg-gray-600 transition duration-300 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
+                    Voltar para Lista
+                </a>
+
+                <form action="{% url 'core:excluir_produto' codigo_produto=produto.codigo_produto %}" method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Você está prestes a EXCLUIR o produto {{ produto.nome }}. Confirma a exclusão?');">
+                    {% csrf_token %}
+                    <button type="submit" class="px-6 py-3 bg-red-600 text-white font-bold rounded-lg shadow-xl hover:bg-red-700 transition duration-300">
+                        Excluir
+                    </button>
+                </form>
+
+            {% else %}
+                <button type="submit" class="px-6 py-3 bg-green-600 text-white font-bold rounded-lg shadow-xl hover:bg-green-700 transition duration-300">
+                    Salvar Novo Produto
+                </button>
+                
+                <a href="{% url 'core:listagem_produtos' %}" class="px-6 py-3 bg-gray-500 text-white font-bold rounded-lg shadow-xl hover:bg-gray-600 transition duration-300 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>
+                    Ver Todos (Listagem)
+                </a>
+                
+                <a href="{% url 'core:cadastrar_produtos' %}" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-xl hover:bg-blue-700 transition duration-300">
+                    Novo Cadastro
+                </a>
+
+            {% endif %}
+
+        </div>
+    </form>
+</div>
+{% endblock %}

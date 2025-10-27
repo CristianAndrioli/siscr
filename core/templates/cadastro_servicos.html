@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}Cadastro de Serviços - Detalhado{% endblock %}
+
+{% block page_title %}Cadastro de Serviços{% endblock %}
+
+{% block content %}
+<div class="bg-white p-8 rounded-xl shadow-2xl transition-all duration-300">
+    <h2 class="text-3xl font-extrabold text-gray-800 mb-6 border-b-2 border-indigo-600 pb-2">
+    {% if editando %}Editar Serviço: {{ servico.nome }}{% else %}Cadastrar Novo Serviço{% endif %}
+    </h2>
+    
+    <form method="post" action="{% if editando %}{% url 'core:editar_servico' codigo_servico=servico.codigo_servico %}{% else %}{% url 'core:cadastrar_servicos' %}{% endif %}" class="space-y-8">
+    {% csrf_token %}
+        
+        <div class="space-y-8">
+            
+            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">1. Dados Básicos</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group col-span-1">
+                        <label for="{{ form.codigo_servico.id_for_label }}" class="block text-sm font-medium text-gray-700">Código do Serviço</label>
+                        {{ form.codigo_servico }}
+                    </div>
+                    
+                    <div class="form-group col-span-1">
+                        <label for="{{ form.nome.id_for_label }}" class="block text-sm font-medium text-gray-700">Nome do Serviço <span class="text-red-500">*</span></label>
+                        {{ form.nome }}
+                    </div>
+                    
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.descricao.id_for_label }}" class="block text-sm font-medium text-gray-700">Descrição</label>
+                        {{ form.descricao }}
+                    </div>
+
+                    <div class="form-group md:col-span-2 flex items-center pt-2">
+                         {{ form.ativo }}
+                         <label for="{{ form.ativo.id_for_label }}" class="ml-2 text-sm font-medium text-gray-700">Serviço Ativo</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">2. Contrato e Valores</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.valor_base.id_for_label }}" class="block text-sm font-medium text-gray-700">Valor Base (R$) <span class="text-red-500">*</span></label>
+                        {{ form.valor_base }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.tipo_contrato.id_for_label }}" class="block text-sm font-medium text-gray-700">Tipo de Contrato</label>
+                        {{ form.tipo_contrato }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.prazo_execucao.id_for_label }}" class="block text-sm font-medium text-gray-700">Prazo Execução (Dias)</label>
+                        {{ form.prazo_execucao }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.valor_impostos_estimado.id_for_label }}" class="block text-sm font-medium text-gray-700">Impostos Estimados (R$)</label>
+                        {{ form.valor_impostos_estimado }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                <h3 class="text-xl font-semibold text-indigo-700 mb-4 border-b pb-2">3. Dados de Tributação</h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.codigo_ncm.id_for_label }}" class="block text-sm font-medium text-gray-700">Código NCM</label>
+                        {{ form.codigo_ncm }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.cfop.id_for_label }}" class="block text-sm font-medium text-gray-700">CFOP</label>
+                        {{ form.cfop }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.tributacao_pis.id_for_label }}" class="block text-sm font-medium text-gray-700">Alíquota PIS (%)</label>
+                        {{ form.tributacao_pis }}
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="{{ form.tributacao_cofins.id_for_label }}" class="block text-sm font-medium text-gray-700">Alíquota COFINS (%)</label>
+                        {{ form.tributacao_cofins }}
+                    </div>
+
+                    <div class="form-group md:col-span-4 flex items-center pt-2">
+                        {{ form.icms_tributado }}
+                        <label for="{{ form.icms_tributado.id_for_label }}" class="ml-2 text-sm font-medium text-gray-700">Incidência de ICMS</label>
+                    </div>
+                </div>
+            </div>
+
+            {% if form.non_field_errors %}
+                <div class="text-red-600 font-bold p-3 bg-red-100 border border-red-300 rounded">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+        </div>
+
+        <div class="mt-8 pt-4 border-t border-gray-200 flex justify-start space-x-4">
+
+        {% if editando %}
+            <button type="submit" class="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-xl hover:bg-indigo-700 transition duration-300">
+                Salvar Alterações
+            </button>
+
+            <a href="{% url 'core:listagem_servicos' %}" class="px-6 py-3 bg-gray-500 text-white font-bold rounded-lg shadow-xl hover:bg-gray-600 transition duration-300 flex items-center">
+                Voltar para Lista
+            </a>
+
+            <form action="{% url 'core:excluir_servico' codigo_servico=servico.codigo_servico %}" method="POST" class="inline" onsubmit="return confirm('ATENÇÃO: Você está prestes a EXCLUIR o serviço {{ servico.nome }}. Confirma a exclusão?');">
+                {% csrf_token %}
+                <button type="submit" class="px-6 py-3 bg-red-600 text-white font-bold rounded-lg shadow-xl hover:bg-red-700 transition duration-300">
+                    Excluir
+                </button>
+            </form>
+
+        {% else %}
+            <button type="submit" class="px-6 py-3 bg-green-600 text-white font-bold rounded-lg shadow-xl hover:bg-green-700 transition duration-300">
+                Salvar Novo Serviço
+            </button>
+
+            <a href="{% url 'core:listagem_servicos' %}" class="px-6 py-3 bg-gray-500 text-white font-bold rounded-lg shadow-xl hover:bg-gray-600 transition duration-300 flex items-center">
+                Ver Todos (Listagem)
+            </a>
+
+            <a href="{% url 'core:cadastrar_servicos' %}" class="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-xl hover:bg-blue-700 transition duration-300">
+                Novo Cadastro
+            </a>
+
+        {% endif %}
+
+    </div>
+    </form>
+
+</div>
+{% endblock %}
