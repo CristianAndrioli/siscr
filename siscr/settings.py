@@ -27,27 +27,42 @@ ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 # Application definition
 
-INSTALLED_APPS = [
-    # Django padrão:
-    'django.contrib.admin',
-    'django.contrib.auth',
+# IMPORTANTE: Para django-tenants, apps são divididos em SHARED_APPS e TENANT_APPS
+SHARED_APPS = [
+    # Django tenants deve vir primeiro
+    'django_tenants',
+    
+    # Django padrão (shared):
     'django.contrib.contenttypes',
+    'django.contrib.auth',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.admin',
     'django.contrib.staticfiles',
     
-    # Third-party apps:
+    # Third-party apps (shared):
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
     'guardian',
     'django_extensions',
     
-    # Seus APPs:
-    'core', # Seu aplicativo que contém views, models e templates
+    # Tenant app (shared):
+    'tenants',  # App de tenants (deve estar em SHARED)
 ]
 
+TENANT_APPS = [
+    # Apps que pertencem aos tenants (cada tenant tem seu próprio schema)
+    'django.contrib.contenttypes',
+    'core',  # Seu aplicativo principal
+]
+
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
 MIDDLEWARE = [
+    # Tenant middleware deve vir primeiro (identifica o tenant pela URL/domínio)
+    'django_tenants.middleware.main.TenantMainMiddleware',
+    
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # CORS deve vir antes de CommonMiddleware
@@ -80,12 +95,12 @@ WSGI_APPLICATION = 'siscr.wsgi.application'
 
 
 # Database
-# Configuração do PostgreSQL
+# Configuração do PostgreSQL com django-tenants
 import os
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
+        'ENGINE': 'django_tenants.postgresql_backend',
         'NAME': os.environ.get('DB_NAME', 'siscr_db'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
@@ -93,6 +108,18 @@ DATABASES = {
         'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
+
+# Database Router para django-tenants
+DATABASE_ROUTERS = (
+    'django_tenants.routers.TenantSyncRouter',
+)
+
+# Configuração de Tenants
+TENANT_MODEL = "tenants.Tenant"  # Model que representa o tenant
+TENANT_DOMAIN_MODEL = "tenants.Domain"  # Model que representa o domínio
+
+# Public schema (schema compartilhado)
+DEFAULT_SCHEMA_NAME = 'public'
 
 
 # Password validation
