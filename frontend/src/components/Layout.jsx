@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { authService } from '../services/api';
+import { authService } from '../services/auth';
 
 function Layout({ children }) {
   const [menuOpen, setMenuOpen] = useState({
