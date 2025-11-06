@@ -4,6 +4,7 @@ import { authService } from './services/api';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
+import CadastroGeral from './pages/cadastros/CadastroGeral';
 
 // Componente para proteger rotas que precisam de autenticação
 function ProtectedRoute({ children }) {
@@ -35,13 +36,36 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <Layout>
-              <Dashboard />
-            </Layout>
-          </ProtectedRoute>
-        } />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/geral"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CadastroGeral />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/geral/:codigo"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CadastroGeral />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
