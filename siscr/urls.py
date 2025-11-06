@@ -17,9 +17,12 @@ urlpatterns = [
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     
-    # API Routes (será expandido)
-    path('api/', include('core.api.urls')),
+    # API Routes
+    path('api/cadastros/', include('cadastros.api.urls')),
+    path('api/', include('core.api.urls')),  # Mantém API geral do core (se houver)
     
     # Inclui todas as rotas definidas no arquivo core/urls.py na raiz do projeto
     path('', include('core.urls')),
+    # Inclui rotas do app cadastros
+    path('cadastros/', include('cadastros.urls')),
 ]

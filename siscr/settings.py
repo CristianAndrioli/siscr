@@ -54,7 +54,9 @@ SHARED_APPS = [
 TENANT_APPS = [
     # Apps que pertencem aos tenants (cada tenant tem seu próprio schema)
     'django.contrib.contenttypes',
-    'core',  # Seu aplicativo principal
+    'core',  # App core (views gerais, dashboard, etc.)
+    'cadastros',  # App de cadastros (Pessoa, Produto, Servico)
+    'accounts',  # App de autenticação e permissões
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
