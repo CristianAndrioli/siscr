@@ -1,19 +1,13 @@
 # C:\siscr\core\views.py - Certifique-se de ter todas essas importações
 from django.shortcuts import render, redirect, get_object_or_404
-from .models import Produto # O modelo Produto deve estar importado
-from .forms import ProdutoForm # O formulário ProdutoForm deve estar importado
+from django.urls import reverse
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
-from django.contrib.auth.decorators import login_required # <-- ESSENCIAL
-from .models import Pessoa # Seus modelos
-from .models import Produto # O modelo Produto deve estar importado
-from .forms import ProdutoForm # O formulário ProdutoForm deve estar importado
-
-# Imports restantes para o CRUD
+from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.contrib import messages
-from django.db import models # Necessário para 'models.Q' na função listagem_produtos
-from .models import Pessoa, Servico, Produto 
+from django.db import models
+from .models import Pessoa, Servico, Produto
 from .forms import PessoaForm, ServicoForm, ProdutoForm
 
 
@@ -282,8 +276,6 @@ def listagem_geral(request):
 # *Para as demais funções, criamos placeholders que apenas renderizam o template.
 # *A lógica de CRUD será migrada na sequência!
 
-def cadastrar_produtos(request): return render(request, 'cadastro_produtos.html')
-def cadastrar_servicos(request): return render(request, 'cadastro_servicos.html')
 def contas_a_receber(request): return render(request, 'contas_a_receber.html')
 def contas_a_pagar(request): return render(request, 'contas_a_pagar.html')
 def faturamento(request): return render(request, 'faturamento.html')
