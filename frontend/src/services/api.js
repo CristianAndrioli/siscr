@@ -64,34 +64,8 @@ api.interceptors.response.use(
   }
 );
 
-// Serviço de autenticação
-export const authService = {
-  login: async (username, password) => {
-    const response = await axios.post(`${API_BASE_URL}/api/auth/token/`, {
-      username,
-      password,
-    });
-    
-    const { access, refresh } = response.data;
-    localStorage.setItem('access_token', access);
-    localStorage.setItem('refresh_token', refresh);
-    
-    return { access, refresh };
-  },
-
-  logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-  },
-
-  getToken: () => {
-    return localStorage.getItem('access_token');
-  },
-
-  isAuthenticated: () => {
-    return !!localStorage.getItem('access_token');
-  },
-};
+// Serviço de autenticação movido para services/auth.js
+// Importar: import { authService } from './auth';
 
 // Exportar instância do axios para uso em outros serviços
 export default api;
