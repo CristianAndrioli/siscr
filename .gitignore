@@ -85,6 +85,12 @@ yarn-error.log
 package-lock.json
 yarn.lock
 
+# Frontend React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
 # Coverage reports
 htmlcov/
 .tox/
