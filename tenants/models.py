@@ -26,6 +26,10 @@ class Tenant(TenantMixin):
     auto_create_schema = True
     auto_drop_schema = False
     
+    # Para desenvolvimento, permitir acesso sem subdomínio
+    # Em produção, usar subdomínios específicos
+    is_public = True  # Permite acesso direto sem subdomínio
+    
     class Meta:
         verbose_name = 'Tenant'
         verbose_name_plural = 'Tenants'

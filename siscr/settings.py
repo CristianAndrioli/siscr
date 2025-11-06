@@ -121,6 +121,9 @@ TENANT_DOMAIN_MODEL = "tenants.Domain"  # Model que representa o domínio
 # Public schema (schema compartilhado)
 DEFAULT_SCHEMA_NAME = 'public'
 
+# Para desenvolvimento: usar domínio padrão quando não houver subdomínio
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
