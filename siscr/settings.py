@@ -72,15 +72,17 @@ WSGI_APPLICATION = 'siscr.wsgi.application'
 
 
 # Database
-# Configuração do seu PostgreSQL
+# Configuração do PostgreSQL
+import os
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'siscr_db', 
-        'USER': 'postgres',      
-        'PASSWORD': 'postgres',  
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'siscr_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
+        'HOST': os.environ.get('DB_HOST', 'db'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
 
