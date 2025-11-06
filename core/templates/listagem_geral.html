@@ -9,11 +9,11 @@
     
     <div class="bg-white p-6 rounded-xl shadow-lg flex flex-col md:flex-row justify-between items-center">
         
-        <a href="{% url 'core:cadastrar_geral' %}" class="w-full md:w-auto px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-300 mb-4 md:mb-0">
+        <a href="{% url 'cadastros:cadastrar_geral' %}" class="w-full md:w-auto px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-300 mb-4 md:mb-0">
             + Novo Cadastro Geral
         </a>
 
-        <form method="GET" action="{% url 'core:listagem_geral' %}" class="w-full md:w-1/2 flex items-center space-x-2">
+        <form method="GET" action="{% url 'cadastros:listagem_geral' %}" class="w-full md:w-1/2 flex items-center space-x-2">
             <input type="text" name="q" placeholder="Buscar por CPF/CNPJ, Nome ou Razão Social..." value="{{ termo_busca|default:'' }}"
                    class="form-control w-full p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
             <button type="submit" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300">
@@ -52,10 +52,10 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ pessoa.tipo|capfirst }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ pessoa.cpf_cnpj }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
-                        <a href="{% url 'core:editar_cadastro' codigo_cadastro=pessoa.codigo_cadastro %}" class="text-indigo-600 hover:text-indigo-900 mr-4">
+                        <a href="{% url 'cadastros:editar_cadastro' codigo_cadastro=pessoa.codigo_cadastro %}" class="text-indigo-600 hover:text-indigo-900 mr-4">
                             Editar
                         </a>
-                        <form action="{% url 'core:excluir_cadastro' codigo_cadastro=pessoa.codigo_cadastro %}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir o cadastro {{ pessoa.nome_completo|default:pessoa.razao_social }}?');">
+                        <form action="{% url 'cadastros:excluir_cadastro' codigo_cadastro=pessoa.codigo_cadastro %}" method="POST" class="inline" onsubmit="return confirm('Tem certeza que deseja excluir o cadastro {{ pessoa.nome_completo|default:pessoa.razao_social }}?');">
                             {% csrf_token %}
                             <button type="submit" class="text-red-600 hover:text-red-900">
                                 Excluir
@@ -67,7 +67,7 @@
             </tbody>
         </table>
         {% else %}
-            <p class="text-center text-gray-500 p-4">Nenhum cadastro encontrado. Tente uma busca diferente ou <a href="{% url 'core:cadastrar_geral' %}" class="text-indigo-600 hover:underline">cadastre um novo</a>.</p>
+            <p class="text-center text-gray-500 p-4">Nenhum cadastro encontrado. Tente uma busca diferente ou <a href="{% url 'cadastros:cadastrar_geral' %}" class="text-indigo-600 hover:underline">cadastre um novo</a>.</p>
         {% endif %}
     </div>
 

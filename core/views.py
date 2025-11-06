@@ -7,8 +7,9 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.contrib import messages
 from django.db import models
-from .models import Pessoa, Servico, Produto
-from .forms import PessoaForm, ServicoForm, ProdutoForm
+# Models e Forms movidos para cadastros app
+from cadastros.models import Pessoa, Servico, Produto
+from cadastros.forms import PessoaForm, ServicoForm, ProdutoForm
 
 
 # ----------------------------
@@ -350,12 +351,8 @@ def buscar_conta_a_receber(request): return JsonResponse({'encontrado': False, '
 
 
 
-# C:\siscr\core\views.py
-# ... (No topo, certifique-se de que os imports estão corretos)
-from django.db.models import Max
-from .models import Pessoa, Servico, Produto # ADICIONE Produto AQUI
-from .forms import ServicoForm, ProdutoForm # ADICIONE ProdutoForm AQUI
-# ...
+# Models e Forms movidos para cadastros app
+# Imports já estão no topo do arquivo
 
 # ... (Outras views)
 
