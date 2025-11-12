@@ -23,7 +23,12 @@ function Layout({ children }) {
     }));
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (location.pathname === path) return true;
+    // Para rotas filhas (ex: /cadastros/pessoas/1 deve ativar /cadastros/pessoas)
+    if (location.pathname.startsWith(path + '/')) return true;
+    return false;
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-300">
@@ -90,6 +95,16 @@ function Layout({ children }) {
               </button>
               {menuOpen.cadastros && (
                 <ul className="pl-6 mt-2 space-y-1">
+                  <li>
+                    <Link
+                      to="/cadastros/pessoas"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/cadastros/pessoas') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Pessoas (Grid)
+                    </Link>
+                  </li>
                   <li>
                     <Link
                       to="/cadastros/geral"

@@ -46,11 +46,37 @@ export function formatCNPJ(cnpj) {
  * @returns {string} - Valor formatado
  */
 export function formatCPFCNPJ(value) {
-  if (!value) return '';
-  const cleaned = value.replace(/\D/g, '');
-  if (cleaned.length === 11) return formatCPF(value);
-  if (cleaned.length === 14) return formatCNPJ(value);
-  return value;
+  if (!value || value === '') return '';
+  const cleaned = String(value).replace(/\D/g, '');
+  
+  if (cleaned.length === 0) return '';
+  
+  // Permite digitação incremental - formata conforme o usuário digita
+  if (cleaned.length <= 11) {
+    // Formata como CPF durante a digitação
+    if (cleaned.length <= 3) {
+      return cleaned;
+    } else if (cleaned.length <= 6) {
+      return cleaned.replace(/(\d{3})(\d+)/, '$1.$2');
+    } else if (cleaned.length <= 9) {
+      return cleaned.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+    } else {
+      return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1.$2.$3-$4');
+    }
+  } else {
+    // Formata como CNPJ durante a digitação
+    if (cleaned.length <= 2) {
+      return cleaned;
+    } else if (cleaned.length <= 5) {
+      return cleaned.replace(/(\d{2})(\d+)/, '$1.$2');
+    } else if (cleaned.length <= 8) {
+      return cleaned.replace(/(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
+    } else if (cleaned.length <= 12) {
+      return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
+    } else {
+      return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d+)/, '$1.$2.$3/$4-$5');
+    }
+  }
 }
 
 /**
@@ -59,10 +85,15 @@ export function formatCPFCNPJ(value) {
  * @returns {string} - CEP formatado
  */
 export function formatCEP(cep) {
-  if (!cep) return '';
-  const cleaned = cep.replace(/\D/g, '');
-  if (cleaned.length !== 8) return cep;
-  return cleaned.replace(/(\d{5})(\d{3})/, '$1-$2');
+  if (!cep || cep === '') return '';
+  const cleaned = String(cep).replace(/\D/g, '');
+  if (cleaned.length === 0) return '';
+  // Permite digitação incremental
+  if (cleaned.length <= 5) {
+    return cleaned;
+  } else {
+    return cleaned.replace(/(\d{5})(\d+)/, '$1-$2');
+  }
 }
 
 /**
@@ -71,14 +102,22 @@ export function formatCEP(cep) {
  * @returns {string} - Telefone formatado
  */
 export function formatPhone(phone) {
-  if (!phone) return '';
-  const cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 10) {
-    return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-  } else if (cleaned.length === 11) {
-    return cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  if (!phone || phone === '') return '';
+  const cleaned = String(phone).replace(/\D/g, '');
+  
+  if (cleaned.length === 0) return '';
+  
+  // Permite digitação incremental
+  if (cleaned.length <= 2) {
+    return `(${cleaned}`;
+  } else if (cleaned.length <= 6) {
+    return cleaned.replace(/(\d{2})(\d+)/, '($1) $2');
+  } else if (cleaned.length <= 10) {
+    return cleaned.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3');
+  } else {
+    // 11 dígitos (celular com 9)
+    return cleaned.replace(/(\d{2})(\d{5})(\d+)/, '($1) $2-$3');
   }
-  return phone;
 }
 
 /**
