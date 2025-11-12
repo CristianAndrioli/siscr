@@ -1,125 +1,208 @@
 # SISCR - Sistema de Gestão Empresarial
 
-Sistema de gestão para empresas de logística e comércio exterior desenvolvido em Django.
+Sistema de gestão para empresas de logística e comércio exterior desenvolvido em Django com frontend React.
 
 ## 📋 Pré-requisitos
 
-- Docker Desktop instalado e rodando
-- Git (opcional, apenas para clonar o repositório)
+- **Docker Desktop** instalado e rodando
+- **Node.js** (versão 16 ou superior) - para o frontend React
+- **Git** (opcional, apenas para clonar o repositório)
 
-## 🚀 Instalação e Execução
+---
 
-### Windows
+## 🚀 Iniciando a Aplicação
 
-#### 1. Instalar Docker Desktop
+### Passo 1: Iniciar Backend (Django + PostgreSQL)
 
-1. Baixe o Docker Desktop para Windows: https://www.docker.com/products/docker-desktop/
-2. Execute o instalador e siga as instruções
-3. Reinicie o computador se solicitado
-4. Abra o Docker Desktop e aguarde até que ele esteja rodando (ícone na bandeja do sistema)
+O backend utiliza Docker Compose para gerenciar o banco de dados PostgreSQL e a aplicação Django.
 
-#### 2. Clonar o Repositório (se aplicável)
-
-```bash
-git clone <url-do-repositorio>
-cd siscr
-```
-
-#### 3. Subir a Aplicação
+#### Windows
 
 ```bash
 docker-compose up -d --build
 ```
 
-Este comando irá:
-- Baixar as imagens necessárias (PostgreSQL e Python)
-- Construir a imagem da aplicação Django
-- Criar e configurar o banco de dados PostgreSQL
-- Aplicar as migrações automaticamente
-- Criar um usuário administrador (admin/admin123)
-- Iniciar os containers em background
-
-#### 4. Acessar a Aplicação
-
-Aguarde alguns segundos para os containers iniciarem completamente, depois acesse:
-
-- **Interface Principal**: http://127.0.0.1:8000/login/
-- **Admin Django**: http://127.0.0.1:8000/admin/
-
-**Credenciais de Login:**
-- Usuário: `admin`
-- Senha: `admin123`
-
----
-
-### Linux
-
-#### 1. Instalar Docker e Docker Compose
-
-**Ubuntu/Debian:**
-
-```bash
-# Atualizar sistema
-sudo apt update
-
-# Instalar dependências
-sudo apt install -y apt-transport-https ca-certificates curl gnupg lsb-release
-
-# Adicionar chave GPG do Docker
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-
-# Adicionar repositório Docker
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Instalar Docker
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-# Adicionar usuário ao grupo docker (para não usar sudo)
-sudo usermod -aG docker $USER
-
-# Reiniciar sessão ou executar:
-newgrp docker
-
-# Verificar instalação
-docker --version
-docker compose version
-```
-
-**Outras distribuições Linux:**
-Consulte a documentação oficial: https://docs.docker.com/engine/install/
-
-#### 2. Clonar o Repositório (se aplicável)
-
-```bash
-git clone <url-do-repositorio>
-cd siscr
-```
-
-#### 3. Subir a Aplicação
+#### Linux/Mac
 
 ```bash
 docker compose up -d --build
 ```
 
 Este comando irá:
-- Baixar as imagens necessárias (PostgreSQL e Python)
-- Construir a imagem da aplicação Django
-- Criar e configurar o banco de dados PostgreSQL
-- Aplicar as migrações automaticamente
-- Criar um usuário administrador (admin/admin123)
-- Iniciar os containers em background
+- ✅ Baixar as imagens necessárias (PostgreSQL 15 e Python 3.11)
+- ✅ Construir a imagem da aplicação Django
+- ✅ Criar e configurar o banco de dados PostgreSQL
+- ✅ Aplicar as migrações automaticamente
+- ✅ Criar um usuário administrador (admin/admin123)
+- ✅ Iniciar os containers em background
 
-#### 4. Acessar a Aplicação
+**Aguarde alguns segundos** para os containers iniciarem completamente.
 
-Aguarde alguns segundos para os containers iniciarem completamente, depois acesse:
+### Passo 2: Iniciar Frontend React
 
-- **Interface Principal**: http://127.0.0.1:8000/login/
-- **Admin Django**: http://127.0.0.1:8000/admin/
+Em um novo terminal, navegue até a pasta do frontend e inicie o servidor de desenvolvimento:
 
-**Credenciais de Login:**
-- Usuário: `admin`
-- Senha: `admin123`
+```bash
+cd frontend
+npm install  # Apenas na primeira vez ou após atualizar dependências
+npm run dev
+```
+
+O frontend React estará disponível em: **http://localhost:5173**
+
+---
+
+## 🌐 Acessos e Credenciais
+
+### 1. **Frontend React (Recomendado)** - Porta 5173
+
+- **URL**: http://localhost:5173
+- **Credenciais**:
+  - Usuário: `admin`
+  - Senha: `admin123`
+- **Descrição**: Interface moderna em React com melhor experiência do usuário. Esta é a versão que está sendo desenvolvida atualmente.
+
+### 2. **Frontend Legado (Django Templates)** - Porta 8000
+
+- **URL**: http://127.0.0.1:8000/login/
+- **Credenciais**:
+  - Usuário: `admin`
+  - Senha: `admin123`
+- **Descrição**: Sistema legado em Django Templates que está sendo gradualmente migrado para React. Ainda possui mais funcionalidades implementadas (15+ páginas) e serve como referência durante a migração.
+
+**Páginas disponíveis no frontend legado:**
+- `/dashboard/` - Dashboard principal
+- `/cadastrar_geral/` - Cadastro de Pessoas/Empresas
+- `/listagem_geral/` - Listagem de Pessoas
+- `/cadastrar_produtos/` - Cadastro de Produtos
+- `/listagem_produtos/` - Listagem de Produtos
+- `/cadastrar_servicos/` - Cadastro de Serviços
+- `/listagem_servicos/` - Listagem de Serviços
+- E outras páginas (Financeiro, Faturamento, etc.)
+
+**Localização dos templates legados:**
+```
+core/templates/
+├── base.html              # Layout base com sidebar
+├── dashboard.html          # Dashboard
+├── login.html              # Página de login
+├── cadastro_geral.html     # Cadastro de pessoas
+├── cadastro_produtos.html  # Cadastro de produtos
+├── cadastro_servicos.html  # Cadastro de serviços
+├── listagem_geral.html     # Listagem de pessoas
+├── listagem_produtos.html  # Listagem de produtos
+└── listagem_servicos.html  # Listagem de serviços
+```
+
+### 3. **Django Admin** - Porta 8000
+
+- **URL**: http://127.0.0.1:8000/admin/
+- **Credenciais**:
+  - Usuário: `admin`
+  - Senha: `admin123`
+- **Descrição**: Painel administrativo nativo do Django. Permite gerenciar todos os modelos do sistema através de uma interface administrativa completa.
+
+**Funcionalidades do Django Admin:**
+- ✅ Gerenciar usuários e permissões
+- ✅ Visualizar e editar Pessoas, Produtos e Serviços
+- ✅ Acessar histórico de mudanças
+- ✅ Filtrar e buscar registros
+- ✅ Exportar dados
+- ✅ Interface completa para administração do sistema
+
+---
+
+## 🗄️ Banco de Dados
+
+### Configuração
+
+O banco de dados PostgreSQL é gerenciado automaticamente pelo Docker Compose.
+
+**Configurações padrão:**
+- **Host**: `localhost` (ou `db` dentro do container)
+- **Porta**: `5432`
+- **Nome do banco**: `siscr_db`
+- **Usuário**: `postgres`
+- **Senha**: `postgres`
+
+**Variáveis de ambiente** (definidas no `docker-compose.yml`):
+- `DB_NAME`: Nome do banco de dados
+- `DB_USER`: Usuário do PostgreSQL
+- `DB_PASSWORD`: Senha do PostgreSQL
+- `DB_HOST`: Host do banco
+- `DB_PORT`: Porta do banco
+
+### Acessar o Banco de Dados
+
+**Via Docker:**
+```bash
+# Windows
+docker-compose exec db psql -U postgres -d siscr_db
+
+# Linux/Mac
+docker compose exec db psql -U postgres -d siscr_db
+```
+
+**Via Cliente Externo:**
+- Host: `localhost`
+- Porta: `5432`
+- Database: `siscr_db`
+- Usuário: `postgres`
+- Senha: `postgres`
+
+---
+
+## 🌱 Seed de Dados para Teste
+
+Para popular o banco de dados com dados de exemplo para testes, utilize o comando `seed_data`:
+
+### Comando Básico
+
+```bash
+# Windows
+docker-compose exec web python manage.py seed_data
+
+# Linux/Mac
+docker compose exec web python manage.py seed_data
+```
+
+### Opções Disponíveis
+
+**Aplicar migrações antes de popular:**
+```bash
+docker-compose exec web python manage.py seed_data --migrate
+```
+
+**Limpar dados existentes e popular novamente:**
+```bash
+docker-compose exec web python manage.py seed_data --clear
+```
+
+### Dados Criados pelo Seed
+
+O comando cria os seguintes dados de exemplo:
+
+**Pessoas (9 registros):**
+- 3 Pessoas Físicas (Clientes)
+- 2 Pessoas Jurídicas (Clientes)
+- 2 Fornecedores
+- 2 Funcionários
+
+**Produtos (5 registros):**
+- Notebook Dell Inspiron 15 (Código: 1001)
+- Mouse Logitech MX Master 3 (Código: 1002)
+- Teclado Mecânico RGB (Código: 1003)
+- Aço Inox 304 - Chapa (Código: 2001)
+- Produto Importado - Componente Eletrônico (Código: 2002)
+
+**Serviços (5 registros):**
+- Consultoria em Comércio Exterior (Código: 3001)
+- Despacho Aduaneiro (Código: 3002)
+- Gestão de Documentação (Código: 3003)
+- Análise de Viabilidade de Importação (Código: 3004)
+- Suporte Técnico Especializado (Código: 3005)
+
+**Nota:** Se um registro já existir, ele será ignorado (não duplica dados).
 
 ---
 
@@ -131,7 +214,7 @@ Aguarde alguns segundos para os containers iniciarem completamente, depois acess
 # Windows
 docker-compose ps
 
-# Linux
+# Linux/Mac
 docker compose ps
 ```
 
@@ -144,10 +227,10 @@ docker-compose logs -f web
 # Windows - últimas 50 linhas
 docker-compose logs --tail 50 web
 
-# Linux - logs em tempo real
+# Linux/Mac - logs em tempo real
 docker compose logs -f web
 
-# Linux - últimas 50 linhas
+# Linux/Mac - últimas 50 linhas
 docker compose logs --tail 50 web
 ```
 
@@ -157,7 +240,7 @@ docker compose logs --tail 50 web
 # Windows
 docker-compose down
 
-# Linux
+# Linux/Mac
 docker compose down
 ```
 
@@ -167,7 +250,7 @@ docker compose down
 # Windows
 docker-compose down -v
 
-# Linux
+# Linux/Mac
 docker compose down -v
 ```
 
@@ -177,7 +260,7 @@ docker compose down -v
 # Windows
 docker-compose restart
 
-# Linux
+# Linux/Mac
 docker compose restart
 ```
 
@@ -187,7 +270,7 @@ docker compose restart
 # Windows
 docker-compose up -d --build
 
-# Linux
+# Linux/Mac
 docker compose up -d --build
 ```
 
@@ -197,7 +280,7 @@ docker compose up -d --build
 # Windows
 docker-compose exec web bash
 
-# Linux
+# Linux/Mac
 docker compose exec web bash
 ```
 
@@ -207,7 +290,7 @@ docker compose exec web bash
 # Windows
 docker-compose exec web python manage.py createsuperuser
 
-# Linux
+# Linux/Mac
 docker compose exec web python manage.py createsuperuser
 ```
 
@@ -217,7 +300,7 @@ docker compose exec web python manage.py createsuperuser
 # Windows
 docker-compose exec web python manage.py migrate
 
-# Linux
+# Linux/Mac
 docker compose exec web python manage.py migrate
 ```
 
@@ -227,7 +310,7 @@ docker compose exec web python manage.py migrate
 # Windows
 docker-compose exec web python manage.py collectstatic --noinput
 
-# Linux
+# Linux/Mac
 docker compose exec web python manage.py collectstatic --noinput
 ```
 
@@ -237,23 +320,34 @@ docker compose exec web python manage.py collectstatic --noinput
 
 ```
 siscr/
-├── core/                    # App principal do Django
-│   ├── models.py           # Modelos: Pessoa, Produto, Servico
-│   ├── views.py            # Views/controllers
-│   ├── forms.py            # Formulários Django
-│   ├── urls.py             # Rotas do app
-│   ├── templates/          # Templates HTML
-│   └── migrations/         # Migrações do banco
-├── siscr/                  # Configurações do projeto
-│   ├── settings.py        # Configurações Django
-│   ├── urls.py            # URLs raiz
-│   └── wsgi.py            # WSGI para deploy
-├── static/                 # Arquivos estáticos
-├── Dockerfile              # Imagem Docker da aplicação
-├── docker-compose.yml      # Orquestração dos containers
-├── requirements.txt        # Dependências Python
-├── manage.py              # Script de gerenciamento Django
-└── README.md              # Este arquivo
+├── accounts/              # App de autenticação
+├── cadastros/             # App de cadastros (Pessoas, Produtos, Serviços)
+│   ├── api/              # API REST (serializers, viewsets)
+│   └── management/       # Comandos Django (seed_data, create_tables)
+├── core/                 # App principal do Django
+│   ├── models.py         # Modelos principais
+│   ├── views.py          # Views/controllers
+│   ├── forms.py          # Formulários Django
+│   ├── urls.py           # Rotas do app
+│   ├── templates/        # Templates HTML (Frontend Legado)
+│   └── migrations/       # Migrações do banco
+├── frontend/             # Frontend React
+│   ├── src/
+│   │   ├── components/   # Componentes React
+│   │   ├── pages/        # Páginas da aplicação
+│   │   ├── services/     # Serviços de API
+│   │   └── hooks/        # Custom hooks
+│   └── package.json
+├── siscr/                # Configurações do projeto
+│   ├── settings.py      # Configurações Django
+│   ├── urls.py          # URLs raiz
+│   └── wsgi.py          # WSGI para deploy
+├── static/               # Arquivos estáticos
+├── Dockerfile            # Imagem Docker da aplicação
+├── docker-compose.yml    # Orquestração dos containers
+├── requirements.txt      # Dependências Python
+├── manage.py            # Script de gerenciamento Django
+└── README.md            # Este arquivo
 ```
 
 ---
@@ -273,7 +367,8 @@ O projeto usa variáveis de ambiente para configuração. No `docker-compose.yml
 
 ### Portas
 
-- **8000**: Aplicação Django
+- **8000**: Backend Django (API REST + Templates Legados + Admin)
+- **5173**: Frontend React (Vite Dev Server)
 - **5432**: PostgreSQL (exposta para acesso externo se necessário)
 
 ---
@@ -292,7 +387,7 @@ docker-compose logs db
 netstat -ano | findstr :8000
 netstat -ano | findstr :5432
 
-# Linux
+# Linux/Mac
 sudo lsof -i :8000
 sudo lsof -i :5432
 ```
@@ -302,6 +397,13 @@ sudo lsof -i :5432
 1. Verifique se o container `db` está rodando: `docker-compose ps`
 2. Aguarde alguns segundos após iniciar os containers (o PostgreSQL precisa de tempo para inicializar)
 3. Verifique os logs: `docker-compose logs db`
+
+### Frontend React não inicia
+
+1. Verifique se o Node.js está instalado: `node --version`
+2. Instale as dependências: `cd frontend && npm install`
+3. Verifique se a porta 5173 está livre
+4. Verifique os logs no terminal onde executou `npm run dev`
 
 ### Erro 404 nas imagens do login
 
@@ -328,6 +430,7 @@ docker-compose up -d --build
 - **Banco de Dados**: Os dados são persistidos em um volume Docker. Ao fazer `docker-compose down -v`, todos os dados serão perdidos.
 - **Superusuário**: O superusuário padrão (admin/admin123) é criado automaticamente na primeira execução.
 - **Migrations**: As migrations são aplicadas automaticamente ao subir os containers.
+- **Frontend Legado**: O frontend em Django Templates está sendo gradualmente migrado para React. Ambos coexistem durante a transição.
 
 ---
 
@@ -341,22 +444,34 @@ docker-compose up -d --build
 - Configure `DEBUG=False` no `settings.py`
 - Configure `ALLOWED_HOSTS` adequadamente
 - Use HTTPS em produção
+- Não exponha a porta 5432 do PostgreSQL em produção
 
 ---
 
 ## 📚 Tecnologias Utilizadas
 
+### Backend
 - **Django 4.2+**: Framework web Python
+- **Django REST Framework**: API REST
 - **PostgreSQL 15**: Banco de dados relacional
 - **Docker**: Containerização
 - **Docker Compose**: Orquestração de containers
-- **Tailwind CSS**: Framework CSS (via CDN)
+
+### Frontend
+- **React 19**: Biblioteca JavaScript para interfaces
+- **TypeScript**: Tipagem estática
+- **Vite**: Build tool e dev server
+- **Tailwind CSS**: Framework CSS
+- **Axios**: Cliente HTTP
 
 ---
 
 ## 📞 Suporte
 
-Para problemas ou dúvidas, consulte os logs dos containers ou abra uma issue no repositório.
+Para problemas ou dúvidas:
+- Consulte os logs dos containers: `docker-compose logs`
+- Verifique a documentação em `docs/`
+- Abra uma issue no repositório
 
 ---
 
