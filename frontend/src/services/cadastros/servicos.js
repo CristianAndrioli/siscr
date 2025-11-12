@@ -30,7 +30,7 @@ export const servicosService = {
   },
 
   proximoCodigo: async () => {
-    const response = await api.get('/cadastros/servicos/proximo-codigo/');
+    const response = await api.get('/cadastros/servicos/proximo_codigo/');
     return response.data;
   },
 };

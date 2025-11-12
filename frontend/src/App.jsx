@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
+import PessoasList from './pages/cadastros/PessoasList';
+import PessoasDetail from './pages/cadastros/PessoasDetail';
 
 // Componente para proteger rotas que precisam de autenticação
 function ProtectedRoute({ children }) {
@@ -62,6 +64,27 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <CadastroGeral />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Novas rotas usando estrutura base */}
+        <Route
+          path="/cadastros/pessoas"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PessoasList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/pessoas/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <PessoasDetail />
               </Layout>
             </ProtectedRoute>
           }

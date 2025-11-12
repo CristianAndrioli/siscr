@@ -78,16 +78,21 @@ function CadastroGeral() {
   // Formatação automática de campos
   const handleFormattedChange = (e) => {
     const { name, value } = e.target;
-    let formattedValue = value;
+    let formattedValue = value || '';
 
-    // Formatação automática
-    if (name === 'cpf_cnpj') {
-      formattedValue = formatCPFCNPJ(value);
-    } else if (name === 'cep') {
-      formattedValue = formatCEP(value);
-    } else if (name === 'telefone_fixo' || name === 'telefone_celular') {
-      formattedValue = formatPhone(value);
+    // Formatação automática apenas se houver valor
+    if (value) {
+      if (name === 'cpf_cnpj') {
+        formattedValue = formatCPFCNPJ(value);
+      } else if (name === 'cep') {
+        formattedValue = formatCEP(value);
+      } else if (name === 'telefone_fixo' || name === 'telefone_celular') {
+        formattedValue = formatPhone(value);
+      }
     }
+
+    // Garante que o valor seja uma string
+    formattedValue = String(formattedValue || '');
 
     handleChange({ target: { ...e.target, value: formattedValue } });
   };
