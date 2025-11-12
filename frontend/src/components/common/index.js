@@ -11,4 +11,5 @@ export { default as Modal } from './Modal';
 export { default as DataGrid } from './DataGrid';
 export { default as DetailView } from './DetailView';
 export { default as RelatedRecords } from './RelatedRecords';
+export { default as DynamicForm } from './DynamicForm';
 
