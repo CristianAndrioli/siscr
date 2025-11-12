@@ -28,8 +28,10 @@ class PessoaViewSet(viewsets.ModelViewSet):
 
 
 class ProdutoViewSet(viewsets.ModelViewSet):
-    queryset = Produto.objects.all()
+    queryset = Produto.objects.all().order_by('codigo_produto')
     serializer_class = ProdutoSerializer
+    # Campos que serão pesquisados pelo SearchFilter do DRF
+    search_fields = ['nome', 'descricao', 'codigo_ncm']
 
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
@@ -44,8 +46,10 @@ class ProdutoViewSet(viewsets.ModelViewSet):
 
 
 class ServicoViewSet(viewsets.ModelViewSet):
-    queryset = Servico.objects.all()
+    queryset = Servico.objects.all().order_by('codigo_servico')
     serializer_class = ServicoSerializer
+    # Campos que serão pesquisados pelo SearchFilter do DRF
+    search_fields = ['nome', 'descricao', 'codigo_ncm']
 
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):

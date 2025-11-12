@@ -102,17 +102,7 @@ function Layout({ children }) {
                         isActive('/cadastros/pessoas') ? 'bg-gray-700' : 'hover:bg-gray-700'
                       }`}
                     >
-                      Pessoas (Grid)
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/cadastros/geral"
-                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
-                        isActive('/cadastros/geral') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                      }`}
-                    >
-                      Geral (Pessoas/Empresas)
+                      Pessoas
                     </Link>
                   </li>
                   <li>
