@@ -63,7 +63,7 @@ function CadastroGeral() {
   const carregarDados = async () => {
     try {
       setLoading(true);
-      const dados = await pessoasService.buscar(codigo);
+      const dados = await pessoasService.get(codigo);
       setFormData({
         ...dados,
         tipo_classificacao: dados.tipo === 'PF' ? 'PF' : 'PJ',
@@ -104,9 +104,9 @@ function CadastroGeral() {
 
     try {
       if (editando) {
-        await pessoasService.atualizar(codigo, formData);
+        await pessoasService.update(codigo, formData);
       } else {
-        await pessoasService.criar(formData);
+        await pessoasService.create(formData);
       }
       navigate('/cadastros/geral/lista');
     } catch (err) {
