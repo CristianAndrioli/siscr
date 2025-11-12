@@ -2,10 +2,12 @@ import { useCrud } from '../../hooks/useCrud';
 import { DataGrid } from '../../components/common';
 import { pessoasService } from '../../services/cadastros/pessoas';
 import { useNavigate } from 'react-router-dom';
+import { useGridColumns } from '../../hooks/useGridColumns';
+import { formatCPFCNPJ } from '../../utils/formatters';
 
 /**
  * Página de listagem de Pessoas usando a estrutura base
- * Demonstra o uso do DataGrid e useCrud
+ * Demonstra o uso do DataGrid e useCrud com geração automática de colunas
  */
 export function PessoasList() {
   const navigate = useNavigate();
@@ -17,6 +19,8 @@ export function PessoasList() {
     pagination,
     handleViewRecord,
     handleCreateRecord,
+    handleEditRecord,
+    handleDeleteRecord,
     handleSearch,
     handlePageChange,
   } = useCrud({
@@ -25,54 +29,53 @@ export function PessoasList() {
     getRecordId: (record) => record.codigo_cadastro,
   });
 
-  // Configuração das colunas do grid
-  const columns = [
-    {
-      key: 'codigo_cadastro',
-      label: 'Código',
-      sortable: true,
-    },
-    {
-      key: 'nome_completo',
-      label: 'Nome',
-      sortable: true,
-      render: (value, record) => {
-        return value || record.razao_social || record.nome_fantasia || '-';
+  // Gerar colunas automaticamente com overrides customizados
+  const columns = useGridColumns(data, {
+    autoConfig: {
+      // Campos que não devem aparecer no grid
+      hiddenFields: [
+        'logradouro', 'numero', 'letra', 'complemento', 'bairro', 'cep',
+        'nome_contato', 'telefone_fixo', 'telefone_celular', 'cargo',
+        'comissoes', 'observacoes', 'inscricao_estadual', 'contribuinte'
+      ],
+      // Overrides para campos específicos
+      fieldOverrides: {
+        nome_completo: {
+          label: 'Nome',
+          defaultWidth: 250,
+          render: (value, record) => {
+            return value || record.razao_social || record.nome_fantasia || '-';
+          },
+        },
+        cpf_cnpj: {
+          label: 'CPF/CNPJ',
+          defaultWidth: 150,
+          render: (value) => formatCPFCNPJ(value),
+        },
+        tipo: {
+          label: 'Tipo',
+          defaultWidth: 120,
+          render: (value) => {
+            const tipos = {
+              'PF': 'Pessoa Física',
+              'PJ': 'Pessoa Jurídica',
+            };
+            return tipos[value] || value;
+          },
+        },
+      },
+      // Larguras padrão customizadas
+      defaultWidths: {
+        codigo_cadastro: 100,
+        nome_completo: 250,
+        cpf_cnpj: 150,
+        tipo: 120,
+        cidade: 150,
+        estado: 80,
+        email: 200,
       },
     },
-    {
-      key: 'cpf_cnpj',
-      label: 'CPF/CNPJ',
-      sortable: true,
-    },
-    {
-      key: 'tipo',
-      label: 'Tipo',
-      sortable: true,
-      render: (value) => {
-        const tipos = {
-          'PF': 'Pessoa Física',
-          'PJ': 'Pessoa Jurídica',
-        };
-        return tipos[value] || value;
-      },
-    },
-    {
-      key: 'cidade',
-      label: 'Cidade',
-      sortable: true,
-    },
-    {
-      key: 'estado',
-      label: 'Estado',
-      sortable: true,
-    },
-    {
-      key: 'email',
-      label: 'Email',
-      sortable: true,
-    },
-  ];
+  });
 
   return (
     <div className="space-y-6">
@@ -97,6 +100,8 @@ export function PessoasList() {
         onRowClick={handleViewRecord}
         onSearch={handleSearch}
         onCreate={handleCreateRecord}
+        onEdit={handleEditRecord}
+        onDelete={handleDeleteRecord}
         loading={loading}
         pagination={{
           ...pagination,
@@ -104,6 +109,8 @@ export function PessoasList() {
         }}
         searchPlaceholder="Pesquisar por nome, CPF/CNPJ, cidade..."
         emptyMessage="Nenhuma pessoa cadastrada. Clique em 'Novo' para adicionar."
+        gridId="pessoas"
+        showActions={true}
       />
     </div>
   );

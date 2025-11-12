@@ -7,7 +7,13 @@ import api from '../api';
 export const pessoasService = {
   // Listar todas as pessoas (compatível com useCrud)
   list: async (params = {}) => {
-    const response = await api.get('/cadastros/pessoas/', { params });
+    // Converter pageSize para page_size (padrão do DRF)
+    const drfParams = { ...params };
+    if (drfParams.pageSize) {
+      drfParams.page_size = drfParams.pageSize;
+      delete drfParams.pageSize;
+    }
+    const response = await api.get('/cadastros/pessoas/', { params: drfParams });
     return response.data;
   },
 
