@@ -12,18 +12,43 @@ Sistema de gestão para empresas de logística e comércio exterior desenvolvido
 
 ## 🚀 Iniciando a Aplicação
 
-### Passo 1: Iniciar Backend (Django + PostgreSQL)
+### ⚡ Início Rápido (Windows)
+
+Para facilitar, você pode usar o script batch que automatiza todo o processo:
+
+**Simplesmente execute:**
+```bash
+start.bat
+```
+
+Este script irá:
+- ✅ Verificar se Docker e Node.js estão instalados
+- ✅ Instalar dependências do frontend se necessário
+- ✅ Iniciar o backend (Docker Compose)
+- ✅ Iniciar o frontend React
+- ✅ Abrir automaticamente os navegadores com:
+  - Frontend React: http://localhost:5173
+  - Backend Django: http://127.0.0.1:8000/login/
+  - Django Admin: http://127.0.0.1:8000/admin/
+
+**Nota:** Na primeira execução, o script pode demorar alguns minutos para baixar imagens Docker e instalar dependências.
+
+---
+
+### 📝 Início Manual
+
+Se preferir iniciar manualmente ou estiver em Linux/Mac:
+
+#### Passo 1: Iniciar Backend (Django + PostgreSQL)
 
 O backend utiliza Docker Compose para gerenciar o banco de dados PostgreSQL e a aplicação Django.
 
-#### Windows
-
+**Windows:**
 ```bash
 docker-compose up -d --build
 ```
 
-#### Linux/Mac
-
+**Linux/Mac:**
 ```bash
 docker compose up -d --build
 ```
@@ -38,7 +63,7 @@ Este comando irá:
 
 **Aguarde alguns segundos** para os containers iniciarem completamente.
 
-### Passo 2: Iniciar Frontend React
+#### Passo 2: Iniciar Frontend React
 
 Em um novo terminal, navegue até a pasta do frontend e inicie o servidor de desenvolvimento:
 
