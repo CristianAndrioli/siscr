@@ -7,6 +7,10 @@ import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
 import PessoasDetail from './pages/cadastros/PessoasDetail';
+import ProdutosList from './pages/cadastros/ProdutosList';
+import ProdutosDetail from './pages/cadastros/ProdutosDetail';
+import ServicosList from './pages/cadastros/ServicosList';
+import ServicosDetail from './pages/cadastros/ServicosDetail';
 
 // Componente para proteger rotas que precisam de autenticação
 function ProtectedRoute({ children }) {
@@ -85,6 +89,46 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <PessoasDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/produtos"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProdutosList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/produtos/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProdutosDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/servicos"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ServicosList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cadastros/servicos/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ServicosDetail />
               </Layout>
             </ProtectedRoute>
           }

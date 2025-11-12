@@ -4,27 +4,32 @@
 import api from '../api';
 
 export const servicosService = {
-  listar: async (params = {}) => {
-    const response = await api.get('/cadastros/servicos/', { params });
+  list: async (params = {}) => {
+    const drfParams = { ...params };
+    if (drfParams.pageSize) {
+      drfParams.page_size = drfParams.pageSize;
+      delete drfParams.pageSize;
+    }
+    const response = await api.get('/cadastros/servicos/', { params: drfParams });
     return response.data;
   },
 
-  buscar: async (codigo) => {
+  get: async (codigo) => {
     const response = await api.get(`/cadastros/servicos/${codigo}/`);
     return response.data;
   },
 
-  criar: async (dados) => {
+  create: async (dados) => {
     const response = await api.post('/cadastros/servicos/', dados);
     return response.data;
   },
 
-  atualizar: async (codigo, dados) => {
+  update: async (codigo, dados) => {
     const response = await api.put(`/cadastros/servicos/${codigo}/`, dados);
     return response.data;
   },
 
-  excluir: async (codigo) => {
+  delete: async (codigo) => {
     const response = await api.delete(`/cadastros/servicos/${codigo}/`);
     return response.data;
   },
