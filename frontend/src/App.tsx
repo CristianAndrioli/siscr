@@ -4,6 +4,16 @@ import { authService } from './services/auth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ServicoLogistico from './pages/ServicoLogistico';
+import ListaDescricaoNCM from './pages/servico-logistico/ListaDescricaoNCM';
+import SolicitacaoEstimativaCustos from './pages/servico-logistico/SolicitacaoEstimativaCustos';
+import AberturaMEX from './pages/servico-logistico/AberturaMEX';
+import FollowUp from './pages/servico-logistico/FollowUp';
+import AssessoriaImportacaoExportacao from './pages/servico-logistico/AssessoriaImportacaoExportacao';
+import Documentacao from './pages/servico-logistico/Documentacao';
+import DespachoAduaneiro from './pages/servico-logistico/DespachoAduaneiro';
+import AssessoriaCambial from './pages/servico-logistico/AssessoriaCambial';
+import HabilitacoesCertificacoes from './pages/servico-logistico/HabilitacoesCertificacoes';
+import DesenvolvimentoFornecedores from './pages/servico-logistico/DesenvolvimentoFornecedores';
 import Perfil from './pages/Perfil';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
@@ -68,6 +78,106 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ServicoLogistico />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/lista-descricao-ncm"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ListaDescricaoNCM />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/solicitacao-estimativa-custos"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SolicitacaoEstimativaCustos />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/abertura-mex"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AberturaMEX />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/follow-up"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <FollowUp />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/assessoria-importacao-exportacao"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AssessoriaImportacaoExportacao />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/documentacao"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Documentacao />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/despacho-aduaneiro"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DespachoAduaneiro />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/assessoria-cambial"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AssessoriaCambial />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/habilitacoes-certificacoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <HabilitacoesCertificacoes />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/desenvolvimento-fornecedores"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DesenvolvimentoFornecedores />
               </Layout>
             </ProtectedRoute>
           }
