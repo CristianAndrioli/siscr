@@ -4,6 +4,7 @@ import { authService } from './services/auth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ServicoLogistico from './pages/ServicoLogistico';
+import Perfil from './pages/Perfil';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
@@ -67,6 +68,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ServicoLogistico />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/perfil"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Perfil />
               </Layout>
             </ProtectedRoute>
           }
