@@ -227,8 +227,31 @@ function Layout({ children }: LayoutProps) {
                       NFSe
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to="/faturamento/cotacao-cambio"
+                      className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
+                    >
+                      Cotação de Câmbio
+                    </Link>
+                  </li>
                 </ul>
               )}
+            </li>
+
+            {/* Monitoramento */}
+            <li>
+              <Link
+                to="/monitoramento"
+                className={`flex items-center p-2 rounded-lg transition duration-150 ${
+                  isActive('/monitoramento') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                }`}
+              >
+                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Monitoramento
+              </Link>
             </li>
 
             {/* Perfil */}
