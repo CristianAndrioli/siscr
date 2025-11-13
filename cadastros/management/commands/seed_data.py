@@ -6,7 +6,8 @@ from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db import transaction, connection
 from decimal import Decimal
-from cadastros.models import Pessoa, Produto, Servico
+from datetime import date, timedelta
+from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
 
 
 class Command(BaseCommand):
@@ -48,6 +49,8 @@ class Command(BaseCommand):
         if clear:
             self.stdout.write(self.style.WARNING('Limpando dados existentes...'))
             try:
+                ContaReceber.objects.all().delete()
+                ContaPagar.objects.all().delete()
                 Pessoa.objects.all().delete()
                 Produto.objects.all().delete()
                 Servico.objects.all().delete()
@@ -66,16 +69,24 @@ class Command(BaseCommand):
         # Seed Serviços
         self._seed_servicos()
         
+        # Seed Financeiro (precisa de pessoas criadas primeiro)
+        self._seed_contas_receber()
+        self._seed_contas_pagar()
+        
         # Contar registros criados (com tratamento de erro)
         try:
             pessoas_count = Pessoa.objects.count()
             produtos_count = Produto.objects.count()
             servicos_count = Servico.objects.count()
+            contas_receber_count = ContaReceber.objects.count()
+            contas_pagar_count = ContaPagar.objects.count()
             
             self.stdout.write(self.style.SUCCESS('\n✅ Seed concluído com sucesso!'))
             self.stdout.write(f'  - {pessoas_count} pessoas criadas')
             self.stdout.write(f'  - {produtos_count} produtos criados')
             self.stdout.write(f'  - {servicos_count} serviços criados')
+            self.stdout.write(f'  - {contas_receber_count} contas a receber criadas')
+            self.stdout.write(f'  - {contas_pagar_count} contas a pagar criadas')
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'\n⚠ Não foi possível contar registros: {e}'))
             self.stdout.write(self.style.SUCCESS('✅ Seed executado (alguns dados podem ter sido criados)'))
@@ -499,4 +510,170 @@ class Command(BaseCommand):
                     self.stdout.write(f'  ✓ {criados} serviços criados (modo individual)')
                 else:
                     self.stdout.write(self.style.WARNING(f'  ⚠ Nenhum serviço criado. Erro: {e}'))
+
+    def _seed_contas_receber(self):
+        """Cria contas a receber de exemplo"""
+        try:
+            # Buscar clientes (PJ)
+            clientes = list(Pessoa.objects.filter(tipo='PJ')[:2])
+            if not clientes:
+                self.stdout.write(self.style.WARNING('  ⚠ Nenhum cliente encontrado. Criando contas a receber ignorado.'))
+                return
+            
+            hoje = date.today()
+            contas_data = [
+                {
+                    'codigo_conta': 1,
+                    'numero_documento': 'CR-001/2024',
+                    'cliente': clientes[0],
+                    'valor_total': Decimal('5000.00'),
+                    'valor_recebido': Decimal('0.00'),
+                    'data_emissao': hoje - timedelta(days=10),
+                    'data_vencimento': hoje + timedelta(days=20),
+                    'status': 'Pendente',
+                    'forma_pagamento': 'Boleto',
+                    'descricao': 'Prestação de serviços de consultoria',
+                },
+                {
+                    'codigo_conta': 2,
+                    'numero_documento': 'CR-002/2024',
+                    'cliente': clientes[0] if len(clientes) > 0 else clientes[0],
+                    'valor_total': Decimal('15000.00'),
+                    'valor_recebido': Decimal('5000.00'),
+                    'data_emissao': hoje - timedelta(days=30),
+                    'data_vencimento': hoje - timedelta(days=5),
+                    'status': 'Parcial',
+                    'forma_pagamento': 'PIX',
+                    'descricao': 'Venda de produtos - parcela 1 de 3',
+                },
+                {
+                    'codigo_conta': 3,
+                    'numero_documento': 'CR-003/2024',
+                    'cliente': clientes[1] if len(clientes) > 1 else clientes[0],
+                    'valor_total': Decimal('8000.00'),
+                    'valor_recebido': Decimal('8000.00'),
+                    'data_emissao': hoje - timedelta(days=45),
+                    'data_vencimento': hoje - timedelta(days=15),
+                    'data_recebimento': hoje - timedelta(days=10),
+                    'status': 'Pago',
+                    'forma_pagamento': 'Transferência',
+                    'descricao': 'Serviço de despacho aduaneiro',
+                },
+                {
+                    'codigo_conta': 4,
+                    'numero_documento': 'CR-004/2024',
+                    'cliente': clientes[0],
+                    'valor_total': Decimal('3000.00'),
+                    'valor_recebido': Decimal('0.00'),
+                    'data_emissao': hoje - timedelta(days=60),
+                    'data_vencimento': hoje - timedelta(days=30),
+                    'status': 'Vencido',
+                    'forma_pagamento': 'Boleto',
+                    'descricao': 'Conta vencida - aguardando pagamento',
+                },
+            ]
+            
+            contas_para_criar = [ContaReceber(**data) for data in contas_data]
+            
+            if contas_para_criar:
+                try:
+                    ContaReceber.objects.bulk_create(contas_para_criar, ignore_conflicts=True)
+                    self.stdout.write(f'  ✓ {len(contas_para_criar)} contas a receber criadas')
+                except Exception as e:
+                    criadas = 0
+                    for conta in contas_para_criar:
+                        try:
+                            conta.save(force_insert=True)
+                            criadas += 1
+                        except Exception:
+                            pass
+                    if criadas > 0:
+                        self.stdout.write(f'  ✓ {criadas} contas a receber criadas (modo individual)')
+                    else:
+                        self.stdout.write(self.style.WARNING(f'  ⚠ Nenhuma conta a receber criada. Erro: {e}'))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  ⚠ Erro ao criar contas a receber: {e}'))
+
+    def _seed_contas_pagar(self):
+        """Cria contas a pagar de exemplo"""
+        try:
+            # Buscar fornecedores (PJ)
+            fornecedores = list(Pessoa.objects.filter(tipo='PJ').exclude(codigo_cadastro__in=[10, 11])[:2])
+            if not fornecedores:
+                self.stdout.write(self.style.WARNING('  ⚠ Nenhum fornecedor encontrado. Criando contas a pagar ignorado.'))
+                return
+            
+            hoje = date.today()
+            contas_data = [
+                {
+                    'codigo_conta': 1,
+                    'numero_documento': 'CP-001/2024',
+                    'fornecedor': fornecedores[0],
+                    'valor_total': Decimal('12000.00'),
+                    'valor_pago': Decimal('0.00'),
+                    'data_emissao': hoje - timedelta(days=5),
+                    'data_vencimento': hoje + timedelta(days=25),
+                    'status': 'Pendente',
+                    'forma_pagamento': 'Boleto',
+                    'descricao': 'Compra de materiais para estoque',
+                },
+                {
+                    'codigo_conta': 2,
+                    'numero_documento': 'CP-002/2024',
+                    'fornecedor': fornecedores[0] if len(fornecedores) > 0 else fornecedores[0],
+                    'valor_total': Decimal('8500.00'),
+                    'valor_pago': Decimal('4250.00'),
+                    'data_emissao': hoje - timedelta(days=20),
+                    'data_vencimento': hoje + timedelta(days=10),
+                    'status': 'Parcial',
+                    'forma_pagamento': 'PIX',
+                    'descricao': 'Serviços de importação - parcela 1 de 2',
+                },
+                {
+                    'codigo_conta': 3,
+                    'numero_documento': 'CP-003/2024',
+                    'fornecedor': fornecedores[1] if len(fornecedores) > 1 else fornecedores[0],
+                    'valor_total': Decimal('6000.00'),
+                    'valor_pago': Decimal('6000.00'),
+                    'data_emissao': hoje - timedelta(days=40),
+                    'data_vencimento': hoje - timedelta(days=10),
+                    'data_pagamento': hoje - timedelta(days=8),
+                    'status': 'Pago',
+                    'forma_pagamento': 'Transferência',
+                    'descricao': 'Pagamento de fornecedor - quitado',
+                },
+                {
+                    'codigo_conta': 4,
+                    'numero_documento': 'CP-004/2024',
+                    'fornecedor': fornecedores[0],
+                    'valor_total': Decimal('4500.00'),
+                    'valor_pago': Decimal('0.00'),
+                    'data_emissao': hoje - timedelta(days=50),
+                    'data_vencimento': hoje - timedelta(days=20),
+                    'status': 'Vencido',
+                    'forma_pagamento': 'Boleto',
+                    'descricao': 'Conta vencida - aguardando pagamento',
+                },
+            ]
+            
+            contas_para_criar = [ContaPagar(**data) for data in contas_data]
+            
+            if contas_para_criar:
+                try:
+                    ContaPagar.objects.bulk_create(contas_para_criar, ignore_conflicts=True)
+                    self.stdout.write(f'  ✓ {len(contas_para_criar)} contas a pagar criadas')
+                except Exception as e:
+                    criadas = 0
+                    for conta in contas_para_criar:
+                        try:
+                            conta.save(force_insert=True)
+                            criadas += 1
+                        except Exception:
+                            pass
+                    if criadas > 0:
+                        self.stdout.write(f'  ✓ {criadas} contas a pagar criadas (modo individual)')
+                    else:
+                        self.stdout.write(self.style.WARNING(f'  ⚠ Nenhuma conta a pagar criada. Erro: {e}'))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  ⚠ Erro ao criar contas a pagar: {e}'))
 

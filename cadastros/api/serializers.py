@@ -2,7 +2,7 @@
 # Serializers movidos de core/api/serializers.py
 
 from rest_framework import serializers
-from cadastros.models import Pessoa, Produto, Servico
+from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
 
 
 class PessoaSerializer(serializers.ModelSerializer):
@@ -107,5 +107,69 @@ class ServicoSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         # Não permitir alterar codigo_servico na atualização
         validated_data.pop('codigo_servico', None)
+        return super().update(instance, validated_data)
+
+
+class ContaReceberSerializer(serializers.ModelSerializer):
+    cliente_nome = serializers.CharField(source='cliente.razao_social', read_only=True)
+    
+    class Meta:
+        model = ContaReceber
+        fields = '__all__'
+    
+    def create(self, validated_data):
+        if 'codigo_conta' not in validated_data or not validated_data['codigo_conta']:
+            from django.db.models import Max
+            try:
+                max_id = ContaReceber.objects.all().aggregate(max_id=Max('codigo_conta'))['max_id']
+                validated_data['codigo_conta'] = (max_id or 0) + 1
+            except Exception:
+                validated_data['codigo_conta'] = 1
+        if validated_data.get('codigo_conta'):
+            try:
+                validated_data['codigo_conta'] = int(validated_data['codigo_conta'])
+            except (ValueError, TypeError):
+                from django.db.models import Max
+                try:
+                    max_id = ContaReceber.objects.all().aggregate(max_id=Max('codigo_conta'))['max_id']
+                    validated_data['codigo_conta'] = (max_id or 0) + 1
+                except Exception:
+                    validated_data['codigo_conta'] = 1
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        validated_data.pop('codigo_conta', None)
+        return super().update(instance, validated_data)
+
+
+class ContaPagarSerializer(serializers.ModelSerializer):
+    fornecedor_nome = serializers.CharField(source='fornecedor.razao_social', read_only=True)
+    
+    class Meta:
+        model = ContaPagar
+        fields = '__all__'
+    
+    def create(self, validated_data):
+        if 'codigo_conta' not in validated_data or not validated_data['codigo_conta']:
+            from django.db.models import Max
+            try:
+                max_id = ContaPagar.objects.all().aggregate(max_id=Max('codigo_conta'))['max_id']
+                validated_data['codigo_conta'] = (max_id or 0) + 1
+            except Exception:
+                validated_data['codigo_conta'] = 1
+        if validated_data.get('codigo_conta'):
+            try:
+                validated_data['codigo_conta'] = int(validated_data['codigo_conta'])
+            except (ValueError, TypeError):
+                from django.db.models import Max
+                try:
+                    max_id = ContaPagar.objects.all().aggregate(max_id=Max('codigo_conta'))['max_id']
+                    validated_data['codigo_conta'] = (max_id or 0) + 1
+                except Exception:
+                    validated_data['codigo_conta'] = 1
+        return super().create(validated_data)
+    
+    def update(self, instance, validated_data):
+        validated_data.pop('codigo_conta', None)
         return super().update(instance, validated_data)
 

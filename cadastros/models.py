@@ -2,6 +2,8 @@
 # Models movidos de core/models.py
 
 from django.db import models
+from django.core.validators import MinValueValidator
+from decimal import Decimal
 
 # Estados brasileiros (constante compartilhada)
 ESTADOS_CHOICES = [
@@ -143,3 +145,241 @@ class Produto(models.Model):
 
     def __str__(self):
         return f"{self.codigo_produto} - {self.nome}"
+
+
+# ============================================================================
+# MODELOS DE FINANCEIRO
+# ============================================================================
+
+class ContaReceber(models.Model):
+    """Modelo para Contas a Receber"""
+    
+    STATUS_CHOICES = [
+        ('Pendente', 'Pendente'),
+        ('Parcial', 'Parcialmente Pago'),
+        ('Pago', 'Pago'),
+        ('Cancelado', 'Cancelado'),
+        ('Vencido', 'Vencido'),
+    ]
+    
+    FORMA_PAGAMENTO_CHOICES = [
+        ('Dinheiro', 'Dinheiro'),
+        ('PIX', 'PIX'),
+        ('Boleto', 'Boleto'),
+        ('Cartão Crédito', 'Cartão de Crédito'),
+        ('Cartão Débito', 'Cartão de Débito'),
+        ('Transferência', 'Transferência Bancária'),
+        ('Cheque', 'Cheque'),
+    ]
+    
+    # Identificação
+    codigo_conta = models.IntegerField(primary_key=True, verbose_name='Código da Conta')
+    numero_documento = models.CharField(max_length=50, unique=True, verbose_name='Número do Documento')
+    
+    # Relacionamentos
+    cliente = models.ForeignKey(
+        Pessoa,
+        on_delete=models.PROTECT,
+        related_name='contas_receber',
+        verbose_name='Cliente',
+        limit_choices_to={'tipo': 'PJ'}  # Apenas clientes (PJ)
+    )
+    
+    # Valores
+    valor_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Valor Total'
+    )
+    valor_recebido = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        verbose_name='Valor Recebido'
+    )
+    valor_pendente = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        verbose_name='Valor Pendente',
+        editable=False
+    )
+    
+    # Datas
+    data_emissao = models.DateField(verbose_name='Data de Emissão')
+    data_vencimento = models.DateField(verbose_name='Data de Vencimento')
+    data_recebimento = models.DateField(blank=True, null=True, verbose_name='Data de Recebimento')
+    
+    # Status e Forma de Pagamento
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='Pendente',
+        verbose_name='Status'
+    )
+    forma_pagamento = models.CharField(
+        max_length=20,
+        choices=FORMA_PAGAMENTO_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name='Forma de Pagamento'
+    )
+    
+    # Informações Adicionais
+    descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
+    observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
+    
+    # Controle
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    
+    class Meta:
+        verbose_name = 'Conta a Receber'
+        verbose_name_plural = 'Contas a Receber'
+        ordering = ['-data_vencimento', '-codigo_conta']
+        indexes = [
+            models.Index(fields=['cliente', 'status']),
+            models.Index(fields=['data_vencimento', 'status']),
+        ]
+    
+    def save(self, *args, **kwargs):
+        # Importar timezone aqui para evitar problemas de importação circular
+        from django.utils import timezone
+        
+        # Calcular valor pendente automaticamente
+        self.valor_pendente = self.valor_total - self.valor_recebido
+        
+        # Atualizar status baseado nos valores
+        if self.valor_pendente <= 0:
+            self.status = 'Pago'
+            if not self.data_recebimento:
+                self.data_recebimento = timezone.now().date()
+        elif self.valor_recebido > 0:
+            self.status = 'Parcial'
+        elif self.data_vencimento and self.data_vencimento < timezone.now().date():
+            self.status = 'Vencido'
+        else:
+            self.status = 'Pendente'
+        
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.numero_documento} - {self.cliente} - R$ {self.valor_total}"
+
+
+class ContaPagar(models.Model):
+    """Modelo para Contas a Pagar"""
+    
+    STATUS_CHOICES = [
+        ('Pendente', 'Pendente'),
+        ('Parcial', 'Parcialmente Pago'),
+        ('Pago', 'Pago'),
+        ('Cancelado', 'Cancelado'),
+        ('Vencido', 'Vencido'),
+    ]
+    
+    FORMA_PAGAMENTO_CHOICES = [
+        ('Dinheiro', 'Dinheiro'),
+        ('PIX', 'PIX'),
+        ('Boleto', 'Boleto'),
+        ('Cartão Crédito', 'Cartão de Crédito'),
+        ('Cartão Débito', 'Cartão de Débito'),
+        ('Transferência', 'Transferência Bancária'),
+        ('Cheque', 'Cheque'),
+    ]
+    
+    # Identificação
+    codigo_conta = models.IntegerField(primary_key=True, verbose_name='Código da Conta')
+    numero_documento = models.CharField(max_length=50, unique=True, verbose_name='Número do Documento')
+    
+    # Relacionamentos
+    fornecedor = models.ForeignKey(
+        Pessoa,
+        on_delete=models.PROTECT,
+        related_name='contas_pagar',
+        verbose_name='Fornecedor',
+        limit_choices_to={'tipo': 'PJ'}  # Apenas fornecedores (PJ)
+    )
+    
+    # Valores
+    valor_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        verbose_name='Valor Total'
+    )
+    valor_pago = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        verbose_name='Valor Pago'
+    )
+    valor_pendente = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        verbose_name='Valor Pendente',
+        editable=False
+    )
+    
+    # Datas
+    data_emissao = models.DateField(verbose_name='Data de Emissão')
+    data_vencimento = models.DateField(verbose_name='Data de Vencimento')
+    data_pagamento = models.DateField(blank=True, null=True, verbose_name='Data de Pagamento')
+    
+    # Status e Forma de Pagamento
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='Pendente',
+        verbose_name='Status'
+    )
+    forma_pagamento = models.CharField(
+        max_length=20,
+        choices=FORMA_PAGAMENTO_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name='Forma de Pagamento'
+    )
+    
+    # Informações Adicionais
+    descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
+    observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
+    
+    # Controle
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    
+    class Meta:
+        verbose_name = 'Conta a Pagar'
+        verbose_name_plural = 'Contas a Pagar'
+        ordering = ['-data_vencimento', '-codigo_conta']
+        indexes = [
+            models.Index(fields=['fornecedor', 'status']),
+            models.Index(fields=['data_vencimento', 'status']),
+        ]
+    
+    def save(self, *args, **kwargs):
+        # Importar timezone aqui para evitar problemas de importação circular
+        from django.utils import timezone
+        
+        # Calcular valor pendente automaticamente
+        self.valor_pendente = self.valor_total - self.valor_pago
+        
+        # Atualizar status baseado nos valores
+        if self.valor_pendente <= 0:
+            self.status = 'Pago'
+            if not self.data_pagamento:
+                self.data_pagamento = timezone.now().date()
+        elif self.valor_pago > 0:
+            self.status = 'Parcial'
+        elif self.data_vencimento and self.data_vencimento < timezone.now().date():
+            self.status = 'Vencido'
+        else:
+            self.status = 'Pendente'
+        
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return f"{self.numero_documento} - {self.fornecedor} - R$ {self.valor_total}"

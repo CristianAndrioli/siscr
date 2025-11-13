@@ -160,7 +160,7 @@ function Layout({ children }: LayoutProps) {
                 <ul className="pl-6 mt-2 space-y-1">
                   <li>
                     <Link
-                      to="/financeiro/contas-a-receber"
+                      to="/financeiro/contas-receber"
                       className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
                     >
                       Contas a Receber
@@ -168,18 +168,10 @@ function Layout({ children }: LayoutProps) {
                   </li>
                   <li>
                     <Link
-                      to="/financeiro/contas-a-pagar"
+                      to="/financeiro/contas-pagar"
                       className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
                     >
                       Contas a Pagar
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      to="/financeiro"
-                      className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
-                    >
-                      Visão Geral
                     </Link>
                   </li>
                 </ul>
