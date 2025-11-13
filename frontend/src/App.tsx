@@ -14,6 +14,18 @@ import DespachoAduaneiro from './pages/servico-logistico/DespachoAduaneiro';
 import AssessoriaCambial from './pages/servico-logistico/AssessoriaCambial';
 import HabilitacoesCertificacoes from './pages/servico-logistico/HabilitacoesCertificacoes';
 import DesenvolvimentoFornecedores from './pages/servico-logistico/DesenvolvimentoFornecedores';
+import Cotacoes from './pages/faturamento/Cotacoes';
+import CotacaoCambio from './pages/faturamento/CotacaoCambio';
+import NFVenda from './pages/faturamento/NFVenda';
+import NFSe from './pages/faturamento/NFSe';
+import Monitoramento from './pages/Monitoramento';
+import Contrato from './pages/servico-logistico/Contrato';
+import ListaDescricaoProdutosRegistroDI from './pages/servico-logistico/ListaDescricaoProdutosRegistroDI';
+import ControleProcesso from './pages/servico-logistico/ControleProcesso';
+import CheckListProcessosAPACOMEX from './pages/servico-logistico/CheckListProcessosAPACOMEX';
+import CheckListProcessos from './pages/servico-logistico/CheckListProcessos';
+import CotacaoFreteInternacionalRodoviario from './pages/servico-logistico/CotacaoFreteInternacionalRodoviario';
+import AnaliseFechamentoFrete from './pages/servico-logistico/AnaliseFechamentoFrete';
 import Perfil from './pages/Perfil';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
@@ -178,6 +190,126 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <DesenvolvimentoFornecedores />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/faturamento/cotacoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Cotacoes />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/faturamento/nf-venda"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <NFVenda />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/faturamento/nfse"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <NFSe />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/faturamento/cotacao-cambio"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CotacaoCambio />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/contrato"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Contrato />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/lista-descricao-produtos-registro-di"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ListaDescricaoProdutosRegistroDI />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/controle-processo"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ControleProcesso />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/checklist-processos-apacomex"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CheckListProcessosAPACOMEX />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/checklist-processos"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CheckListProcessos />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/cotacao-frete-internacional-rodoviario"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CotacaoFreteInternacionalRodoviario />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico/analise-fechamento-frete"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AnaliseFechamentoFrete />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/monitoramento"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Monitoramento />
               </Layout>
             </ProtectedRoute>
           }
