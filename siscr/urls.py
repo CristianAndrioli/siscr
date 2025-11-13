@@ -21,8 +21,6 @@ urlpatterns = [
     path('api/cadastros/', include('cadastros.api.urls')),
     path('api/', include('core.api.urls')),  # Mantém API geral do core (se houver)
     
-    # Inclui todas as rotas definidas no arquivo core/urls.py na raiz do projeto
+    # APIs auxiliares do core (se necessário)
     path('', include('core.urls')),
-    # Inclui rotas do app cadastros
-    path('cadastros/', include('cadastros.urls')),
 ]
