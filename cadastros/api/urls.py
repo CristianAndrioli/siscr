@@ -3,7 +3,10 @@
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .viewsets import PessoaViewSet, ProdutoViewSet, ServicoViewSet
+from .viewsets import (
+    PessoaViewSet, ProdutoViewSet, ServicoViewSet,
+    ContaReceberViewSet, ContaPagarViewSet
+)
 
 app_name = 'cadastros_api'
 
@@ -12,6 +15,8 @@ router = DefaultRouter()
 router.register(r'pessoas', PessoaViewSet, basename='pessoa')
 router.register(r'produtos', ProdutoViewSet, basename='produto')
 router.register(r'servicos', ServicoViewSet, basename='servico')
+router.register(r'contas-receber', ContaReceberViewSet, basename='contareceber')
+router.register(r'contas-pagar', ContaPagarViewSet, basename='contapagar')
 
 urlpatterns = [
     path('', include(router.urls)),

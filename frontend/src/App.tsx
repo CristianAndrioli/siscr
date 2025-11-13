@@ -11,6 +11,10 @@ import ProdutosList from './pages/cadastros/ProdutosList';
 import ProdutosDetail from './pages/cadastros/ProdutosDetail';
 import ServicosList from './pages/cadastros/ServicosList';
 import ServicosDetail from './pages/cadastros/ServicosDetail';
+import ContasReceberList from './pages/financeiro/ContasReceberList';
+import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
+import ContasPagarList from './pages/financeiro/ContasPagarList';
+import ContasPagarDetail from './pages/financeiro/ContasPagarDetail';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -133,6 +137,47 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ServicosDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rotas de Financeiro */}
+        <Route
+          path="/financeiro/contas-receber"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ContasReceberList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/financeiro/contas-receber/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ContasReceberDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/financeiro/contas-pagar"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ContasPagarList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/financeiro/contas-pagar/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ContasPagarDetail />
               </Layout>
             </ProtectedRoute>
           }

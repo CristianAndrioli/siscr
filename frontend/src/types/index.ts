@@ -76,9 +76,53 @@ export interface Servico {
 }
 
 // ============================================
+// CONTA A RECEBER
+// ============================================
+export interface ContaReceber {
+  codigo_conta: number;
+  numero_documento: string;
+  cliente: number;
+  cliente_nome?: string;
+  valor_total: number;
+  valor_recebido: number;
+  valor_pendente: number;
+  data_emissao: string;
+  data_vencimento: string;
+  data_recebimento?: string | null;
+  status: 'Pendente' | 'Parcial' | 'Pago' | 'Cancelado' | 'Vencido';
+  forma_pagamento?: 'Dinheiro' | 'PIX' | 'Boleto' | 'Cartão Crédito' | 'Cartão Débito' | 'Transferência' | 'Cheque';
+  descricao?: string;
+  observacoes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// ============================================
+// CONTA A PAGAR
+// ============================================
+export interface ContaPagar {
+  codigo_conta: number;
+  numero_documento: string;
+  fornecedor: number;
+  fornecedor_nome?: string;
+  valor_total: number;
+  valor_pago: number;
+  valor_pendente: number;
+  data_emissao: string;
+  data_vencimento: string;
+  data_pagamento?: string | null;
+  status: 'Pendente' | 'Parcial' | 'Pago' | 'Cancelado' | 'Vencido';
+  forma_pagamento?: 'Dinheiro' | 'PIX' | 'Boleto' | 'Cartão Crédito' | 'Cartão Débito' | 'Transferência' | 'Cheque';
+  descricao?: string;
+  observacoes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// ============================================
 // TIPOS GENÉRICOS
 // ============================================
-export type EntityType = Pessoa | Produto | Servico;
+export type EntityType = Pessoa | Produto | Servico | ContaReceber | ContaPagar;
 
 // ============================================
 // RESPOSTAS DA API
