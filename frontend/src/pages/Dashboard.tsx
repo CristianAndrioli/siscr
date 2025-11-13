@@ -25,6 +25,8 @@ function Dashboard() {
     { id: 'PROC-1005', client: 'Empresa E', origin: 'Tokyo', destination: 'Recife', status: 'Entregue', estimatedArrival: new Date('2025-09-15') },
   ]);
 
+  const [filteredShipments, setFilteredShipments] = useState<Shipment[]>(shipments);
+
   const updateDashboard = (data: Shipment[]): DashboardStats => {
     const total = data.length;
     const emTransito = data.filter((s) => s.status === 'Em Trânsito').length;
@@ -35,6 +37,14 @@ function Dashboard() {
   };
 
   const stats = updateDashboard(shipments);
+
+  const showShipmentsByStatus = (status: Shipment['status'] | null) => {
+    if (status === null) {
+      setFilteredShipments(shipments);
+    } else {
+      setFilteredShipments(shipments.filter((s) => s.status === status));
+    }
+  };
 
   const getStatusClass = (status: Shipment['status']): string => {
     switch (status) {
@@ -53,7 +63,10 @@ function Dashboard() {
     <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card Total */}
-        <div className="bg-blue-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+        <div 
+          onClick={() => showShipmentsByStatus(null)}
+          className="bg-blue-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+        >
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-sm font-semibold opacity-80">Total de Envios</h3>
@@ -67,7 +80,10 @@ function Dashboard() {
         </div>
 
         {/* Card Em Trânsito */}
-        <div className="bg-yellow-500 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+        <div 
+          onClick={() => showShipmentsByStatus('Em Trânsito')}
+          className="bg-yellow-500 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+        >
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-sm font-semibold opacity-80">Em Trânsito</h3>
@@ -80,7 +96,10 @@ function Dashboard() {
         </div>
 
         {/* Card Entregues */}
-        <div className="bg-green-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+        <div 
+          onClick={() => showShipmentsByStatus('Entregue')}
+          className="bg-green-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+        >
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-sm font-semibold opacity-80">Entregues</h3>
@@ -93,7 +112,10 @@ function Dashboard() {
         </div>
 
         {/* Card Atrasados */}
-        <div className="bg-red-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer">
+        <div 
+          onClick={() => showShipmentsByStatus('Atrasado')}
+          className="bg-red-600 text-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+        >
           <div className="flex justify-between items-center">
             <div>
               <h3 className="text-sm font-semibold opacity-80">Atrasados</h3>
@@ -124,7 +146,7 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody className="text-gray-600 text-sm font-light">
-              {shipments.map((shipment) => (
+              {filteredShipments.map((shipment) => (
                 <tr key={shipment.id} className="border-b border-gray-200 hover:bg-gray-100">
                   <td className="py-3 px-6 whitespace-nowrap">{shipment.id}</td>
                   <td className="py-3 px-6 whitespace-nowrap">{shipment.client}</td>

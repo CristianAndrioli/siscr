@@ -3,6 +3,7 @@ import { useState, useEffect, ReactNode } from 'react';
 import { authService } from './services/auth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import ServicoLogistico from './pages/ServicoLogistico';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
@@ -56,6 +57,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <Dashboard />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/servico-logistico"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ServicoLogistico />
               </Layout>
             </ProtectedRoute>
           }
