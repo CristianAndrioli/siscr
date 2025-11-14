@@ -47,6 +47,7 @@ SHARED_APPS = [
     'corsheaders',
     'guardian',
     'django_extensions',
+    'django_ratelimit',
     
     # Tenant app (shared):
     'tenants',  # App de tenants (deve estar em SHARED)
@@ -302,6 +303,17 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'SISCR <noreply@siscr.
 
 # URL do frontend para links de email
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+
+# ============================================
+# RATE LIMITING SETTINGS
+# ============================================
+# Configuração de rate limiting para segurança
+# Usa cache do Django (Redis recomendado em produção)
+RATELIMIT_USE_CACHE = 'default'  # Usa o cache padrão do Django
+
+# Configurações de rate limit por endpoint
+RATELIMIT_ENABLE = True  # Habilitar rate limiting
+RATELIMIT_SWITCH_OFF = False  # Desabilitar apenas para testes
 
 # ============================================
 # SENTRY (será configurado depois)
