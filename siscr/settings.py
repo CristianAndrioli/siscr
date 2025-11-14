@@ -52,7 +52,7 @@ SHARED_APPS = [
     'tenants',  # App de tenants (deve estar em SHARED)
     
     # SaaS apps (shared):
-    'subscriptions',  # App de assinaturas (deve estar em SHARED)
+    'subscriptions.apps.SubscriptionsConfig',  # App de assinaturas (deve estar em SHARED)
     'public',  # App para páginas públicas (signup, etc.)
 ]
 
@@ -78,6 +78,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
+    # Middleware de quotas (verifica assinatura e limites)
+    'subscriptions.middleware.QuotaMiddleware',
 ]
 
 ROOT_URLCONF = 'siscr.urls'
