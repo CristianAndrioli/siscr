@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from payments import webhooks
 
 urlpatterns = [
     # Admin (apenas para superusuários do schema público)
@@ -19,5 +20,8 @@ urlpatterns = [
     # APIs de autenticação (token refresh/verify) - podem ser públicas
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
+    
+    # Webhooks do Stripe (público, sem autenticação)
+    path('api/webhooks/stripe/', webhooks.stripe_webhook, name='stripe_webhook'),
 ]
 

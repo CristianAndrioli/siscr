@@ -21,6 +21,9 @@ urlpatterns = [
     # APIs de cadastros (pessoas, produtos, serviços, etc.)
     path('api/cadastros/', include('cadastros.api.urls')),
     
+    # APIs de pagamentos
+    path('api/payments/', include('payments.api.urls')),
+    
     # APIs do core
     path('api/', include('core.api.urls')),
     
