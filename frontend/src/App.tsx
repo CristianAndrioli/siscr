@@ -27,6 +27,8 @@ import CheckListProcessos from './pages/servico-logistico/CheckListProcessos';
 import CotacaoFreteInternacionalRodoviario from './pages/servico-logistico/CotacaoFreteInternacionalRodoviario';
 import AnaliseFechamentoFrete from './pages/servico-logistico/AnaliseFechamentoFrete';
 import Perfil from './pages/Perfil';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
@@ -64,6 +66,8 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
         <Route
           path="/"
           element={

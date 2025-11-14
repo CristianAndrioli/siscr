@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 
 function Login() {
@@ -79,7 +79,16 @@ function Login() {
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-gray-600">
+        <div className="mt-6 text-center">
+          <Link
+            to="/forgot-password"
+            className="text-sm text-indigo-600 hover:text-indigo-800"
+          >
+            Esqueci minha senha
+          </Link>
+        </div>
+
+        <div className="mt-4 text-center text-sm text-gray-600">
           <p>Credenciais padrão:</p>
           <p className="font-mono">admin / admin123</p>
         </div>
