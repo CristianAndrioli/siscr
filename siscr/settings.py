@@ -58,6 +58,7 @@ SHARED_APPS = [
     'subscriptions.apps.SubscriptionsConfig',  # App de assinaturas (deve estar em SHARED)
     'public',  # App para páginas públicas (signup, etc.)
     'payments',  # App de pagamentos (Stripe)
+    'accounts',  # App de autenticação e permissões (UserProfile e TenantMembership precisam estar no schema público)
 ]
 
 TENANT_APPS = [
@@ -65,7 +66,6 @@ TENANT_APPS = [
     'django.contrib.contenttypes',
     'core',  # App core (views gerais, dashboard, etc.)
     'cadastros',  # App de cadastros (Pessoa, Produto, Servico)
-    'accounts',  # App de autenticação e permissões
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
@@ -162,9 +162,6 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
         'LOCATION': REDIS_URL,
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
     }
 }
 
