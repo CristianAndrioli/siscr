@@ -17,6 +17,7 @@ from subscriptions.models import Plan, Subscription, QuotaUsage
 from accounts.models import UserProfile, TenantMembership
 from django.core.mail import send_mail
 from django.conf import settings
+from django.db import IntegrityError
 
 User = get_user_model()
 
@@ -89,7 +90,7 @@ def check_domain(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@ratelimit(key='ip', rate='3/h', method='POST', block=True)
+@ratelimit(key='ip', rate='10/h', method='POST', block=True)
 @transaction.atomic
 def signup(request):
     """
@@ -127,19 +128,69 @@ def signup(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Verificar se email já existe
-    if User.objects.filter(email=admin_email).exists():
-        return Response(
-            {'error': 'Email já está cadastrado'}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    # Garantir que estamos no schema público para verificação
+    # A view já deve estar no schema público, mas vamos garantir
+    from django.db import connection
+    current_schema = connection.schema_name if hasattr(connection, 'schema_name') else 'public'
     
-    # Verificar se username já existe
-    if User.objects.filter(username=admin_username).exists():
-        return Response(
-            {'error': 'Username já está em uso'}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    # Verificar se email já existe E tem membership ativo (no schema público)
+    user_with_email = User.objects.filter(email=admin_email).first()
+    if user_with_email:
+        # Verificar se o usuário tem algum tenant membership ativo
+        has_active_membership = TenantMembership.objects.filter(
+            user=user_with_email,
+            is_active=True
+        ).exists()
+        if has_active_membership:
+            return Response(
+                {'error': f'Email "{admin_email}" já está cadastrado. Use outro email ou faça login.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Se não tem membership ativo, é um usuário órfão - vamos limpar para permitir recadastro
+        # Deletar UserProfile se existir
+        UserProfile.objects.filter(user=user_with_email).delete()
+        # Deletar qualquer membership inativo
+        TenantMembership.objects.filter(user=user_with_email).delete()
+        # Deletar o usuário
+        user_with_email.delete()
+    
+    # Verificar se username já existe E tem membership ativo (no schema público)
+    user_with_username = User.objects.filter(username=admin_username).first()
+    if user_with_username:
+        # Verificar se o usuário tem algum tenant membership ativo
+        has_active_membership = TenantMembership.objects.filter(
+            user=user_with_username,
+            is_active=True
+        ).exists()
+        if has_active_membership:
+            # Log para debug (apenas em desenvolvimento)
+            memberships = list(TenantMembership.objects.filter(
+                user=user_with_username,
+                is_active=True
+            ).values('tenant__name', 'tenant__schema_name', 'role'))
+            
+            if settings.DEBUG:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f'Username {admin_username} tem membership ativo: {memberships}')
+            
+            # Em modo debug, retornar mais informações
+            error_msg = f'Username "{admin_username}" já está cadastrado. Escolha outro username ou faça login.'
+            if settings.DEBUG and memberships:
+                tenant_names = [m['tenant__name'] for m in memberships]
+                error_msg += f' (Tenants: {", ".join(tenant_names)})'
+            
+            return Response(
+                {'error': error_msg}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        # Se não tem membership ativo, é um usuário órfão - vamos limpar para permitir recadastro
+        # Deletar UserProfile se existir
+        UserProfile.objects.filter(user=user_with_username).delete()
+        # Deletar qualquer membership inativo
+        TenantMembership.objects.filter(user=user_with_username).delete()
+        # Deletar o usuário
+        user_with_username.delete()
     
     # Buscar plano
     try:
@@ -195,15 +246,29 @@ def signup(request):
         
         # Depois criar no schema do tenant (para uso dentro do tenant)
         with schema_context(tenant.schema_name):
-            user_tenant = User.objects.create_user(
-                username=admin_username,
-                email=admin_email,
-                password=admin_password,
-                first_name=admin_first_name,
-                last_name=admin_last_name,
-                is_staff=True,
-                is_superuser=True,
-            )
+            # Verificar se o usuário já existe no schema do tenant (pode ter sido criado parcialmente)
+            existing_user = User.objects.filter(username=admin_username).first()
+            if existing_user:
+                # Se existe, usar o existente ao invés de criar novo
+                user_tenant = existing_user
+                # Atualizar dados se necessário
+                user_tenant.email = admin_email
+                user_tenant.set_password(admin_password)
+                user_tenant.first_name = admin_first_name
+                user_tenant.last_name = admin_last_name
+                user_tenant.is_staff = True
+                user_tenant.is_superuser = True
+                user_tenant.save()
+            else:
+                user_tenant = User.objects.create_user(
+                    username=admin_username,
+                    email=admin_email,
+                    password=admin_password,
+                    first_name=admin_first_name,
+                    last_name=admin_last_name,
+                    is_staff=True,
+                    is_superuser=True,
+                )
             
             # Criar empresa
             empresa = Empresa.objects.create(
@@ -297,8 +362,75 @@ Bem-vindo ao SISCR!
             'login_url': f'http://{domain}/login/',
         }, status=status.HTTP_201_CREATED)
         
+    except IntegrityError as e:
+        error_message = str(e)
+        
+        # Tratar erros específicos de constraint única
+        if 'username' in error_message.lower() or 'auth_user_username_key' in error_message.lower():
+            # Verificar se o usuário realmente existe antes de retornar erro
+            user_exists = User.objects.filter(username=admin_username).exists()
+            if user_exists:
+                # Verificar se tem membership ativo
+                user = User.objects.filter(username=admin_username).first()
+                if user:
+                    has_membership = TenantMembership.objects.filter(
+                        user=user,
+                        is_active=True
+                    ).exists()
+                    if not has_membership:
+                        # Usuário órfão - limpar e retornar erro genérico para tentar novamente
+                        UserProfile.objects.filter(user=user).delete()
+                        TenantMembership.objects.filter(user=user).delete()
+                        user.delete()
+                        return Response(
+                            {'error': 'Erro ao criar conta. Tente novamente.'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+            
+            return Response(
+                {'error': f'Username "{admin_username}" já está cadastrado. Escolha outro username ou faça login.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        elif 'email' in error_message.lower() or 'auth_user_email_key' in error_message.lower():
+            # Verificar se o email realmente existe antes de retornar erro
+            user_exists = User.objects.filter(email=admin_email).exists()
+            if user_exists:
+                # Verificar se tem membership ativo
+                user = User.objects.filter(email=admin_email).first()
+                if user:
+                    has_membership = TenantMembership.objects.filter(
+                        user=user,
+                        is_active=True
+                    ).exists()
+                    if not has_membership:
+                        # Usuário órfão - limpar e retornar erro genérico para tentar novamente
+                        UserProfile.objects.filter(user=user).delete()
+                        TenantMembership.objects.filter(user=user).delete()
+                        user.delete()
+                        return Response(
+                            {'error': 'Erro ao criar conta. Tente novamente.'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+            
+            return Response(
+                {'error': f'Email "{admin_email}" já está cadastrado. Use outro email ou faça login.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        else:
+            return Response(
+                {'error': 'Dados já cadastrados. Verifique username, email ou domínio.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
     except Exception as e:
+        error_message = str(e)
+        
+        # Log do erro completo para debug (em desenvolvimento)
+        import traceback
+        if settings.DEBUG:
+            error_message = f'{error_message}\n\n{traceback.format_exc()}'
+        
         return Response(
-            {'error': f'Erro ao criar cadastro: {str(e)}'}, 
+            {'error': f'Erro ao criar cadastro: {error_message}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
