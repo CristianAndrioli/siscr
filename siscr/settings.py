@@ -25,7 +25,11 @@ DEBUG = True  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
 # CORREÇÃO: Necessário para rodar o servidor quando DEBUG=False. 
 # Mesmo com DEBUG=True, é bom configurar para localhost.
 # ALLOWED_HOSTS será configurado baseado no ENVIRONMENT abaixo
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
+ALLOWED_HOSTS = [
+    '127.0.0.1', 
+    'localhost',
+    'teste-tenant.localhost',  # Domínio do tenant de teste
+]  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
 
 
 # Application definition
@@ -285,7 +289,19 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite default
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
+    # Domínios de tenant para desenvolvimento
+    "http://teste-tenant.localhost:5173",
+    "http://teste-tenant.localhost:3000",
 ]
+
+# Permitir subdomínios de localhost em desenvolvimento
+CORS_ALLOWED_ORIGIN_REGEXES = []
+if ENVIRONMENT == 'development':
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^http://.*\.localhost:\d+$",  # Qualquer subdomínio de localhost com qualquer porta
+        r"^http://localhost:\d+$",  # localhost com qualquer porta
+        r"^http://127\.0\.0\.1:\d+$",  # 127.0.0.1 com qualquer porta
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -301,6 +317,9 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:8000',
     'http://127.0.0.1:5173',
     'http://localhost:5173',
+    # Domínios de tenant para desenvolvimento
+    'http://teste-tenant.localhost:8000',
+    'http://teste-tenant.localhost:5173',
 ]
 
 # Permitir cookies em requisições cross-origin
