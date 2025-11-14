@@ -29,6 +29,9 @@ django-extensions>=3.2.0
 # Rate Limiting
 django-ratelimit>=4.1.0
 
+# Payment Gateway
+stripe>=7.0.0
+
 # Monitoring
 sentry-sdk>=1.32.0
 

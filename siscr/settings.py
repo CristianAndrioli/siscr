@@ -19,11 +19,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-sua-chave-secreta-aqui') 
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG será configurado baseado no ENVIRONMENT abaixo
+DEBUG = True  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
 
 # CORREÇÃO: Necessário para rodar o servidor quando DEBUG=False. 
 # Mesmo com DEBUG=True, é bom configurar para localhost.
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+# ALLOWED_HOSTS será configurado baseado no ENVIRONMENT abaixo
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
 
 
 # Application definition
@@ -55,6 +57,7 @@ SHARED_APPS = [
     # SaaS apps (shared):
     'subscriptions.apps.SubscriptionsConfig',  # App de assinaturas (deve estar em SHARED)
     'public',  # App para páginas públicas (signup, etc.)
+    'payments',  # App de pagamentos (Stripe)
 ]
 
 TENANT_APPS = [
@@ -314,6 +317,52 @@ RATELIMIT_USE_CACHE = 'default'  # Usa o cache padrão do Django
 # Configurações de rate limit por endpoint
 RATELIMIT_ENABLE = True  # Habilitar rate limiting
 RATELIMIT_SWITCH_OFF = False  # Desabilitar apenas para testes
+
+# ============================================
+# ENVIRONMENT CONFIGURATION
+# ============================================
+# Ambientes: development, homologation, preprod, production
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
+
+# Debug baseado no ambiente (sobrescreve valor padrão acima)
+if 'ENVIRONMENT' in os.environ:
+    if ENVIRONMENT == 'production':
+        DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+    else:
+        DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+
+# Allowed hosts baseado no ambiente (sobrescreve valor padrão acima)
+if 'ENVIRONMENT' in os.environ:
+    if ENVIRONMENT == 'production':
+        ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
+    elif ENVIRONMENT == 'preprod':
+        ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'preprod.siscr.com.br').split(',')
+    elif ENVIRONMENT == 'homologation':
+        ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'homolog.siscr.com.br').split(',')
+    # development mantém valores padrão acima
+
+# ============================================
+# STRIPE CONFIGURATION
+# ============================================
+# Modo do Stripe: simulated (dev), test (homolog/preprod), live (production)
+STRIPE_MODE = os.environ.get('STRIPE_MODE', 'simulated' if ENVIRONMENT == 'development' else 'test')
+
+# Chaves do Stripe por ambiente
+if ENVIRONMENT == 'production':
+    STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+    STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+    STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+elif ENVIRONMENT in ['preprod', 'homologation']:
+    STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY_TEST', '')
+    STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY_TEST', '')
+    STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET_TEST', '')
+else:  # development
+    STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY_TEST', '')
+    STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY_TEST', '')
+    STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET_TEST', '')
+
+# URLs do Stripe
+STRIPE_API_VERSION = '2024-11-20.acacia'
 
 # ============================================
 # SENTRY (será configurado depois)
