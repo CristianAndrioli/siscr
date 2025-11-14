@@ -12,19 +12,27 @@ export interface TokenResponse {
 
 export const authService = {
   /**
-   * Realiza login e retorna tokens
+   * Realiza login multi-tenant e retorna tokens
    */
-  login: async (username: string, password: string): Promise<TokenResponse> => {
-    const response = await axios.post<TokenResponse>(`${API_BASE_URL}/api/auth/token/`, {
+  login: async (username: string, password: string): Promise<TokenResponse & { user?: any; tenant?: any; requires_selection?: boolean }> => {
+    const response = await axios.post(`${API_BASE_URL}/api/auth/login/`, {
       username,
       password,
     });
     
-    const { access, refresh } = response.data;
+    const { access, refresh, user, tenant, requires_selection } = response.data;
     localStorage.setItem('access_token', access);
     localStorage.setItem('refresh_token', refresh);
     
-    return { access, refresh };
+    // Salvar informações do usuário e tenant
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    }
+    if (tenant) {
+      localStorage.setItem('tenant', JSON.stringify(tenant));
+    }
+    
+    return { access, refresh, user, tenant, requires_selection };
   },
 
   /**
@@ -85,6 +93,36 @@ export const authService = {
     } catch (error) {
       return false;
     }
+  },
+
+  /**
+   * Solicita reset de senha
+   */
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    const response = await axios.post<{ message: string }>(
+      `${API_BASE_URL}/api/auth/password-reset/`,
+      { email }
+    );
+    return response.data;
+  },
+
+  /**
+   * Confirma reset de senha
+   */
+  confirmPasswordReset: async (
+    uid: string,
+    token: string,
+    newPassword: string
+  ): Promise<{ message: string }> => {
+    const response = await axios.post<{ message: string }>(
+      `${API_BASE_URL}/api/auth/password-reset-confirm/`,
+      {
+        uid,
+        token,
+        new_password: newPassword,
+      }
+    );
+    return response.data;
   },
 };
 

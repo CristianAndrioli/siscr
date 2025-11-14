@@ -8,6 +8,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django_tenants.utils import get_tenant_from_request, schema_context
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.core.mail import send_mail
+from django.conf import settings
 from django.db import transaction
 from .models import UserProfile, TenantMembership
 from tenants.models import Empresa, Filial
@@ -298,3 +303,152 @@ def current_user(request):
                 }
     
     return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_request(request):
+    """
+    Solicita reset de senha
+    Envia email com link para redefinir senha
+    """
+    email = request.data.get('email', '').strip().lower()
+    
+    if not email:
+        return Response(
+            {'error': 'Email é obrigatório'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Identificar tenant pela URL
+    tenant = get_tenant_from_request(request)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Buscar usuário pelo membership no schema público
+    # O usuário deve ter membership no tenant para poder resetar senha
+    user = None
+    try:
+        membership = TenantMembership.objects.filter(
+            user__email=email,
+            tenant=tenant,
+            is_active=True
+        ).first()
+        if membership:
+            user = membership.user
+    except Exception:
+        pass
+    
+    # Sempre retornar sucesso (não revelar se email existe)
+    if user:
+        try:
+            # Gerar token
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            # URL de reset (frontend)
+            frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+            reset_url = f"{frontend_url}/reset-password/{uid}/{token}/"
+            
+            # Enviar email
+            send_mail(
+                subject='Redefinição de Senha - SISCR',
+                message=f'''
+Olá,
+
+Você solicitou a redefinição de senha para sua conta no SISCR.
+
+Clique no link abaixo para redefinir sua senha:
+{reset_url}
+
+Este link é válido por 24 horas.
+
+Se você não solicitou esta redefinição, ignore este email.
+
+Atenciosamente,
+Equipe SISCR
+                ''',
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@siscr.com.br'),
+                recipient_list=[email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            # Log do erro mas não revelar ao usuário
+            pass
+    
+    # Sempre retornar sucesso (segurança)
+    return Response({
+        'message': 'Se o email existir, você receberá instruções para redefinir sua senha.'
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def password_reset_confirm(request):
+    """
+    Confirma reset de senha com token
+    """
+    uid = request.data.get('uid', '').strip()
+    token = request.data.get('token', '').strip()
+    new_password = request.data.get('new_password', '')
+    
+    if not all([uid, token, new_password]):
+        return Response(
+            {'error': 'uid, token e new_password são obrigatórios'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validar força da senha
+    if len(new_password) < 8:
+        return Response(
+            {'error': 'Senha deve ter no mínimo 8 caracteres'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Decodificar uid
+        user_id = force_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=user_id, is_active=True)
+        
+        # Verificar token
+        if not default_token_generator.check_token(user, token):
+            return Response(
+                {'error': 'Token inválido ou expirado'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Identificar tenant (se possível)
+        tenant = get_tenant_from_request(request)
+        
+        # Atualizar senha no schema público
+        user.set_password(new_password)
+        user.save()
+        
+        # Atualizar senha no schema do tenant (se houver)
+        if tenant:
+            with schema_context(tenant.schema_name):
+                try:
+                    user_tenant = User.objects.get(username=user.username)
+                    user_tenant.set_password(new_password)
+                    user_tenant.save()
+                except User.DoesNotExist:
+                    # Usuário pode não existir no tenant ainda
+                    pass
+        
+        return Response({
+            'message': 'Senha redefinida com sucesso'
+        }, status=status.HTTP_200_OK)
+        
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response(
+            {'error': 'Link inválido'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao redefinir senha: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
