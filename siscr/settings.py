@@ -174,10 +174,11 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CONFIGURAÇÃO DE LOGIN
+# Nota: O login foi migrado para React (porta 5173)
+# Estas configurações são mantidas apenas para compatibilidade com Django Admin
 # Redireciona o usuário para o dashboard após o login bem-sucedido
-LOGIN_REDIRECT_URL = '/dashboard/' 
-# Onde o Django busca o template para login se não estiver logado
-LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/admin/'  # Redireciona para admin já que não há mais templates de login
+# LOGIN_URL removido - login agora está no React (http://localhost:5173/login)
 
 # ============================================
 # DJANGO REST FRAMEWORK
