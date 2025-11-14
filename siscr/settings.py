@@ -177,6 +177,9 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Custom User Model (comentado temporariamente para migrations)
+# AUTH_USER_MODEL = 'accounts.User'
+
 # CONFIGURAÇÃO DE LOGIN
 # Nota: O login foi migrado para React (porta 5173)
 # Estas configurações são mantidas apenas para compatibilidade com Django Admin
