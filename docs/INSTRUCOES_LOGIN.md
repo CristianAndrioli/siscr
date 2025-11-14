@@ -3,16 +3,21 @@
 ## 📍 URLs da Aplicação
 
 ### URLs Principais
+- **Frontend React (Login)**: http://localhost:5173/login
+- **Frontend React (Dashboard)**: http://localhost:5173/dashboard
 - **Admin Django**: http://localhost:8000/admin/
-- **Login**: http://localhost:8000/login/
-- **Dashboard**: http://localhost:8000/dashboard/
-- **API**: http://localhost:8000/api/
+- **API REST**: http://localhost:8000/api/
 
 ## 🔑 Credenciais de Acesso
 
 ### Superusuário (Admin)
 - **Usuário**: `admin`
 - **Senha**: `admin123`
+
+### Acesso ao Sistema (Frontend React)
+1. Acesse: http://localhost:5173/login
+2. Use as credenciais acima
+3. Você terá acesso a todas as funcionalidades do sistema
 
 ### Acesso ao Admin Django
 1. Acesse: http://localhost:8000/admin/

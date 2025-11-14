@@ -120,6 +120,7 @@ echo ========================================
 echo.
 
 cd frontend
+set FRONTEND_PATH=%CD%
 
 if not exist "node_modules" (
     echo Instalando dependencias do frontend...
@@ -137,14 +138,15 @@ if not exist "node_modules" (
 
 echo.
 
-:: Iniciar Frontend em background
+:: Iniciar Frontend em janela separada
 echo ========================================
 echo   Iniciando Frontend React
 echo ========================================
 echo.
 
 echo Iniciando servidor de desenvolvimento do frontend...
-start "SISCR Frontend" cmd /k "npm run dev"
+echo Abrindo janela separada do PowerShell para o frontend...
+powershell -Command "Start-Process powershell -ArgumentList '-NoExit', '-Command', \"cd '%FRONTEND_PATH%'; Write-Host '========================================' -ForegroundColor Cyan; Write-Host 'SISCR Frontend - Servidor de Desenvolvimento' -ForegroundColor Green; Write-Host '========================================' -ForegroundColor Cyan; Write-Host ''; Write-Host 'Aguardando inicializacao...' -ForegroundColor Yellow; npm run dev\""
 
 :: Aguardar frontend iniciar
 echo Aguardando frontend iniciar...
@@ -195,8 +197,8 @@ start http://localhost:5173
 
 timeout /t 2 /nobreak >nul
 
-echo Abrindo Backend Django (Login)...
-start http://127.0.0.1:8000/login/
+echo Abrindo Backend Django (API)...
+start http://127.0.0.1:8000/api/
 
 timeout /t 2 /nobreak >nul
 
@@ -209,7 +211,7 @@ echo   Aplicação Iniciada com Sucesso!
 echo ========================================
 echo.
 echo Frontend React:     http://localhost:5173
-echo Backend Django:     http://127.0.0.1:8000/login/
+echo Backend Django API: http://127.0.0.1:8000/api/
 echo Django Admin:       http://127.0.0.1:8000/admin/
 echo.
 echo Credenciais:

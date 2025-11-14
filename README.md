@@ -28,7 +28,7 @@ Este script irá:
 - ✅ Iniciar o frontend React
 - ✅ Abrir automaticamente os navegadores com:
   - Frontend React: http://localhost:5173
-  - Backend Django: http://127.0.0.1:8000/login/
+  - Backend Django API: http://127.0.0.1:8000/api/
   - Django Admin: http://127.0.0.1:8000/admin/
 
 **Nota:** Na primeira execução, o script pode demorar alguns minutos para baixar imagens Docker e instalar dependências.
@@ -87,37 +87,15 @@ O frontend React estará disponível em: **http://localhost:5173**
   - Senha: `admin123`
 - **Descrição**: Interface moderna em React com melhor experiência do usuário. Esta é a versão que está sendo desenvolvida atualmente.
 
-### 2. **Frontend Legado (Django Templates)** - Porta 8000
+### 2. **Backend Django (API REST)** - Porta 8000
 
-- **URL**: http://127.0.0.1:8000/login/
-- **Credenciais**:
-  - Usuário: `admin`
-  - Senha: `admin123`
-- **Descrição**: Sistema legado em Django Templates que está sendo gradualmente migrado para React. Ainda possui mais funcionalidades implementadas (15+ páginas) e serve como referência durante a migração.
+- **URL API**: http://127.0.0.1:8000/api/
+- **Descrição**: Backend Django fornece apenas APIs REST. Todas as páginas foram migradas para React (porta 5173).
 
-**Páginas disponíveis no frontend legado:**
-- `/dashboard/` - Dashboard principal
-- `/cadastrar_geral/` - Cadastro de Pessoas/Empresas
-- `/listagem_geral/` - Listagem de Pessoas
-- `/cadastrar_produtos/` - Cadastro de Produtos
-- `/listagem_produtos/` - Listagem de Produtos
-- `/cadastrar_servicos/` - Cadastro de Serviços
-- `/listagem_servicos/` - Listagem de Serviços
-- E outras páginas (Financeiro, Faturamento, etc.)
-
-**Localização dos templates legados:**
-```
-core/templates/
-├── base.html              # Layout base com sidebar
-├── dashboard.html          # Dashboard
-├── login.html              # Página de login
-├── cadastro_geral.html     # Cadastro de pessoas
-├── cadastro_produtos.html  # Cadastro de produtos
-├── cadastro_servicos.html  # Cadastro de serviços
-├── listagem_geral.html     # Listagem de pessoas
-├── listagem_produtos.html  # Listagem de produtos
-└── listagem_servicos.html  # Listagem de serviços
-```
+**Endpoints principais:**
+- `/api/auth/token/` - Autenticação JWT
+- `/api/cadastros/` - APIs de cadastros (Pessoas, Produtos, Serviços)
+- `/api/` - Outras APIs do sistema
 
 ### 3. **Django Admin** - Porta 8000
 
