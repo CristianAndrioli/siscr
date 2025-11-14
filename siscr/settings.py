@@ -153,22 +153,20 @@ ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
 # CACHE CONFIGURATION
 # ============================================
 # Cache para rate limiting e outras funcionalidades
-# Em desenvolvimento: LocMemCache (não compartilhado, mas funciona)
-# Em produção: Redis (recomendado)
-if ENVIRONMENT == 'production':
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-            'LOCATION': os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+# django-ratelimit requer cache com suporte a atomic increment
+# Em desenvolvimento: Redis (mesmo que em produção para compatibilidade)
+# Em produção: Redis
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1')
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
     }
-else:
-    # Para desenvolvimento, usar LocMemCache (aceita warning)
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        }
-    }
+}
 
 # ============================================
 # RATE LIMITING SETTINGS
@@ -345,21 +343,21 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'SISCR <noreply@siscr.
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
 # Debug baseado no ambiente (sobrescreve valor padrão acima)
-if 'ENVIRONMENT' in os.environ:
-    if ENVIRONMENT == 'production':
-        DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
-    else:
-        DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+# ENVIRONMENT já está definido acima (linha 150)
+if ENVIRONMENT == 'production':
+    DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+else:
+    DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 # Allowed hosts baseado no ambiente (sobrescreve valor padrão acima)
-if 'ENVIRONMENT' in os.environ:
-    if ENVIRONMENT == 'production':
-        ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
-    elif ENVIRONMENT == 'preprod':
-        ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'preprod.siscr.com.br').split(',')
-    elif ENVIRONMENT == 'homologation':
-        ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'homolog.siscr.com.br').split(',')
-    # development mantém valores padrão acima
+# ENVIRONMENT já está definido acima (linha 150)
+if ENVIRONMENT == 'production':
+    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
+elif ENVIRONMENT == 'preprod':
+    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'preprod.siscr.com.br').split(',')
+elif ENVIRONMENT == 'homologation':
+    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'homolog.siscr.com.br').split(',')
+# development mantém valores padrão acima
 
 # ============================================
 # STRIPE CONFIGURATION
