@@ -13,6 +13,7 @@ from django_tenants.utils import schema_context
 from django.contrib.auth import get_user_model
 from tenants.models import Tenant, Domain, Empresa
 from subscriptions.models import Plan, Subscription, QuotaUsage
+from accounts.models import UserProfile, TenantMembership
 from django.core.mail import send_mail
 from django.conf import settings
 
@@ -178,9 +179,21 @@ def signup(request):
         # Criar schema e aplicar migrations
         tenant.save()  # Isso cria o schema automaticamente
         
-        # Criar usuário admin no schema do tenant
+        # Criar usuário admin no schema do tenant E no schema público
+        # Primeiro criar no schema público (para TenantMembership)
+        user_public = User.objects.create_user(
+            username=admin_username,
+            email=admin_email,
+            password=admin_password,
+            first_name=admin_first_name,
+            last_name=admin_last_name,
+            is_staff=True,
+            is_superuser=True,
+        )
+        
+        # Depois criar no schema do tenant (para uso dentro do tenant)
         with schema_context(tenant.schema_name):
-            user = User.objects.create_user(
+            user_tenant = User.objects.create_user(
                 username=admin_username,
                 email=admin_email,
                 password=admin_password,
@@ -197,6 +210,20 @@ def signup(request):
                 cnpj=empresa_cnpj or '',
                 razao_social=empresa_razao_social or empresa_nome,
             )
+        
+        # Criar UserProfile e TenantMembership (no schema público, usando user_public)
+        profile = UserProfile.objects.create(
+            user=user_public,
+            current_tenant=tenant,
+            current_empresa=empresa,
+        )
+        
+        TenantMembership.objects.create(
+            user=user_public,
+            tenant=tenant,
+            role='admin',
+            is_active=True,
+        )
         
         # Criar assinatura
         period_start = timezone.now()
@@ -257,8 +284,8 @@ Bem-vindo ao SISCR!
                 'domain': domain,
             },
             'user': {
-                'username': admin_username,
-                'email': admin_email,
+                'username': user_public.username,
+                'email': user_public.email,
             },
             'subscription': {
                 'plan': plan.name,
