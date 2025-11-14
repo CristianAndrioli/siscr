@@ -132,6 +132,13 @@ DEFAULT_SCHEMA_NAME = 'public'
 # Para desenvolvimento: usar domínio padrão quando não houver subdomínio
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
 
+# Configuração de URLs por schema
+# URLs para schema público (quando não há tenant identificado)
+PUBLIC_SCHEMA_URLCONF = 'siscr.public_urls'
+
+# URLs para schemas de tenants (quando tenant é identificado)
+TENANT_SCHEMA_URLCONF = 'siscr.tenant_urls'
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
