@@ -33,7 +33,14 @@ class Command(BaseCommand):
         if migrate or not self._tabelas_existem():
             self.stdout.write(self.style.WARNING('Aplicando migrações...'))
             try:
-                call_command('migrate', 'cadastros', verbosity=0)
+                # Verificar se estamos em um contexto de tenant
+                current_schema = self._get_current_schema()
+                if current_schema and current_schema != 'public':
+                    # Estamos em um tenant, usar migrate_schemas
+                    call_command('migrate_schemas', schema_name=current_schema, verbosity=0)
+                else:
+                    # Schema público, usar migrate normal
+                    call_command('migrate', 'cadastros', verbosity=0)
                 self.stdout.write(self.style.SUCCESS('Migrações aplicadas!'))
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'Migrações não aplicadas: {e}'))
@@ -91,17 +98,44 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(f'\n⚠ Não foi possível contar registros: {e}'))
             self.stdout.write(self.style.SUCCESS('✅ Seed executado (alguns dados podem ter sido criados)'))
     
-    def _tabelas_existem(self):
-        """Verifica se as tabelas principais existem"""
+    def _get_current_schema(self):
+        """Obtém o schema atual da conexão"""
         try:
+            # Tentar obter do django-tenants primeiro
+            if hasattr(connection, 'schema_name') and connection.schema_name:
+                return connection.schema_name
+            
+            # Fallback: consultar o banco
+            with connection.cursor() as cursor:
+                # Obter o primeiro schema do search_path (geralmente o schema do tenant)
+                cursor.execute("""
+                    SELECT unnest(string_to_array(current_setting('search_path'), ','))[1] as schema_name;
+                """)
+                result = cursor.fetchone()
+                if result and result[0]:
+                    # Remover espaços e aspas
+                    schema = result[0].strip().strip('"')
+                    return schema if schema != 'public' else None
+        except Exception:
+            pass
+        return None
+    
+    def _tabelas_existem(self):
+        """Verifica se as tabelas principais existem no schema atual"""
+        try:
+            current_schema = self._get_current_schema()
+            if not current_schema:
+                # Se não conseguir determinar o schema, verificar no public
+                current_schema = 'public'
+                
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
+                        WHERE table_schema = %s 
                         AND table_name = 'cadastros_pessoa'
                     );
-                """)
+                """, [current_schema])
                 return cursor.fetchone()[0]
         except Exception:
             return False

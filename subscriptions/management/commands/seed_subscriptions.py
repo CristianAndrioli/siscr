@@ -262,8 +262,8 @@ class Command(BaseCommand):
                 current_period_end=period_end,
             )
             
-            # Criar quota usage
-            QuotaUsage.objects.create(tenant=tenant)
+            # Criar quota usage (se não existir)
+            QuotaUsage.objects.get_or_create(tenant=tenant)
             
             self.stdout.write(
                 f'  ✓ Assinatura criada: {tenant.name} -> {plan.name} '
