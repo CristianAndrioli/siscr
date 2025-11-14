@@ -21,6 +21,9 @@ urlpatterns = [
     path('api/cadastros/', include('cadastros.api.urls')),
     path('api/', include('core.api.urls')),  # Mantém API geral do core (se houver)
     
+    # APIs públicas (cadastro de novos clientes)
+    path('', include('public.urls')),
+    
     # APIs auxiliares do core (se necessário)
     path('', include('core.urls')),
 ]

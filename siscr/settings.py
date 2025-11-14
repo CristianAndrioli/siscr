@@ -50,6 +50,10 @@ SHARED_APPS = [
     
     # Tenant app (shared):
     'tenants',  # App de tenants (deve estar em SHARED)
+    
+    # SaaS apps (shared):
+    'subscriptions',  # App de assinaturas (deve estar em SHARED)
+    'public',  # App para páginas públicas (signup, etc.)
 ]
 
 TENANT_APPS = [
