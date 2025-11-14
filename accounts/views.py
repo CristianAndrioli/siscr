@@ -15,6 +15,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.db import transaction
 from .models import UserProfile, TenantMembership
+from .decorators import rate_limit_login, rate_limit_password_reset
 from tenants.models import Empresa, Filial
 
 User = get_user_model()
@@ -22,6 +23,7 @@ User = get_user_model()
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@rate_limit_login
 def login(request):
     """
     Login multi-tenant com identificação de tenant pela URL/subdomínio
@@ -307,6 +309,7 @@ def current_user(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@rate_limit_password_reset
 def password_reset_request(request):
     """
     Solicita reset de senha
@@ -387,6 +390,7 @@ Equipe SISCR
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@rate_limit_password_reset
 def password_reset_confirm(request):
     """
     Confirma reset de senha com token

@@ -11,6 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django_tenants.utils import schema_context
 from django.contrib.auth import get_user_model
+from django_ratelimit.decorators import ratelimit
 from tenants.models import Tenant, Domain, Empresa
 from subscriptions.models import Plan, Subscription, QuotaUsage
 from accounts.models import UserProfile, TenantMembership
@@ -88,6 +89,7 @@ def check_domain(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@ratelimit(key='ip', rate='3/h', method='POST', block=True)
 @transaction.atomic
 def signup(request):
     """
