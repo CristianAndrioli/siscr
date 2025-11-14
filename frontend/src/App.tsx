@@ -29,6 +29,9 @@ import AnaliseFechamentoFrete from './pages/servico-logistico/AnaliseFechamentoF
 import Perfil from './pages/Perfil';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import Home from './pages/Home';
+import Plans from './pages/Plans';
+import Signup from './pages/Signup';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
@@ -65,19 +68,12 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/plans" element={<Plans />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:uid/:token" element={<ResetPassword />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
         <Route
           path="/dashboard"
           element={

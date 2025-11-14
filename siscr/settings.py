@@ -78,6 +78,7 @@ MIDDLEWARE = [
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',  # CORS deve vir antes de CommonMiddleware
     'django.middleware.common.CommonMiddleware',
+    'siscr.middleware.DisableCSRFForAPI',  # Desabilita CSRF para APIs (deve vir antes do CSRF middleware)
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
