@@ -16,10 +16,18 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: siscr_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   web:
     build: .
     container_name: siscr_web
-    command: sh -c "python manage.py migrate --noinput && python manage.py shell -c \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').delete(); User.objects.create_superuser('admin', 'admin@example.com', 'admin123')\" && python manage.py runserver 0.0.0.0:8000"
+    command: sh -c "python manage.py migrate_schemas --shared --noinput && python manage.py shell -c \"from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='admin').delete(); User.objects.create_superuser('admin', 'admin@example.com', 'admin123')\" && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
       - static_volume:/app/static
@@ -32,11 +40,16 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - REDIS_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
 
 volumes:
   postgres_data:
   static_volume:
+  redis_data:
 
