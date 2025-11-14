@@ -2,7 +2,7 @@
 Middleware para verificação de quotas antes de processar requisições
 """
 from django.http import JsonResponse
-from django_tenants.utils import get_tenant_from_request
+from django.db import connection
 from .models import Subscription, QuotaUsage
 
 
@@ -31,7 +31,7 @@ class QuotaMiddleware:
         
         # Apenas verificar em requisições que criam recursos
         if request.method in ['POST', 'PUT', 'PATCH']:
-            tenant = get_tenant_from_request(request)
+            tenant = getattr(connection, 'tenant', None)
             if tenant:
                 try:
                     # Buscar subscription ativa do tenant

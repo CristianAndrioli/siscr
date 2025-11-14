@@ -6,7 +6,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from django_tenants.utils import get_tenant_from_request, schema_context
+from django_tenants.utils import schema_context
+from django.db import connection
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -38,7 +39,7 @@ def login(request):
         )
     
     # Identificar tenant pela URL/subdomínio
-    tenant = get_tenant_from_request(request)
+    tenant = getattr(connection, 'tenant', None)
     if not tenant:
         return Response(
             {'error': 'Tenant não identificado. Acesse através do domínio do seu tenant.'}, 
@@ -324,7 +325,7 @@ def password_reset_request(request):
         )
     
     # Identificar tenant pela URL
-    tenant = get_tenant_from_request(request)
+    tenant = getattr(connection, 'tenant', None)
     if not tenant:
         return Response(
             {'error': 'Tenant não identificado'}, 

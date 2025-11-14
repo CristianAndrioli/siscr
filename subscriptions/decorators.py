@@ -3,7 +3,8 @@ Decoradores para verificação de quotas em views/API
 """
 from functools import wraps
 from django.http import JsonResponse
-from django_tenants.utils import get_tenant_from_request, schema_context
+from django_tenants.utils import schema_context
+from django.db import connection
 from .models import QuotaUsage
 
 
@@ -23,7 +24,7 @@ def check_quota(quota_type, value=1):
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
-            tenant = get_tenant_from_request(request)
+            tenant = getattr(connection, 'tenant', None)
             if not tenant:
                 return JsonResponse(
                     {'error': 'Tenant não identificado'}, 
@@ -68,7 +69,7 @@ def update_quota_after_create(quota_type, value=1):
             
             # Se criação foi bem-sucedida (status 201 ou 200)
             if response.status_code in [200, 201]:
-                tenant = get_tenant_from_request(request)
+                tenant = getattr(connection, 'tenant', None)
                 if tenant:
                     quota_usage = getattr(tenant, 'quota_usage', None)
                     if quota_usage:
@@ -99,7 +100,7 @@ def update_quota_after_delete(quota_type, value=1):
             
             # Se deleção foi bem-sucedida (status 200, 204)
             if response.status_code in [200, 204]:
-                tenant = get_tenant_from_request(request)
+                tenant = getattr(connection, 'tenant', None)
                 if tenant:
                     quota_usage = getattr(tenant, 'quota_usage', None)
                     if quota_usage:

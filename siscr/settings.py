@@ -143,6 +143,43 @@ PUBLIC_SCHEMA_URLCONF = 'siscr.public_urls'
 # URLs para schemas de tenants (quando tenant é identificado)
 TENANT_SCHEMA_URLCONF = 'siscr.tenant_urls'
 
+# ============================================
+# ENVIRONMENT CONFIGURATION (deve vir antes de outras configurações que dependem dele)
+# ============================================
+# Ambientes: development, homologation, preprod, production
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
+
+# ============================================
+# CACHE CONFIGURATION
+# ============================================
+# Cache para rate limiting e outras funcionalidades
+# Em desenvolvimento: LocMemCache (não compartilhado, mas funciona)
+# Em produção: Redis (recomendado)
+if ENVIRONMENT == 'production':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1'),
+        }
+    }
+else:
+    # Para desenvolvimento, usar LocMemCache (aceita warning)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+
+# ============================================
+# RATE LIMITING SETTINGS
+# ============================================
+# Configuração de rate limiting para segurança
+# Usa cache do Django (Redis recomendado em produção)
+RATELIMIT_USE_CACHE = 'default'  # Usa o cache padrão do Django
+
+# Configurações de rate limit por endpoint
+RATELIMIT_ENABLE = True  # Habilitar rate limiting
+RATELIMIT_SWITCH_OFF = False  # Desabilitar apenas para testes
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -306,23 +343,6 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'SISCR <noreply@siscr.
 
 # URL do frontend para links de email
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
-
-# ============================================
-# RATE LIMITING SETTINGS
-# ============================================
-# Configuração de rate limiting para segurança
-# Usa cache do Django (Redis recomendado em produção)
-RATELIMIT_USE_CACHE = 'default'  # Usa o cache padrão do Django
-
-# Configurações de rate limit por endpoint
-RATELIMIT_ENABLE = True  # Habilitar rate limiting
-RATELIMIT_SWITCH_OFF = False  # Desabilitar apenas para testes
-
-# ============================================
-# ENVIRONMENT CONFIGURATION
-# ============================================
-# Ambientes: development, homologation, preprod, production
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development')
 
 # Debug baseado no ambiente (sobrescreve valor padrão acima)
 if 'ENVIRONMENT' in os.environ:
