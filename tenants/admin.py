@@ -8,10 +8,10 @@ from .models import Tenant, Domain, Empresa, Filial
 
 @admin.register(Tenant)
 class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
-    list_display = ('name', 'schema_name', 'is_active', 'created_at')
-    list_filter = ('is_active', 'created_at')
+    list_display = ('name', 'schema_name', 'is_active')
+    list_filter = ('is_active',)
     search_fields = ('name', 'schema_name')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('schema_name',)
 
 
 @admin.register(Domain)
