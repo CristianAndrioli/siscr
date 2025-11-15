@@ -106,7 +106,7 @@ REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
 echo.
 echo [5/9] Verificando dados compartilhados (Planos, Features, Subscriptions)...
-docker-compose exec web python check_subscriptions_data.py >nul 2>&1
+docker-compose exec web python database/scripts/check_subscriptions_data.py >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ Dados compartilhados já existem!
 ) else (
@@ -120,39 +120,46 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
-REM Passo 6: Criar tenant de teste (se não existir)
+REM Passo 6: Criar tenants com dados realistas
 REM ========================================
 echo.
-echo [6/9] Verificando tenant de teste...
-docker-compose exec web python manage.py create_test_tenant
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Tenant pode já existir ou houve erro na criação
+echo [6/9] Criando tenants com dados realistas...
+echo.
+echo Este processo criará 3 tenants completos:
+echo   • Comércio Simples (1 empresa, 1 filial)
+echo   • Grupo Expansão (1 empresa, 2 filiais)
+echo   • Holding Diversificada (2 empresas, 2 filiais cada)
+echo.
+echo Verificando se tenants já existem...
+docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from tenants.models import Tenant; tenants = Tenant.objects.filter(schema_name__in=['comercio_simples', 'grupo_expansao', 'holding_diversificada']); count = tenants.count(); exit(0 if count >= 3 else 1)" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ✅ Tenants já existem! Pulando criação...
+    echo.
+    echo Se quiser recriar os tenants, execute manualmente:
+    echo   docker-compose exec web python manage.py seed_multiple_tenants
+) else (
+    echo Executando seed de múltiplos tenants...
+    echo (Isso pode levar alguns minutos...)
+    docker-compose exec web python manage.py seed_multiple_tenants
+    if %errorlevel% neq 0 (
+        echo ⚠️  Aviso: Seed de múltiplos tenants pode ter falhado
+        echo Tentando criar apenas tenant de teste como fallback...
+        docker-compose exec web python manage.py create_test_tenant
+    ) else (
+        echo ✅ Tenants criados com sucesso!
+    )
 )
 
 REM ========================================
-REM Passo 7: Aplicar migrações no tenant e fazer seed
+REM Passo 7: Criar tenant de teste (fallback/opcional)
 REM ========================================
 echo.
-echo [7/9] Aplicando migrações no tenant e criando dados de exemplo...
-echo Aplicando migrações no schema do tenant...
-docker-compose exec web python manage.py migrate_schemas --schema=teste_tenant --noinput
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
-) else (
-    echo ✅ Migrações do tenant verificadas/aplicadas!
-)
-echo Verificando dados de exemplo no tenant (Pessoas, Produtos, Serviços)...
-docker-compose exec web python check_tenant_data.py teste_tenant >nul 2>&1
+echo [7/9] Verificando tenant de teste (opcional)...
+docker-compose exec web python manage.py create_test_tenant >nul 2>&1
 if %errorlevel% equ 0 (
-    echo ✅ Dados de exemplo do tenant já existem!
+    echo ✅ Tenant de teste criado/verificado!
 ) else (
-    echo Criando dados de exemplo no tenant...
-    docker-compose exec web python seed_tenant_data.py teste_tenant
-    if %errorlevel% neq 0 (
-        echo ⚠️  Aviso: Seed de dados do tenant pode ter falhado
-    ) else (
-        echo ✅ Dados de exemplo do tenant criados!
-    )
+    echo ℹ️  Tenant de teste já existe ou não foi necessário criar
 )
 
 @REM REM ========================================
@@ -219,9 +226,13 @@ echo    • Admin Django:     http://localhost:8000/admin/
 echo    • Frontend (React): http://localhost:5173
 echo.
 echo 🔐 Credenciais de teste:
-echo    • Username: teste_user
+echo    • Username: (varia por tenant, formato: nome.sobrenome.codigo)
 echo    • Password: senha123
-echo    • Tenant:   teste_tenant
+echo    • Tenants disponíveis:
+echo      - Comércio Simples: http://comercio_simples.localhost:8000
+echo      - Grupo Expansão: http://grupo_expansao.localhost:8000
+echo      - Holding Diversificada: http://holding_diversificada.localhost:8000
+echo      - Teste (se criado): http://teste-tenant.localhost:8000
 echo.
 echo 💡 Dica: O servidor do frontend está rodando em uma janela separada.
 echo    Para parar os containers, execute: docker-compose down
