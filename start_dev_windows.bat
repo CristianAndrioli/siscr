@@ -97,16 +97,26 @@ echo [4/9] Aplicando migrações no schema compartilhado...
 docker-compose exec web python manage.py migrate_schemas --shared --noinput
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
+) else (
+    echo ✅ Migrações compartilhadas verificadas/aplicadas!
 )
 
 REM ========================================
 REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
 echo.
-echo [5/9] Criando dados de exemplo compartilhados (Planos, Features, Subscriptions)...
-docker-compose exec web python manage.py seed_subscriptions
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Seed de subscriptions pode ter falhado ou já estar criado
+echo [5/9] Verificando dados compartilhados (Planos, Features, Subscriptions)...
+docker-compose exec web python check_subscriptions_data.py >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ✅ Dados compartilhados já existem!
+) else (
+    echo Criando dados de exemplo compartilhados...
+    docker-compose exec web python manage.py seed_subscriptions
+    if %errorlevel% neq 0 (
+        echo ⚠️  Aviso: Seed de subscriptions pode ter falhado
+    ) else (
+        echo ✅ Dados compartilhados criados!
+    )
 )
 
 REM ========================================
@@ -128,11 +138,21 @@ echo Aplicando migrações no schema do tenant...
 docker-compose exec web python manage.py migrate_schemas --schema=teste_tenant --noinput
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
+) else (
+    echo ✅ Migrações do tenant verificadas/aplicadas!
 )
-echo Criando dados de exemplo no tenant (Pessoas, Produtos, Serviços)...
-docker-compose exec web python seed_tenant_data.py teste_tenant
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Seed de dados do tenant pode ter falhado ou já estar criado
+echo Verificando dados de exemplo no tenant (Pessoas, Produtos, Serviços)...
+docker-compose exec web python check_tenant_data.py teste_tenant >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ✅ Dados de exemplo do tenant já existem!
+) else (
+    echo Criando dados de exemplo no tenant...
+    docker-compose exec web python seed_tenant_data.py teste_tenant
+    if %errorlevel% neq 0 (
+        echo ⚠️  Aviso: Seed de dados do tenant pode ter falhado
+    ) else (
+        echo ✅ Dados de exemplo do tenant criados!
+    )
 )
 
 @REM REM ========================================
@@ -162,18 +182,18 @@ if %errorlevel% neq 0 (
 @REM )
 @REM popd
 
-REM ========================================
-REM Passo 9: Iniciar servidor de desenvolvimento do frontend
-REM ========================================
-echo.
-echo [9/9] Iniciando servidor de desenvolvimento do frontend...
-echo.
-echo ⚠️  IMPORTANTE: O servidor do frontend será iniciado em uma nova janela.
-echo    Esta janela pode ser fechada após o frontend iniciar.
-echo.
-pushd frontend
-start "SISCR Frontend" cmd /k "npm run dev"
-popd
+@REM REM ========================================
+@REM REM Passo 9: Iniciar servidor de desenvolvimento do frontend
+@REM REM ========================================
+@REM echo.
+@REM echo [9/9] Iniciando servidor de desenvolvimento do frontend...
+@REM echo.
+@REM echo ⚠️  IMPORTANTE: O servidor do frontend será iniciado em uma nova janela.
+@REM echo    Esta janela pode ser fechada após o frontend iniciar.
+@REM echo.
+@REM pushd frontend
+@REM start "SISCR Frontend" cmd /k "npm run dev"
+@REM popd
 
 REM Aguardar um pouco para o servidor iniciar
 timeout /t 3 /nobreak >nul
@@ -187,8 +207,6 @@ timeout /t 2 /nobreak >nul
 start http://localhost:8000/admin/
 timeout /t 1 /nobreak >nul
 start http://localhost:5173
-timeout /t 1 /nobreak >nul
-start http://localhost:5173/dashboard
 
 echo.
 echo ========================================
