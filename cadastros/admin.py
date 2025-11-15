@@ -7,32 +7,32 @@ from .models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
 
 @admin.register(Pessoa)
 class PessoaAdmin(admin.ModelAdmin):
-    list_display = ('codigo_cadastro', 'nome_completo', 'razao_social', 'tipo', 'cpf_cnpj', 'cidade', 'estado')
-    list_filter = ('tipo', 'estado', 'contribuinte')
+    list_display = ('codigo_cadastro', 'nome_completo', 'razao_social', 'tipo', 'cpf_cnpj', 'empresa', 'filial', 'cidade', 'estado')
+    list_filter = ('tipo', 'estado', 'contribuinte', 'empresa', 'filial')
     search_fields = ('codigo_cadastro', 'nome_completo', 'razao_social', 'cpf_cnpj', 'email')
     readonly_fields = ('codigo_cadastro',)
 
 
 @admin.register(Produto)
 class ProdutoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_produto', 'nome', 'valor_custo', 'valor_venda', 'codigo_ncm', 'ativo')
-    list_filter = ('ativo', 'origem_mercadoria', 'unidade_medida')
+    list_display = ('codigo_produto', 'nome', 'valor_custo', 'valor_venda', 'codigo_ncm', 'empresa', 'filial', 'ativo')
+    list_filter = ('ativo', 'origem_mercadoria', 'unidade_medida', 'empresa', 'filial')
     search_fields = ('codigo_produto', 'nome', 'codigo_ncm', 'descricao')
     readonly_fields = ('codigo_produto',)
 
 
 @admin.register(Servico)
 class ServicoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_servico', 'nome', 'valor_base', 'tipo_contrato', 'ativo')
-    list_filter = ('ativo', 'tipo_contrato', 'icms_tributado')
+    list_display = ('codigo_servico', 'nome', 'valor_base', 'tipo_contrato', 'empresa', 'filial', 'ativo')
+    list_filter = ('ativo', 'tipo_contrato', 'icms_tributado', 'empresa', 'filial')
     search_fields = ('codigo_servico', 'nome', 'descricao')
     readonly_fields = ('codigo_servico',)
 
 
 @admin.register(ContaReceber)
 class ContaReceberAdmin(admin.ModelAdmin):
-    list_display = ('codigo_conta', 'numero_documento', 'cliente', 'valor_total', 'valor_recebido', 'valor_pendente', 'data_vencimento', 'status')
-    list_filter = ('status', 'forma_pagamento', 'data_vencimento')
+    list_display = ('codigo_conta', 'numero_documento', 'cliente', 'empresa', 'filial', 'valor_total', 'valor_recebido', 'valor_pendente', 'data_vencimento', 'status')
+    list_filter = ('status', 'forma_pagamento', 'data_vencimento', 'empresa', 'filial')
     search_fields = ('codigo_conta', 'numero_documento', 'cliente__razao_social', 'cliente__nome_fantasia', 'descricao')
     readonly_fields = ('codigo_conta', 'valor_pendente', 'created_at', 'updated_at')
     date_hierarchy = 'data_vencimento'
@@ -40,8 +40,8 @@ class ContaReceberAdmin(admin.ModelAdmin):
 
 @admin.register(ContaPagar)
 class ContaPagarAdmin(admin.ModelAdmin):
-    list_display = ('codigo_conta', 'numero_documento', 'fornecedor', 'valor_total', 'valor_pago', 'valor_pendente', 'data_vencimento', 'status')
-    list_filter = ('status', 'forma_pagamento', 'data_vencimento')
+    list_display = ('codigo_conta', 'numero_documento', 'fornecedor', 'empresa', 'filial', 'valor_total', 'valor_pago', 'valor_pendente', 'data_vencimento', 'status')
+    list_filter = ('status', 'forma_pagamento', 'data_vencimento', 'empresa', 'filial')
     search_fields = ('codigo_conta', 'numero_documento', 'fornecedor__razao_social', 'fornecedor__nome_fantasia', 'descricao')
     readonly_fields = ('codigo_conta', 'valor_pendente', 'created_at', 'updated_at')
     date_hierarchy = 'data_vencimento'

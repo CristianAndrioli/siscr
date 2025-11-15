@@ -4,6 +4,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
+from core.base_models import SiscrModelBase
 
 # Estados brasileiros (constante compartilhada)
 ESTADOS_CHOICES = [
@@ -37,7 +38,7 @@ ESTADOS_CHOICES = [
 ]
 
 
-class Pessoa(models.Model):
+class Pessoa(SiscrModelBase):
     # Tipos de Pessoa
     TIPO_CHOICES = [
         ('PF', 'Pessoa Física'),
@@ -82,16 +83,42 @@ class Pessoa(models.Model):
 
     # 4. Observações
     observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
+    
+    # 5. Vínculo com Empresa/Filial (para separação de dados)
+    empresa = models.ForeignKey(
+        'tenants.Empresa',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='pessoas',
+        verbose_name='Empresa',
+        help_text='Deixe em branco para dados compartilhados entre todas as empresas'
+    )
+    
+    filial = models.ForeignKey(
+        'tenants.Filial',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='pessoas',
+        verbose_name='Filial',
+        help_text='Deixe em branco para dados compartilhados entre todas as filiais'
+    )
 
     class Meta:
         verbose_name = 'Pessoa'
         verbose_name_plural = 'Pessoas'
+        indexes = [
+            models.Index(fields=['empresa', 'filial']),
+            models.Index(fields=['empresa']),
+            models.Index(fields=['filial']),
+        ]
 
     def __str__(self):
         return self.nome_completo or self.razao_social or f"Código {self.codigo_cadastro}"
 
 
-class Servico(models.Model):
+class Servico(SiscrModelBase):
     # Campos Identificadores e Gerais
     codigo_servico = models.IntegerField(primary_key=True) 
     nome = models.CharField(max_length=255)
@@ -110,12 +137,42 @@ class Servico(models.Model):
     tributacao_pis = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text="Alíquota PIS (%)", default=0.00)
     tributacao_cofins = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text="Alíquota COFINS (%)", default=0.00)
     icms_tributado = models.BooleanField(default=False, help_text="O serviço incide ICMS?")
+    
+    # Vínculo com Empresa/Filial (para separação de dados)
+    empresa = models.ForeignKey(
+        'tenants.Empresa',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='servicos',
+        verbose_name='Empresa',
+        help_text='Deixe em branco para dados compartilhados entre todas as empresas'
+    )
+    
+    filial = models.ForeignKey(
+        'tenants.Filial',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='servicos',
+        verbose_name='Filial',
+        help_text='Deixe em branco para dados compartilhados entre todas as filiais'
+    )
+
+    class Meta:
+        verbose_name = 'Serviço'
+        verbose_name_plural = 'Serviços'
+        indexes = [
+            models.Index(fields=['empresa', 'filial']),
+            models.Index(fields=['empresa']),
+            models.Index(fields=['filial']),
+        ]
 
     def __str__(self):
         return self.nome
 
 
-class Produto(models.Model):
+class Produto(SiscrModelBase):
     # Campos Identificadores e Gerais
     codigo_produto = models.IntegerField(primary_key=True) 
     nome = models.CharField(max_length=255)
@@ -142,6 +199,36 @@ class Produto(models.Model):
     incoterm = models.CharField(max_length=10, blank=True, null=True, help_text="Último Incoterm utilizado (e.g., FOB, CIF).")
     moeda_negociacao = models.CharField(max_length=3, choices=[('BRL', 'Real'), ('USD', 'Dólar Americano'), ('EUR', 'Euro')], default='BRL', help_text="Moeda de negociação padrão.")
     aliquota_ii = models.DecimalField(max_digits=5, decimal_places=2, default=0.00, help_text="Alíquota de Imposto de Importação (II) (%)")
+    
+    # Vínculo com Empresa/Filial (para separação de dados)
+    empresa = models.ForeignKey(
+        'tenants.Empresa',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='produtos',
+        verbose_name='Empresa',
+        help_text='Deixe em branco para dados compartilhados entre todas as empresas'
+    )
+    
+    filial = models.ForeignKey(
+        'tenants.Filial',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='produtos',
+        verbose_name='Filial',
+        help_text='Deixe em branco para dados compartilhados entre todas as filiais'
+    )
+
+    class Meta:
+        verbose_name = 'Produto'
+        verbose_name_plural = 'Produtos'
+        indexes = [
+            models.Index(fields=['empresa', 'filial']),
+            models.Index(fields=['empresa']),
+            models.Index(fields=['filial']),
+        ]
 
     def __str__(self):
         return f"{self.codigo_produto} - {self.nome}"
@@ -151,7 +238,7 @@ class Produto(models.Model):
 # MODELOS DE FINANCEIRO
 # ============================================================================
 
-class ContaReceber(models.Model):
+class ContaReceber(SiscrModelBase):
     """Modelo para Contas a Receber"""
     
     STATUS_CHOICES = [
@@ -230,9 +317,26 @@ class ContaReceber(models.Model):
     descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
     observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
     
-    # Controle
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    # Vínculo com Empresa/Filial (para separação de dados)
+    empresa = models.ForeignKey(
+        'tenants.Empresa',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='contas_receber',
+        verbose_name='Empresa',
+        help_text='Deixe em branco para dados compartilhados entre todas as empresas'
+    )
+    
+    filial = models.ForeignKey(
+        'tenants.Filial',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='contas_receber',
+        verbose_name='Filial',
+        help_text='Deixe em branco para dados compartilhados entre todas as filiais'
+    )
     
     class Meta:
         verbose_name = 'Conta a Receber'
@@ -241,6 +345,9 @@ class ContaReceber(models.Model):
         indexes = [
             models.Index(fields=['cliente', 'status']),
             models.Index(fields=['data_vencimento', 'status']),
+            models.Index(fields=['empresa', 'filial']),
+            models.Index(fields=['empresa']),
+            models.Index(fields=['filial']),
         ]
     
     def save(self, *args, **kwargs):
@@ -268,7 +375,7 @@ class ContaReceber(models.Model):
         return f"{self.numero_documento} - {self.cliente} - R$ {self.valor_total}"
 
 
-class ContaPagar(models.Model):
+class ContaPagar(SiscrModelBase):
     """Modelo para Contas a Pagar"""
     
     STATUS_CHOICES = [
@@ -347,9 +454,26 @@ class ContaPagar(models.Model):
     descricao = models.TextField(blank=True, null=True, verbose_name='Descrição')
     observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
     
-    # Controle
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    # Vínculo com Empresa/Filial (para separação de dados)
+    empresa = models.ForeignKey(
+        'tenants.Empresa',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='contas_pagar',
+        verbose_name='Empresa',
+        help_text='Deixe em branco para dados compartilhados entre todas as empresas'
+    )
+    
+    filial = models.ForeignKey(
+        'tenants.Filial',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='contas_pagar',
+        verbose_name='Filial',
+        help_text='Deixe em branco para dados compartilhados entre todas as filiais'
+    )
     
     class Meta:
         verbose_name = 'Conta a Pagar'
@@ -358,6 +482,9 @@ class ContaPagar(models.Model):
         indexes = [
             models.Index(fields=['fornecedor', 'status']),
             models.Index(fields=['data_vencimento', 'status']),
+            models.Index(fields=['empresa', 'filial']),
+            models.Index(fields=['empresa']),
+            models.Index(fields=['filial']),
         ]
     
     def save(self, *args, **kwargs):

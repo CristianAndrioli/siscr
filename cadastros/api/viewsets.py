@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Max
 from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.utils import filter_by_empresa_filial, get_current_empresa_filial
 from .serializers import (
     PessoaSerializer, ProdutoSerializer, ServicoSerializer,
     ContaReceberSerializer, ContaPagarSerializer
@@ -18,11 +19,18 @@ class PessoaViewSet(viewsets.ModelViewSet):
     # Campos que serão pesquisados pelo SearchFilter do DRF
     search_fields = ['cpf_cnpj', 'nome_completo', 'razao_social', 'nome_fantasia', 'cidade', 'email']
 
+    def get_queryset(self):
+        """Filtra pessoas por empresa/filial atual do usuário."""
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
         """Retorna o próximo código de cadastro disponível."""
         try:
-            max_id = Pessoa.objects.all().aggregate(max_id=Max('codigo_cadastro'))['max_id']
+            queryset = self.get_queryset()
+            max_id = queryset.aggregate(max_id=Max('codigo_cadastro'))['max_id']
             proximo_codigo = (max_id or 0) + 1
         except Exception:
             # Se a tabela não existir ou houver erro, retorna 1
@@ -36,11 +44,18 @@ class ProdutoViewSet(viewsets.ModelViewSet):
     # Campos que serão pesquisados pelo SearchFilter do DRF
     search_fields = ['nome', 'descricao', 'codigo_ncm']
 
+    def get_queryset(self):
+        """Filtra produtos por empresa/filial atual do usuário."""
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
         """Retorna o próximo código de produto disponível."""
         try:
-            max_id = Produto.objects.all().aggregate(max_id=Max('codigo_produto'))['max_id']
+            queryset = self.get_queryset()
+            max_id = queryset.aggregate(max_id=Max('codigo_produto'))['max_id']
             proximo_codigo = (max_id or 0) + 1
         except Exception:
             # Se a tabela não existir ou houver erro, retorna 1
@@ -54,11 +69,18 @@ class ServicoViewSet(viewsets.ModelViewSet):
     # Campos que serão pesquisados pelo SearchFilter do DRF
     search_fields = ['nome', 'descricao', 'codigo_ncm']
 
+    def get_queryset(self):
+        """Filtra serviços por empresa/filial atual do usuário."""
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
         """Retorna o próximo código de serviço disponível."""
         try:
-            max_id = Servico.objects.all().aggregate(max_id=Max('codigo_servico'))['max_id']
+            queryset = self.get_queryset()
+            max_id = queryset.aggregate(max_id=Max('codigo_servico'))['max_id']
             proximo_codigo = (max_id or 0) + 1
         except Exception:
             # Se a tabela não existir ou houver erro, retorna 1
@@ -71,11 +93,18 @@ class ContaReceberViewSet(viewsets.ModelViewSet):
     serializer_class = ContaReceberSerializer
     search_fields = ['numero_documento', 'cliente__razao_social', 'cliente__nome_fantasia', 'descricao']
     
+    def get_queryset(self):
+        """Filtra contas a receber por empresa/filial atual do usuário."""
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+    
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
         """Retorna o próximo código de conta disponível."""
         try:
-            max_id = ContaReceber.objects.all().aggregate(max_id=Max('codigo_conta'))['max_id']
+            queryset = self.get_queryset()
+            max_id = queryset.aggregate(max_id=Max('codigo_conta'))['max_id']
             proximo_codigo = (max_id or 0) + 1
         except Exception:
             proximo_codigo = 1
@@ -87,11 +116,18 @@ class ContaPagarViewSet(viewsets.ModelViewSet):
     serializer_class = ContaPagarSerializer
     search_fields = ['numero_documento', 'fornecedor__razao_social', 'fornecedor__nome_fantasia', 'descricao']
     
+    def get_queryset(self):
+        """Filtra contas a pagar por empresa/filial atual do usuário."""
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+    
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
         """Retorna o próximo código de conta disponível."""
         try:
-            max_id = ContaPagar.objects.all().aggregate(max_id=Max('codigo_conta'))['max_id']
+            queryset = self.get_queryset()
+            max_id = queryset.aggregate(max_id=Max('codigo_conta'))['max_id']
             proximo_codigo = (max_id or 0) + 1
         except Exception:
             proximo_codigo = 1
