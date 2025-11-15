@@ -3,6 +3,7 @@ Models para Multi-Tenancy
 """
 from django.db import models
 from django_tenants.models import TenantMixin, DomainMixin
+from core.base_models import SiscrModelBase
 
 
 class Tenant(TenantMixin):
@@ -19,8 +20,6 @@ class Tenant(TenantMixin):
     
     # Configurações
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     
     # Configurações do Tenant
     auto_create_schema = True
@@ -51,7 +50,7 @@ class Domain(DomainMixin):
         verbose_name_plural = 'Domínios'
 
 
-class Empresa(models.Model):
+class Empresa(SiscrModelBase):
     """
     Model que representa uma Empresa dentro de um Tenant
     Cada Tenant pode ter múltiplas Empresas
@@ -79,8 +78,6 @@ class Empresa(models.Model):
     
     # Status
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     
     class Meta:
         verbose_name = 'Empresa'
@@ -94,7 +91,7 @@ class Empresa(models.Model):
         return f"{self.nome} ({self.tenant.name})"
 
 
-class Filial(models.Model):
+class Filial(SiscrModelBase):
     """
     Model que representa uma Filial de uma Empresa
     Cada Empresa pode ter múltiplas Filiais
@@ -134,8 +131,6 @@ class Filial(models.Model):
     
     # Status
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     
     class Meta:
         verbose_name = 'Filial'

@@ -3,41 +3,8 @@
  */
 import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 
-/**
- * Obtém a URL base da API considerando o tenant
- * Em desenvolvimento, usa o domínio do tenant salvo no localStorage
- * ou um domínio padrão de desenvolvimento
- */
-function getApiBaseUrl(): string {
-  const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl) {
-    return envUrl;
-  }
-
-  // Tentar obter o domínio do tenant do localStorage
-  try {
-    const tenantStr = localStorage.getItem('tenant');
-    if (tenantStr) {
-      const tenant = JSON.parse(tenantStr);
-      // Se o tenant tiver um domínio, usar ele
-      if (tenant.domain) {
-        return `http://${tenant.domain}:8000`;
-      }
-    }
-  } catch (e) {
-    console.warn('Erro ao ler tenant do localStorage:', e);
-  }
-
-  // Em desenvolvimento, usar um domínio padrão de tenant
-  // Você pode criar um tenant com domínio 'teste-tenant.localhost' ou 'localhost'
-  // Para desenvolvimento local sem subdomínio, você precisará criar um tenant
-  // com domínio 'localhost' no Django admin
-  const devTenantDomain = import.meta.env.VITE_DEV_TENANT_DOMAIN || 'teste-tenant.localhost';
-  return `http://${devTenantDomain}:8000`;
-}
-
 // URL base da API (backend Django)
-const API_BASE_URL = getApiBaseUrl();
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Criar instância do axios
 const api = axios.create({

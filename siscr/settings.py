@@ -85,6 +85,7 @@ MIDDLEWARE = [
     'siscr.middleware.DisableCSRFForAPI',  # Desabilita CSRF para APIs (deve vir antes do CSRF middleware)
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.AuditMiddleware',  # Middleware de auditoria (preenche created_by, updated_by, owner)
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     

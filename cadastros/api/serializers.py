@@ -3,6 +3,7 @@
 
 from rest_framework import serializers
 from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.utils import get_current_empresa_filial
 
 
 class PessoaSerializer(serializers.ModelSerializer):
@@ -32,6 +33,16 @@ class PessoaSerializer(serializers.ModelSerializer):
                     validated_data['codigo_cadastro'] = (max_id or 0) + 1
                 except Exception:
                     validated_data['codigo_cadastro'] = 1
+        
+        # Definir empresa/filial automaticamente se não fornecidos
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user:
+            empresa, filial = get_current_empresa_filial(user)
+            if 'empresa' not in validated_data or validated_data.get('empresa') is None:
+                validated_data['empresa'] = empresa
+            if 'filial' not in validated_data or validated_data.get('filial') is None:
+                validated_data['filial'] = filial
+        
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
@@ -67,6 +78,16 @@ class ProdutoSerializer(serializers.ModelSerializer):
                     validated_data['codigo_produto'] = (max_id or 0) + 1
                 except Exception:
                     validated_data['codigo_produto'] = 1
+        
+        # Definir empresa/filial automaticamente se não fornecidos
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user:
+            empresa, filial = get_current_empresa_filial(user)
+            if 'empresa' not in validated_data or validated_data.get('empresa') is None:
+                validated_data['empresa'] = empresa
+            if 'filial' not in validated_data or validated_data.get('filial') is None:
+                validated_data['filial'] = filial
+        
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
@@ -102,6 +123,16 @@ class ServicoSerializer(serializers.ModelSerializer):
                     validated_data['codigo_servico'] = (max_id or 0) + 1
                 except Exception:
                     validated_data['codigo_servico'] = 1
+        
+        # Definir empresa/filial automaticamente se não fornecidos
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user:
+            empresa, filial = get_current_empresa_filial(user)
+            if 'empresa' not in validated_data or validated_data.get('empresa') is None:
+                validated_data['empresa'] = empresa
+            if 'filial' not in validated_data or validated_data.get('filial') is None:
+                validated_data['filial'] = filial
+        
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
@@ -135,6 +166,16 @@ class ContaReceberSerializer(serializers.ModelSerializer):
                     validated_data['codigo_conta'] = (max_id or 0) + 1
                 except Exception:
                     validated_data['codigo_conta'] = 1
+        
+        # Definir empresa/filial automaticamente se não fornecidos
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user:
+            empresa, filial = get_current_empresa_filial(user)
+            if 'empresa' not in validated_data or validated_data.get('empresa') is None:
+                validated_data['empresa'] = empresa
+            if 'filial' not in validated_data or validated_data.get('filial') is None:
+                validated_data['filial'] = filial
+        
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
@@ -167,6 +208,16 @@ class ContaPagarSerializer(serializers.ModelSerializer):
                     validated_data['codigo_conta'] = (max_id or 0) + 1
                 except Exception:
                     validated_data['codigo_conta'] = 1
+        
+        # Definir empresa/filial automaticamente se não fornecidos
+        user = self.context.get('request').user if self.context.get('request') else None
+        if user:
+            empresa, filial = get_current_empresa_filial(user)
+            if 'empresa' not in validated_data or validated_data.get('empresa') is None:
+                validated_data['empresa'] = empresa
+            if 'filial' not in validated_data or validated_data.get('filial') is None:
+                validated_data['filial'] = filial
+        
         return super().create(validated_data)
     
     def update(self, instance, validated_data):

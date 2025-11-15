@@ -5,11 +5,12 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from tenants.models import Tenant, Empresa, Filial
+from core.base_models import SiscrModelBase
 
 User = get_user_model()
 
 
-class UserProfile(models.Model):
+class UserProfile(SiscrModelBase):
     """
     Perfil do usuário vinculado a tenant
     Permite que usuários tenham acesso a múltiplos tenants
@@ -72,9 +73,6 @@ class UserProfile(models.Model):
     #     verbose_name='Avatar'
     # )
     
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
-    
     class Meta:
         verbose_name = 'Perfil de Usuário'
         verbose_name_plural = 'Perfis de Usuário'
@@ -94,7 +92,7 @@ class UserProfile(models.Model):
         ).distinct()
 
 
-class TenantMembership(models.Model):
+class TenantMembership(SiscrModelBase):
     """
     Membros de um tenant (relação many-to-many entre User e Tenant)
     Define o papel do usuário em cada tenant

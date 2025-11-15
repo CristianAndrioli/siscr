@@ -6,9 +6,10 @@ from django.utils import timezone
 from django.core.validators import MinValueValidator
 from decimal import Decimal
 from tenants.models import Tenant
+from core.base_models import SiscrModelBase
 
 
-class Plan(models.Model):
+class Plan(SiscrModelBase):
     """
     Plano de assinatura (Básico, Pro, Enterprise)
     Armazenado no schema público (shared)
@@ -78,9 +79,6 @@ class Plan(models.Model):
         verbose_name='Funcionalidades'
     )
     
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
-    
     class Meta:
         verbose_name = 'Plano'
         verbose_name_plural = 'Planos'
@@ -93,7 +91,7 @@ class Plan(models.Model):
         return self.name
 
 
-class Feature(models.Model):
+class Feature(SiscrModelBase):
     """
     Funcionalidades disponíveis por plano
     Armazenado no schema público (shared)
@@ -107,8 +105,6 @@ class Feature(models.Model):
         verbose_name='Ícone (classe CSS)'
     )
     
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    
     class Meta:
         verbose_name = 'Funcionalidade'
         verbose_name_plural = 'Funcionalidades'
@@ -118,7 +114,7 @@ class Feature(models.Model):
         return self.name
 
 
-class Subscription(models.Model):
+class Subscription(SiscrModelBase):
     """
     Assinatura de um tenant
     Armazenado no schema público (shared)
@@ -193,9 +189,6 @@ class Subscription(models.Model):
         verbose_name='Notas Internas'
     )
     
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
-    
     class Meta:
         verbose_name = 'Assinatura'
         verbose_name_plural = 'Assinaturas'
@@ -246,7 +239,7 @@ class Subscription(models.Model):
         self.save()
 
 
-class QuotaUsage(models.Model):
+class QuotaUsage(SiscrModelBase):
     """
     Uso atual de quotas por tenant
     Armazenado no schema público (shared)
@@ -280,8 +273,6 @@ class QuotaUsage(models.Model):
         validators=[MinValueValidator(0)],
         verbose_name='Armazenamento (MB)'
     )
-    
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     
     class Meta:
         verbose_name = 'Uso de Quota'

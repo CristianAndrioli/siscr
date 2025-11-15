@@ -7,9 +7,10 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 from tenants.models import Tenant
 from subscriptions.models import Subscription
+from core.base_models import SiscrModelBase
 
 
-class PaymentMethod(models.Model):
+class PaymentMethod(SiscrModelBase):
     """
     Método de pagamento do cliente (cartão, PIX, etc.)
     Armazenado no schema público (shared)
@@ -82,9 +83,6 @@ class PaymentMethod(models.Model):
         verbose_name='Ativo'
     )
     
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
-    
     class Meta:
         verbose_name = 'Método de Pagamento'
         verbose_name_plural = 'Métodos de Pagamento'
@@ -100,7 +98,7 @@ class PaymentMethod(models.Model):
         return f"{self.get_type_display()} - {self.tenant.name}"
 
 
-class Payment(models.Model):
+class Payment(SiscrModelBase):
     """
     Pagamento individual (cobrança de assinatura)
     Armazenado no schema público (shared)
@@ -198,9 +196,6 @@ class Payment(models.Model):
         verbose_name='Motivo da falha'
     )
     
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
-    
     class Meta:
         verbose_name = 'Pagamento'
         verbose_name_plural = 'Pagamentos'
@@ -215,7 +210,7 @@ class Payment(models.Model):
         return f"{self.tenant.name} - R$ {self.amount} ({self.get_status_display()})"
 
 
-class Invoice(models.Model):
+class Invoice(SiscrModelBase):
     """
     Fatura gerada para o tenant
     Armazenado no schema público (shared)
@@ -287,9 +282,6 @@ class Invoice(models.Model):
         null=True,
         verbose_name='URL do PDF'
     )
-    
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
-    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     
     class Meta:
         verbose_name = 'Fatura'

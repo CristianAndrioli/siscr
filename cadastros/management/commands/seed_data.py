@@ -8,6 +8,7 @@ from django.db import transaction, connection
 from decimal import Decimal
 from datetime import date, timedelta
 from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from tenants.models import Empresa, Filial
 
 
 class Command(BaseCommand):
@@ -67,18 +68,30 @@ class Command(BaseCommand):
 
         self.stdout.write('Criando dados de exemplo...')
         
+        # Obter empresa e filiais do tenant
+        empresa, filiais = self._get_empresa_filiais()
+        
+        if empresa:
+            self.stdout.write(f'  Empresa: {empresa.nome}')
+            if filiais:
+                self.stdout.write(f'  Filiais encontradas: {len(filiais)}')
+            else:
+                self.stdout.write('  Nenhuma filial encontrada - dados serão associados apenas à empresa')
+        else:
+            self.stdout.write(self.style.WARNING('  ⚠ Nenhuma empresa encontrada - dados serão criados como compartilhados'))
+        
         # Seed Pessoas
-        self._seed_pessoas()
+        self._seed_pessoas(empresa, filiais)
         
         # Seed Produtos
-        self._seed_produtos()
+        self._seed_produtos(empresa, filiais)
         
         # Seed Serviços
-        self._seed_servicos()
+        self._seed_servicos(empresa, filiais)
         
         # Seed Financeiro (precisa de pessoas criadas primeiro)
-        self._seed_contas_receber()
-        self._seed_contas_pagar()
+        self._seed_contas_receber(empresa, filiais)
+        self._seed_contas_pagar(empresa, filiais)
         
         # Contar registros criados (com tratamento de erro)
         try:
@@ -139,8 +152,28 @@ class Command(BaseCommand):
                 return cursor.fetchone()[0]
         except Exception:
             return False
+    
+    def _get_empresa_filiais(self):
+        """
+        Obtém a primeira empresa e todas as filiais ativas do tenant atual.
+        Returns: (empresa, lista_filiais)
+        """
+        try:
+            # Tentar obter empresa do tenant atual
+            empresa = Empresa.objects.filter(is_active=True).first()
+            
+            if not empresa:
+                return (None, [])
+            
+            # Obter todas as filiais ativas da empresa
+            filiais = list(Filial.objects.filter(empresa=empresa, is_active=True))
+            
+            return (empresa, filiais)
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  ⚠ Erro ao obter empresa/filiais: {e}'))
+            return (None, [])
 
-    def _seed_pessoas(self):
+    def _seed_pessoas(self, empresa=None, filiais=None):
         """Cria pessoas de exemplo (clientes, fornecedores, funcionários)"""
         pessoas_data = [
             # Pessoas Físicas - Clientes
@@ -309,7 +342,44 @@ class Command(BaseCommand):
             },
         ]
         
-        pessoas_para_criar = [Pessoa(**data) for data in pessoas_data]
+        # Associar pessoas à empresa/filial
+        pessoas_para_criar = []
+        for index, data in enumerate(pessoas_data):
+            pessoa_data = data.copy()
+            
+            # Distribuir pessoas entre filiais e algumas como compartilhadas
+            if empresa:
+                if filiais and len(filiais) > 0:
+                    # Se tem filiais, distribuir entre elas
+                    # Primeiros 30%: compartilhados (empresa=None, filial=None)
+                    # Próximos 40%: primeira filial
+                    # Restantes: outras filiais (se houver)
+                    if index < len(pessoas_data) * 0.3:
+                        # Compartilhados
+                        pessoa_data['empresa'] = None
+                        pessoa_data['filial'] = None
+                    elif index < len(pessoas_data) * 0.7:
+                        # Primeira filial
+                        pessoa_data['empresa'] = empresa
+                        pessoa_data['filial'] = filiais[0]
+                    else:
+                        # Outras filiais (distribuir)
+                        if len(filiais) > 1:
+                            filial_idx = ((index - int(len(pessoas_data) * 0.7)) % (len(filiais) - 1)) + 1
+                        else:
+                            filial_idx = 0
+                        pessoa_data['empresa'] = empresa
+                        pessoa_data['filial'] = filiais[filial_idx]
+                else:
+                    # Sem filiais, associar apenas à empresa (compartilhado na empresa)
+                    pessoa_data['empresa'] = empresa
+                    pessoa_data['filial'] = None
+            else:
+                # Sem empresa, manter como compartilhado
+                pessoa_data['empresa'] = None
+                pessoa_data['filial'] = None
+            
+            pessoas_para_criar.append(Pessoa(**pessoa_data))
         
         if pessoas_para_criar:
             try:
@@ -329,7 +399,7 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(self.style.WARNING(f'  ⚠ Nenhuma pessoa criada. Erro: {e}'))
 
-    def _seed_produtos(self):
+    def _seed_produtos(self, empresa=None, filiais=None):
         """Cria produtos de exemplo"""
         produtos_data = [
             {
@@ -427,7 +497,30 @@ class Command(BaseCommand):
             },
         ]
         
-        produtos_para_criar = [Produto(**data) for data in produtos_data]
+        # Associar produtos à empresa/filial (maioria compartilhada, alguns por filial)
+        produtos_para_criar = []
+        for index, data in enumerate(produtos_data):
+            produto_data = data.copy()
+            
+            if empresa:
+                if filiais and len(filiais) > 0:
+                    # 60% compartilhados, 40% distribuídos entre filiais
+                    if index < len(produtos_data) * 0.6:
+                        produto_data['empresa'] = empresa
+                        produto_data['filial'] = None  # Compartilhado na empresa
+                    else:
+                        filial_idx = (index % len(filiais))
+                        produto_data['empresa'] = empresa
+                        produto_data['filial'] = filiais[filial_idx]
+                else:
+                    # Sem filiais, associar apenas à empresa
+                    produto_data['empresa'] = empresa
+                    produto_data['filial'] = None
+            else:
+                produto_data['empresa'] = None
+                produto_data['filial'] = None
+            
+            produtos_para_criar.append(Produto(**produto_data))
         
         if produtos_para_criar:
             try:
@@ -446,7 +539,7 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(self.style.WARNING(f'  ⚠ Nenhum produto criado. Erro: {e}'))
 
-    def _seed_servicos(self):
+    def _seed_servicos(self, empresa=None, filiais=None):
         """Cria serviços de exemplo"""
         servicos_data = [
             {
@@ -526,7 +619,20 @@ class Command(BaseCommand):
             },
         ]
         
-        servicos_para_criar = [Servico(**data) for data in servicos_data]
+        # Associar serviços à empresa/filial (maioria compartilhada)
+        servicos_para_criar = []
+        for index, data in enumerate(servicos_data):
+            servico_data = data.copy()
+            
+            if empresa:
+                # Serviços geralmente são compartilhados na empresa
+                servico_data['empresa'] = empresa
+                servico_data['filial'] = None
+            else:
+                servico_data['empresa'] = None
+                servico_data['filial'] = None
+            
+            servicos_para_criar.append(Servico(**servico_data))
         
         if servicos_para_criar:
             try:
@@ -545,10 +651,10 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(self.style.WARNING(f'  ⚠ Nenhum serviço criado. Erro: {e}'))
 
-    def _seed_contas_receber(self):
+    def _seed_contas_receber(self, empresa=None, filiais=None):
         """Cria contas a receber de exemplo"""
         try:
-            # Buscar clientes (PJ)
+            # Buscar clientes (PJ) - já filtrados por empresa/filial se aplicável
             clientes = list(Pessoa.objects.filter(tipo='PJ')[:2])
             if not clientes:
                 self.stdout.write(self.style.WARNING('  ⚠ Nenhum cliente encontrado. Criando contas a receber ignorado.'))
@@ -607,7 +713,31 @@ class Command(BaseCommand):
                 },
             ]
             
-            contas_para_criar = [ContaReceber(**data) for data in contas_data]
+            # Associar contas à empresa/filial (usar mesma empresa/filial do cliente)
+            contas_para_criar = []
+            for index, data in enumerate(contas_data):
+                conta_data = data.copy()
+                cliente = conta_data.get('cliente')
+                
+                # Usar empresa/filial do cliente, ou empresa/filial padrão
+                if cliente and hasattr(cliente, 'empresa') and cliente.empresa:
+                    conta_data['empresa'] = cliente.empresa
+                    conta_data['filial'] = cliente.filial if hasattr(cliente, 'filial') else None
+                elif empresa:
+                    # Se cliente não tem empresa, usar empresa padrão
+                    if filiais and len(filiais) > 0:
+                        # Distribuir entre filiais
+                        filial_idx = index % len(filiais)
+                        conta_data['empresa'] = empresa
+                        conta_data['filial'] = filiais[filial_idx]
+                    else:
+                        conta_data['empresa'] = empresa
+                        conta_data['filial'] = None
+                else:
+                    conta_data['empresa'] = None
+                    conta_data['filial'] = None
+                
+                contas_para_criar.append(ContaReceber(**conta_data))
             
             if contas_para_criar:
                 try:
@@ -628,10 +758,10 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'  ⚠ Erro ao criar contas a receber: {e}'))
 
-    def _seed_contas_pagar(self):
+    def _seed_contas_pagar(self, empresa=None, filiais=None):
         """Cria contas a pagar de exemplo"""
         try:
-            # Buscar fornecedores (PJ)
+            # Buscar fornecedores (PJ) - já filtrados por empresa/filial se aplicável
             fornecedores = list(Pessoa.objects.filter(tipo='PJ').exclude(codigo_cadastro__in=[10, 11])[:2])
             if not fornecedores:
                 self.stdout.write(self.style.WARNING('  ⚠ Nenhum fornecedor encontrado. Criando contas a pagar ignorado.'))
@@ -690,7 +820,31 @@ class Command(BaseCommand):
                 },
             ]
             
-            contas_para_criar = [ContaPagar(**data) for data in contas_data]
+            # Associar contas à empresa/filial (usar mesma empresa/filial do fornecedor)
+            contas_para_criar = []
+            for index, data in enumerate(contas_data):
+                conta_data = data.copy()
+                fornecedor = conta_data.get('fornecedor')
+                
+                # Usar empresa/filial do fornecedor, ou empresa/filial padrão
+                if fornecedor and hasattr(fornecedor, 'empresa') and fornecedor.empresa:
+                    conta_data['empresa'] = fornecedor.empresa
+                    conta_data['filial'] = fornecedor.filial if hasattr(fornecedor, 'filial') else None
+                elif empresa:
+                    # Se fornecedor não tem empresa, usar empresa padrão
+                    if filiais and len(filiais) > 0:
+                        # Distribuir entre filiais
+                        filial_idx = index % len(filiais)
+                        conta_data['empresa'] = empresa
+                        conta_data['filial'] = filiais[filial_idx]
+                    else:
+                        conta_data['empresa'] = empresa
+                        conta_data['filial'] = None
+                else:
+                    conta_data['empresa'] = None
+                    conta_data['filial'] = None
+                
+                contas_para_criar.append(ContaPagar(**conta_data))
             
             if contas_para_criar:
                 try:
