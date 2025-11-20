@@ -18,6 +18,18 @@ class Tenant(TenantMixin):
     name = models.CharField(max_length=100, verbose_name='Nome')
     description = models.TextField(blank=True, null=True, verbose_name='Descrição')
     
+    # Campos de auditoria (adicionados para compatibilidade com o banco)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Data de Criação',
+        help_text='Data e hora em que o registro foi criado'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Data de Atualização',
+        help_text='Data e hora da última modificação do registro'
+    )
+    
     # Configurações
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
     
