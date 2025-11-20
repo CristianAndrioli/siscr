@@ -143,64 +143,77 @@ if %errorlevel% equ 0 (
     docker-compose exec web python manage.py seed_multiple_tenants
     if %errorlevel% neq 0 (
         echo ⚠️  Aviso: Seed de múltiplos tenants pode ter falhado
-        echo Tentando criar apenas tenant de teste como fallback...
-        docker-compose exec web python manage.py create_test_tenant
     ) else (
         echo ✅ Tenants criados com sucesso!
     )
 )
 
 REM ========================================
-REM Passo 7: Criar tenant de teste (fallback/opcional)
+REM Passo 7: Verificar Node.js e instalar dependencias do frontend
 REM ========================================
 echo.
-echo [7/9] Verificando tenant de teste (opcional)...
-docker-compose exec web python manage.py create_test_tenant >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ✅ Tenant de teste criado/verificado!
+echo [7/8] Verificando Node.js e dependencias do frontend...
+node --version >nul 2>&1
+if errorlevel 1 goto :nodejs_not_found
+echo OK: Node.js encontrado!
+if not exist "frontend" goto :frontend_not_found
+pushd frontend
+if not exist "node_modules" (
+    echo Executando npm install pode levar alguns minutos...
+    call npm install
+    if errorlevel 1 (
+        echo ERRO: Falha ao instalar dependencias do frontend!
+        echo AVISO: Continuando sem iniciar o frontend...
+        popd
+        goto :continue_after_step8
+    )
+    echo OK: Dependencias instaladas!
 ) else (
-    echo ℹ️  Tenant de teste já existe ou não foi necessário criar
+    echo OK: Dependencias ja instaladas!
 )
+popd
+goto :continue_after_step8
 
-@REM REM ========================================
-@REM REM Passo 8: Instalar dependências do frontend
-@REM REM ========================================
-@REM echo.
-@REM echo [8/9] Instalando dependências do frontend...
-@REM if not exist "frontend" (
-@REM     echo ❌ Pasta frontend não encontrada!
-@REM     pause
-@REM     exit /b 1
-@REM )
-@REM pushd frontend
-@REM if not exist "node_modules" (
-@REM     echo Executando npm install (pode levar alguns minutos)...
-@REM     call npm install
-@REM     set INSTALL_ERROR=!errorlevel!
-@REM     if !INSTALL_ERROR! neq 0 (
-@REM         echo ❌ Erro ao instalar dependências do frontend!
-@REM         popd
-@REM         pause
-@REM         exit /b 1
-@REM     )
-@REM     echo ✅ Dependências instaladas!
-@REM ) else (
-@REM     echo ✅ Dependências já instaladas!
-@REM )
-@REM popd
+:nodejs_not_found
+echo.
+echo ERRO: Node.js nao esta instalado ou nao esta no PATH!
+echo.
+echo Por favor, baixe e instale o Node.js versao 16 ou superior:
+echo    https://nodejs.org/
+echo.
+echo Apos instalar, reinicie este script.
+echo.
+echo AVISO: Continuando sem iniciar o frontend...
+goto :continue_after_step8
 
-@REM REM ========================================
-@REM REM Passo 9: Iniciar servidor de desenvolvimento do frontend
-@REM REM ========================================
-@REM echo.
-@REM echo [9/9] Iniciando servidor de desenvolvimento do frontend...
-@REM echo.
-@REM echo ⚠️  IMPORTANTE: O servidor do frontend será iniciado em uma nova janela.
-@REM echo    Esta janela pode ser fechada após o frontend iniciar.
-@REM echo.
-@REM pushd frontend
-@REM start "SISCR Frontend" cmd /k "npm run dev"
-@REM popd
+:frontend_not_found
+echo ERRO: Pasta frontend nao encontrada!
+echo AVISO: Continuando sem iniciar o frontend...
+
+:continue_after_step8
+
+REM ========================================
+REM Passo 8: Iniciar servidor de desenvolvimento do frontend
+REM ========================================
+echo.
+echo [8/8] Iniciando servidor de desenvolvimento do frontend...
+node --version >nul 2>&1
+if errorlevel 1 goto :skip_frontend_start
+if not exist "frontend" goto :skip_frontend_start
+echo.
+echo IMPORTANTE: O servidor do frontend sera iniciado em uma nova janela.
+echo    Esta janela pode ser fechada apos o frontend iniciar.
+echo.
+pushd frontend
+start "SISCR Frontend" cmd /k "npm run dev"
+popd
+echo OK: Servidor do frontend iniciado!
+goto :continue_after_step9
+
+:skip_frontend_start
+echo AVISO: Frontend nao sera iniciado.
+
+:continue_after_step9
 
 REM Aguardar um pouco para o servidor iniciar
 timeout /t 3 /nobreak >nul
@@ -232,7 +245,6 @@ echo    • Tenants disponíveis:
 echo      - Comércio Simples: http://comercio_simples.localhost:8000
 echo      - Grupo Expansão: http://grupo_expansao.localhost:8000
 echo      - Holding Diversificada: http://holding_diversificada.localhost:8000
-echo      - Teste (se criado): http://teste-tenant.localhost:8000
 echo.
 echo 💡 Dica: O servidor do frontend está rodando em uma janela separada.
 echo    Para parar os containers, execute: docker-compose down
