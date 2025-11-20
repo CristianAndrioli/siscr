@@ -38,11 +38,30 @@ def login(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Identificar tenant pela URL/subdomínio
+    # Identificar tenant pela URL/subdomínio ou pelo header/body
     tenant = getattr(connection, 'tenant', None)
+    
+    # Se não identificou pelo Host, tentar pelo header ou body (para desenvolvimento)
+    if not tenant:
+        domain = request.headers.get('X-Tenant-Domain') or request.data.get('domain')
+        if domain:
+            from tenants.models import Domain as TenantDomain
+            try:
+                # Buscar o tenant pelo domínio (no schema público)
+                tenant_domain = TenantDomain.objects.select_related('tenant').get(domain=domain)
+                tenant = tenant_domain.tenant
+                # Configurar o tenant na connection para uso posterior
+                # O django-tenants usa connection.set_tenant() para definir o schema
+                connection.set_tenant(tenant)
+            except TenantDomain.DoesNotExist:
+                return Response(
+                    {'error': f'Domínio "{domain}" não encontrado. Verifique o domínio e tente novamente.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+    
     if not tenant:
         return Response(
-            {'error': 'Tenant não identificado. Acesse através do domínio do seu tenant.'}, 
+            {'error': 'Tenant não identificado. Acesse através do domínio do seu tenant ou forneça o domínio.'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     

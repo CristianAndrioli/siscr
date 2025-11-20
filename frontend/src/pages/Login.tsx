@@ -1,8 +1,10 @@
-import { useState, FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, FormEvent, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authService } from '../services/auth';
 
 function Login() {
+  const [searchParams] = useSearchParams();
+  const domain = searchParams.get('domain') || '';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,11 +17,11 @@ function Login() {
     setLoading(true);
 
     try {
-      await authService.login(username, password);
+      await authService.login(username, password, domain);
       navigate('/dashboard');
     } catch (err) {
-      const axiosError = err as { response?: { data?: { detail?: string } } };
-      setError(axiosError.response?.data?.detail || 'Erro ao fazer login. Verifique suas credenciais.');
+      const axiosError = err as { response?: { data?: { error?: string; detail?: string } } };
+      setError(axiosError.response?.data?.error || axiosError.response?.data?.detail || 'Erro ao fazer login. Verifique suas credenciais.');
     } finally {
       setLoading(false);
     }

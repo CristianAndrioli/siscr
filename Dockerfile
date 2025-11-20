@@ -21,7 +21,7 @@ RUN mkdir -p /app/static
 EXPOSE 8000
 
 # Comando para rodar migrations e iniciar servidor
-CMD python manage.py migrate --noinput && \
+CMD python manage.py migrate_schemas --shared --noinput && \
     python manage.py collectstatic --noinput && \
     python manage.py runserver 0.0.0.0:8000
 

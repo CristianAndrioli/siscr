@@ -50,7 +50,7 @@ class Pessoa(SiscrModelBase):
     
     # 1. Informações Básicas
     tipo = models.CharField(max_length=2, choices=TIPO_CHOICES, default='PF', verbose_name='Tipo de Pessoa')
-    cpf_cnpj = models.CharField(max_length=18, unique=True, verbose_name='CPF/CNPJ')
+    cpf_cnpj = models.CharField(max_length=20, unique=True, verbose_name='CPF/CNPJ')
     
     # Pessoa Física
     nome_completo = models.CharField(max_length=255, blank=True, null=True, verbose_name='Nome Completo')

@@ -146,13 +146,13 @@ def signup(request):
                 {'error': f'Email "{admin_email}" já está cadastrado. Use outro email ou faça login.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-        # Se não tem membership ativo, é um usuário órfão - vamos limpar para permitir recadastro
-        # Deletar UserProfile se existir
+        # Se não tem membership ativo, é um usuário órfão
+        # Não vamos deletar o usuário para evitar problemas de cascata em schemas de tenants
+        # Apenas limpar os dados do schema público (UserProfile e TenantMembership)
+        # O novo cadastro poderá usar o mesmo username/email porque não há membership ativo
         UserProfile.objects.filter(user=user_with_email).delete()
-        # Deletar qualquer membership inativo
         TenantMembership.objects.filter(user=user_with_email).delete()
-        # Deletar o usuário
-        user_with_email.delete()
+        # Não deletar o usuário para evitar problemas de cascata
     
     # Verificar se username já existe E tem membership ativo (no schema público)
     user_with_username = User.objects.filter(username=admin_username).first()
@@ -184,13 +184,13 @@ def signup(request):
                 {'error': error_msg}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-        # Se não tem membership ativo, é um usuário órfão - vamos limpar para permitir recadastro
-        # Deletar UserProfile se existir
+        # Se não tem membership ativo, é um usuário órfão
+        # Não vamos deletar o usuário para evitar problemas de cascata em schemas de tenants
+        # Apenas limpar os dados do schema público (UserProfile e TenantMembership)
+        # O novo cadastro poderá usar o mesmo username/email porque não há membership ativo
         UserProfile.objects.filter(user=user_with_username).delete()
-        # Deletar qualquer membership inativo
         TenantMembership.objects.filter(user=user_with_username).delete()
-        # Deletar o usuário
-        user_with_username.delete()
+        # Não deletar o usuário para evitar problemas de cascata
     
     # Buscar plano
     try:
@@ -232,17 +232,40 @@ def signup(request):
         # Criar schema e aplicar migrations
         tenant.save()  # Isso cria o schema automaticamente
         
+        # Executar migrations do tenant para criar todas as tabelas necessárias
+        from django.core.management import call_command
+        try:
+            call_command('migrate_schemas', schema_name=tenant.schema_name, verbosity=0)
+        except Exception as e:
+            # Se falhar, tentar continuar (pode ser que já esteja migrado)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f'Erro ao executar migrations do tenant {tenant.schema_name}: {e}')
+        
         # Criar usuário admin no schema do tenant E no schema público
         # Primeiro criar no schema público (para TenantMembership)
-        user_public = User.objects.create_user(
-            username=admin_username,
-            email=admin_email,
-            password=admin_password,
-            first_name=admin_first_name,
-            last_name=admin_last_name,
-            is_staff=True,
-            is_superuser=True,
-        )
+        # Verificar se o usuário já existe (pode ser um usuário órfão que não foi deletado)
+        user_public = User.objects.filter(username=admin_username).first()
+        if user_public:
+            # Se existe, atualizar os dados
+            user_public.email = admin_email
+            user_public.set_password(admin_password)
+            user_public.first_name = admin_first_name
+            user_public.last_name = admin_last_name
+            user_public.is_staff = True
+            user_public.is_superuser = True
+            user_public.save()
+        else:
+            # Se não existe, criar novo
+            user_public = User.objects.create_user(
+                username=admin_username,
+                email=admin_email,
+                password=admin_password,
+                first_name=admin_first_name,
+                last_name=admin_last_name,
+                is_staff=True,
+                is_superuser=True,
+            )
         
         # Depois criar no schema do tenant (para uso dentro do tenant)
         with schema_context(tenant.schema_name):
@@ -310,8 +333,8 @@ def signup(request):
             current_period_end=period_end,
         )
         
-        # Criar quota usage
-        QuotaUsage.objects.create(tenant=tenant)
+        # Criar quota usage (usar get_or_create para evitar duplicatas)
+        QuotaUsage.objects.get_or_create(tenant=tenant)
         
         # Enviar email de boas-vindas (se configurado)
         try:

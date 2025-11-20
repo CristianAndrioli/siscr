@@ -25,13 +25,23 @@ class QuotaMiddleware:
         self.get_response = get_response
     
     def __call__(self, request):
-        # Verificar se é rota pública
-        if any(request.path.startswith(path) for path in self.PUBLIC_PATHS):
+
+        # Verificar se é rota pública - SEMPRE permitir rotas públicas (retornar imediatamente)
+        for public_path in self.PUBLIC_PATHS:
+            if request.path.startswith(public_path):
+                return self.get_response(request)
+        
+        # Se não há tenant (schema público), permitir continuar
+        try:
+            tenant = getattr(connection, 'tenant', None)
+        except Exception:
+            tenant = None
+        
+        if not tenant:
             return self.get_response(request)
         
         # Apenas verificar em requisições que criam recursos
         if request.method in ['POST', 'PUT', 'PATCH']:
-            tenant = getattr(connection, 'tenant', None)
             if tenant:
                 try:
                     # Buscar subscription ativa do tenant

@@ -226,35 +226,49 @@ class Command(BaseCommand):
             
             # Criar empresas e filiais
             for emp_config in empresas_config:
-                empresa = Empresa.objects.create(
-                    tenant=tenant,
-                    nome=emp_config['nome'],
-                    razao_social=f"{emp_config['nome']} LTDA",
+                # Usar get_or_create para evitar duplicatas se o script for executado múltiplas vezes
+                cidade, estado = random.choice(CIDADES)
+                empresa, created = Empresa.objects.get_or_create(
                     cnpj=emp_config['cnpj'],
-                    cidade=random.choice(CIDADES)[0],
-                    estado=random.choice(CIDADES)[1],
-                    email=f"contato@{emp_config['nome'].lower().replace(' ', '')}.com.br",
-                    telefone=f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
-                    is_active=True,
+                    defaults={
+                        'tenant': tenant,
+                        'nome': emp_config['nome'],
+                        'razao_social': f"{emp_config['nome']} LTDA",
+                        'cidade': cidade,
+                        'estado': estado,
+                        'email': f"contato@{emp_config['nome'].lower().replace(' ', '')}.com.br",
+                        'telefone': f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
+                        'is_active': True,
+                    }
                 )
                 empresas_criadas.append(empresa)
-                self.stdout.write(f"  ✅ Empresa: {empresa.nome}")
+                if created:
+                    self.stdout.write(f"  ✅ Empresa criada: {empresa.nome}")
+                else:
+                    self.stdout.write(f"  ⚠️  Empresa já existe: {empresa.nome}")
                 
                 # Criar filiais
                 for fil_config in emp_config['filiais']:
                     cidade, estado = random.choice(CIDADES)
-                    filial = Filial.objects.create(
+                    codigo_filial = fil_config.get('codigo', '001')
+                    # Usar get_or_create para evitar duplicatas
+                    filial, created = Filial.objects.get_or_create(
                         empresa=empresa,
-                        nome=fil_config['nome'],
-                        codigo_filial=fil_config.get('codigo', '001'),
-                        cidade=cidade,
-                        estado=estado,
-                        email=f"filial{fil_config.get('codigo', '001')}@{empresa.nome.lower().replace(' ', '')}.com.br",
-                        telefone=f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
-                        is_active=True,
+                        codigo_filial=codigo_filial,
+                        defaults={
+                            'nome': fil_config['nome'],
+                            'cidade': cidade,
+                            'estado': estado,
+                            'email': f"filial{codigo_filial}@{empresa.nome.lower().replace(' ', '')}.com.br",
+                            'telefone': f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
+                            'is_active': True,
+                        }
                     )
                     filiais_criadas.append(filial)
-                    self.stdout.write(f"    ✅ Filial: {filial.nome}")
+                    if created:
+                        self.stdout.write(f"    ✅ Filial criada: {filial.nome}")
+                    else:
+                        self.stdout.write(f"    ⚠️  Filial já existe: {filial.nome}")
             
             # Criar pessoas (clientes, fornecedores, funcionários)
             self.stdout.write("\n👥 Criando pessoas...")
