@@ -14,11 +14,21 @@ export const authService = {
   /**
    * Realiza login multi-tenant e retorna tokens
    */
-  login: async (username: string, password: string): Promise<TokenResponse & { user?: any; tenant?: any; requires_selection?: boolean }> => {
-    const response = await axios.post(`${API_BASE_URL}/api/auth/login/`, {
+  login: async (username: string, password: string, domain?: string): Promise<TokenResponse & { user?: any; tenant?: any; requires_selection?: boolean }> => {
+    // Se API_BASE_URL estiver vazio, usar URL relativa para o proxy do Vite
+    const url = API_BASE_URL ? `${API_BASE_URL}/api/auth/login/` : '/api/auth/login/';
+    
+    // Configurar headers para passar o domínio do tenant se fornecido
+    const headers: Record<string, string> = {};
+    if (domain) {
+      headers['X-Tenant-Domain'] = domain;
+    }
+    
+    const response = await axios.post(url, {
       username,
       password,
-    });
+      domain, // Também enviar no body como fallback
+    }, { headers });
     
     const { access, refresh, user, tenant, requires_selection } = response.data;
     localStorage.setItem('access_token', access);

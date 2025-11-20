@@ -75,12 +75,15 @@ TENANT_APPS = [
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 MIDDLEWARE = [
-    # Tenant middleware deve vir primeiro (identifica o tenant pela URL/domínio)
+    # CORS deve vir PRIMEIRO para processar requisições OPTIONS (preflight)
+    'corsheaders.middleware.CorsMiddleware',
+    # Middleware customizado para identificar tenant por header (deve vir ANTES do TenantMainMiddleware)
+    'siscr.middleware.TenantDomainHeaderMiddleware',
+    # Tenant middleware deve vir depois (identifica o tenant pela URL/domínio)
     'django_tenants.middleware.main.TenantMainMiddleware',
     
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS deve vir antes de CommonMiddleware
     'django.middleware.common.CommonMiddleware',
     'siscr.middleware.DisableCSRFForAPI',  # Desabilita CSRF para APIs (deve vir antes do CSRF middleware)
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -93,7 +96,10 @@ MIDDLEWARE = [
     'subscriptions.middleware.QuotaMiddleware',
 ]
 
-ROOT_URLCONF = 'siscr.urls'
+# ROOT_URLCONF não é usado pelo django-tenants
+# O django-tenants usa PUBLIC_SCHEMA_URLCONF e TENANT_SCHEMA_URLCONF
+# Mas precisamos definir para compatibilidade
+ROOT_URLCONF = 'siscr.public_urls'  # Usar public_urls como padrão
 
 TEMPLATES = [
     {
@@ -295,6 +301,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://teste-tenant.localhost:3000",
 ]
 
+# Em desenvolvimento, permitir todas as origens para facilitar testes
+# IMPORTANTE: CORS_ALLOW_ALL_ORIGINS deve ser True em desenvolvimento
+# para permitir requisições do frontend (localhost:5173)
+CORS_ALLOW_ALL_ORIGINS = True if ENVIRONMENT == 'development' else False
+
 # Permitir subdomínios de localhost em desenvolvimento
 CORS_ALLOWED_ORIGIN_REGEXES = []
 if ENVIRONMENT == 'development':
@@ -306,8 +317,21 @@ if ENVIRONMENT == 'development':
 
 CORS_ALLOW_CREDENTIALS = True
 
-# Para desenvolvimento (remover em produção)
-CORS_ALLOW_ALL_ORIGINS = False  # Mudar para False em produção
+# Headers permitidos em requisições CORS
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-tenant-domain',  # Header customizado para identificar tenant
+]
+
+# CORS_ALLOW_ALL_ORIGINS agora é definido acima baseado no ENVIRONMENT
 
 # ============================================
 # CSRF SETTINGS (para desenvolvimento)

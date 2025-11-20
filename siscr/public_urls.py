@@ -9,10 +9,16 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 from payments import webhooks
+from accounts import views as accounts_views
 
 urlpatterns = [
     # Admin (apenas para superusuários do schema público)
     path('admin/', admin.site.urls),
+    
+    # API de login multi-tenant (aceita domínio via header ou body)
+    # Esta rota funciona tanto no schema público quanto no tenant
+    # IMPORTANTE: Colocar ANTES do include('public.urls') para garantir que seja encontrada
+    path('api/auth/login/', accounts_views.login, name='login'),
     
     # APIs públicas (cadastro de novos clientes, planos, etc.)
     path('', include('public.urls')),

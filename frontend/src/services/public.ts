@@ -3,7 +3,9 @@
  */
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Usar URL relativa para aproveitar o proxy do Vite, ou URL absoluta se VITE_API_URL estiver definido
+// Quando VITE_API_URL não está definido, usar URL relativa que começa com / para o proxy funcionar
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export interface Plan {
   id: number;
@@ -69,7 +71,9 @@ export const publicService = {
    * Lista planos disponíveis
    */
   getPlans: async (): Promise<Plan[]> => {
-    const response = await axios.get<Plan[]>(`${API_BASE_URL}/api/public/plans/`);
+    // Se API_BASE_URL estiver vazio, usar URL relativa para o proxy do Vite
+    const url = API_BASE_URL ? `${API_BASE_URL}/api/public/plans/` : '/api/public/plans/';
+    const response = await axios.get<Plan[]>(url);
     return response.data;
   },
 
@@ -77,8 +81,10 @@ export const publicService = {
    * Verifica se domínio está disponível
    */
   checkDomain: async (domain: string): Promise<CheckDomainResponse> => {
+    // Se API_BASE_URL estiver vazio, usar URL relativa para o proxy do Vite
+    const url = API_BASE_URL ? `${API_BASE_URL}/api/public/check-domain/` : '/api/public/check-domain/';
     const response = await axios.post<CheckDomainResponse>(
-      `${API_BASE_URL}/api/public/check-domain/`,
+      url,
       { domain }
     );
     return response.data;
@@ -88,8 +94,10 @@ export const publicService = {
    * Cadastro público de novo cliente
    */
   signup: async (data: SignupData): Promise<SignupResponse> => {
+    // Se API_BASE_URL estiver vazio, usar URL relativa para o proxy do Vite
+    const url = API_BASE_URL ? `${API_BASE_URL}/api/public/signup/` : '/api/public/signup/';
     const response = await axios.post<SignupResponse>(
-      `${API_BASE_URL}/api/public/signup/`,
+      url,
       data
     );
     return response.data;
