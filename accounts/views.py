@@ -41,6 +41,12 @@ def login(request):
     # Identificar tenant pela URL/subdomínio ou pelo header/body
     tenant = getattr(connection, 'tenant', None)
     
+    # Verificar se é um FakeTenant (objeto mock do django-tenants quando não há tenant)
+    from tenants.models import Tenant
+    if tenant and not isinstance(tenant, Tenant):
+        # Se for FakeTenant, considerar como None
+        tenant = None
+    
     # Se não identificou pelo Host, tentar pelo header ou body (para desenvolvimento)
     if not tenant:
         domain = request.headers.get('X-Tenant-Domain') or request.data.get('domain')
@@ -48,8 +54,10 @@ def login(request):
             from tenants.models import Domain as TenantDomain
             try:
                 # Buscar o tenant pelo domínio (no schema público)
-                tenant_domain = TenantDomain.objects.select_related('tenant').get(domain=domain)
-                tenant = tenant_domain.tenant
+                from django_tenants.utils import schema_context
+                with schema_context('public'):
+                    tenant_domain = TenantDomain.objects.select_related('tenant').get(domain=domain)
+                    tenant = tenant_domain.tenant
                 # Configurar o tenant na connection para uso posterior
                 # O django-tenants usa connection.set_tenant() para definir o schema
                 connection.set_tenant(tenant)
@@ -59,14 +67,28 @@ def login(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
     
+    # Se ainda não identificou o tenant, tentar buscar pelo username (último recurso)
     if not tenant:
-        return Response(
-            {'error': 'Tenant não identificado. Acesse através do domínio do seu tenant ou forneça o domínio.'}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        from django_tenants.utils import schema_context
+        with schema_context('public'):
+            # Buscar tenant pelo membership do usuário
+            membership = TenantMembership.objects.filter(
+                user__username=username,
+                is_active=True
+            ).select_related('tenant').first()
+            
+            if membership:
+                tenant = membership.tenant
+                # Configurar o tenant na connection
+                connection.set_tenant(tenant)
+            else:
+                return Response(
+                    {'error': 'Tenant não identificado. Acesse através do domínio do seu tenant, forneça o domínio, ou verifique se o usuário existe em algum tenant.'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
     
-    # Verificar se tenant está ativo
-    if not tenant.is_active:
+    # Verificar se tenant está ativo (só verificar se for instância real do modelo)
+    if isinstance(tenant, Tenant) and not tenant.is_active:
         return Response(
             {'error': 'Tenant inativo. Entre em contato com o suporte.'}, 
             status=status.HTTP_403_FORBIDDEN
@@ -143,6 +165,7 @@ def login(request):
             'id': tenant.id,
             'name': tenant.name,
             'schema_name': tenant.schema_name,
+            'domain': tenant.domains.filter(is_primary=True).first().domain if tenant.domains.filter(is_primary=True).exists() else f'{tenant.schema_name}.localhost',
         },
     }
     

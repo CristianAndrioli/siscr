@@ -14,13 +14,35 @@ const api = axios.create({
   },
 });
 
-// Interceptor para adicionar token JWT em todas as requisições
+// Interceptor para adicionar token JWT e tenant domain em todas as requisições
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Adicionar header X-Tenant-Domain se o tenant estiver salvo
+    const tenantStr = localStorage.getItem('tenant');
+    if (tenantStr) {
+      try {
+        const tenant = JSON.parse(tenantStr);
+        // Usar domínio diretamente se disponível, senão construir a partir do schema_name
+        const domain = tenant.domain || (tenant.schema_name ? `${tenant.schema_name}.localhost` : null);
+        if (domain) {
+          config.headers['X-Tenant-Domain'] = domain;
+          console.log('[API] Adicionando header X-Tenant-Domain:', domain);
+        } else {
+          console.warn('[API] Tenant encontrado mas sem domain ou schema_name:', tenant);
+        }
+      } catch (e) {
+        // Se houver erro ao parsear, ignorar silenciosamente
+        console.warn('[API] Erro ao parsear tenant do localStorage:', e);
+      }
+    } else {
+      console.warn('[API] Nenhum tenant encontrado no localStorage');
+    }
+    
     return config;
   },
   (error: AxiosError) => {
