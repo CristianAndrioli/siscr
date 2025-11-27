@@ -11,7 +11,7 @@ echo.
 REM ========================================
 REM Passo 1: Verificar se Docker está instalado
 REM ========================================
-echo [1/9] Verificando se Docker está instalado...
+echo [1/10] Verificando se Docker está instalado...
 docker --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
@@ -30,7 +30,7 @@ REM ========================================
 REM Passo 2: Verificar se Docker está rodando
 REM ========================================
 echo.
-echo [2/9] Verificando se Docker está rodando...
+echo [2/10] Verificando se Docker está rodando...
 docker ps >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
@@ -50,7 +50,7 @@ REM ========================================
 REM Passo 3: Subir ou iniciar containers
 REM ========================================
 echo.
-echo [3/9] Verificando containers...
+echo [3/10] Verificando containers...
 docker-compose ps | findstr "siscr_web" >nul 2>&1
 if %errorlevel% equ 0 (
     echo Containers existem. Verificando se estão rodando...
@@ -93,7 +93,7 @@ REM ========================================
 REM Passo 4: Aplicar migrações compartilhadas
 REM ========================================
 echo.
-echo [4/9] Aplicando migrações no schema compartilhado...
+echo [4/10] Aplicando migrações no schema compartilhado...
 docker-compose exec web python manage.py migrate_schemas --shared --noinput
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
@@ -105,7 +105,7 @@ REM ========================================
 REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
 echo.
-echo [5/9] Verificando dados compartilhados (Planos, Features, Subscriptions)...
+echo [5/10] Verificando dados compartilhados (Planos, Features, Subscriptions)...
 docker-compose exec web python database/scripts/check_subscriptions_data.py >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ Dados compartilhados já existem!
@@ -120,10 +120,28 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
-REM Passo 6: Criar tenants com dados realistas
+REM Passo 6: Remover tenants de teste indesejados
 REM ========================================
 echo.
-echo [6/9] Criando tenants com dados realistas...
+echo [6/10] Removendo tenants de teste indesejados...
+echo.
+echo Este passo remove os seguintes tenants:
+echo   • minha_empresa_teste2
+echo   • minha_empresa_teste
+echo   • teste_tenant
+echo.
+docker-compose exec web python manage.py remove_test_tenants
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Erro ao remover tenants de teste (podem não existir)
+) else (
+    echo ✅ Limpeza de tenants de teste concluída!
+)
+
+REM ========================================
+REM Passo 7: Criar tenants com dados realistas
+REM ========================================
+echo.
+echo [7/10] Criando tenants com dados realistas...
 echo.
 echo Este processo criará 3 tenants completos:
 echo   • Comércio Simples (1 empresa, 1 filial)
@@ -149,10 +167,10 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
-REM Passo 7: Verificar Node.js e instalar dependencias do frontend
+REM Passo 8: Verificar Node.js e instalar dependencias do frontend
 REM ========================================
 echo.
-echo [7/8] Verificando Node.js e dependencias do frontend...
+echo [8/10] Verificando Node.js e dependencias do frontend...
 node --version >nul 2>&1
 if errorlevel 1 goto :nodejs_not_found
 echo OK: Node.js encontrado!
@@ -193,10 +211,10 @@ echo AVISO: Continuando sem iniciar o frontend...
 :continue_after_step8
 
 REM ========================================
-REM Passo 8: Iniciar servidor de desenvolvimento do frontend
+REM Passo 9: Iniciar servidor de desenvolvimento do frontend
 REM ========================================
 echo.
-echo [8/8] Iniciando servidor de desenvolvimento do frontend...
+echo [9/10] Iniciando servidor de desenvolvimento do frontend...
 node --version >nul 2>&1
 if errorlevel 1 goto :skip_frontend_start
 if not exist "frontend" goto :skip_frontend_start
