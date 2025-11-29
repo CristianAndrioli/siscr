@@ -29,6 +29,8 @@ ALLOWED_HOSTS = [
     '127.0.0.1', 
     'localhost',
     'teste-tenant.localhost',  # Domínio do tenant de teste
+    'comercio_simples.localhost',  # Domínio do tenant Comércio Simples
+    '*.localhost',  # Permitir qualquer subdomínio .localhost em desenvolvimento
 ]  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
 
 
@@ -79,8 +81,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     # Middleware customizado para identificar tenant por header (deve vir ANTES do TenantMainMiddleware)
     'siscr.middleware.TenantDomainHeaderMiddleware',
-    # Tenant middleware deve vir depois (identifica o tenant pela URL/domínio)
-    'django_tenants.middleware.main.TenantMainMiddleware',
+    # Tenant middleware customizado que não retorna 404 quando tenant já está configurado
+    'siscr.middleware.CustomTenantMainMiddleware',
+    # Middleware para preservar URLs do tenant após TenantMainMiddleware
+    'siscr.middleware.PreserveTenantURLsMiddleware',
     
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

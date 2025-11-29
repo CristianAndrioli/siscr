@@ -4,15 +4,13 @@ API URLs for core app
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
-from .viewsets import PessoaViewSet, ProdutoViewSet, ServicoViewSet
 
 app_name = 'api'
 
 # Router para viewsets
+# NOTA: As viewsets de cadastros (Pessoa, Produto, Servico) foram movidas para cadastros/api/urls.py
+# Mantendo apenas rotas específicas do core aqui
 router = DefaultRouter()
-router.register(r'pessoas', PessoaViewSet, basename='pessoa')
-router.register(r'produtos', ProdutoViewSet, basename='produto')
-router.register(r'servicos', ServicoViewSet, basename='servico')
 
 urlpatterns = [
     path('', views.api_root, name='api-root'),
