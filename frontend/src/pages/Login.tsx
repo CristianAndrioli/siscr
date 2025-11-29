@@ -4,7 +4,20 @@ import { authService } from '../services/auth';
 
 function Login() {
   const [searchParams] = useSearchParams();
-  const domain = searchParams.get('domain') || '';
+  // Tentar obter domain dos searchParams, localStorage (tenant salvo) ou deixar vazio
+  const domainFromParams = searchParams.get('domain') || '';
+  const tenantFromStorage = localStorage.getItem('tenant');
+  let domainFromStorage = '';
+  if (tenantFromStorage) {
+    try {
+      const tenant = JSON.parse(tenantFromStorage);
+      // Tentar obter o domain do tenant salvo (pode ter domain ou schema_name)
+      domainFromStorage = tenant.domain || `${tenant.schema_name}.localhost` || '';
+    } catch (e) {
+      // Ignorar erro de parsing
+    }
+  }
+  const domain = domainFromParams || domainFromStorage;
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');

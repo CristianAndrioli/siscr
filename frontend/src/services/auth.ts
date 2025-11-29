@@ -19,16 +19,32 @@ export const authService = {
     // Se API_BASE_URL estiver vazio, usar URL relativa para o proxy do Vite
     const url = API_BASE_URL ? `${API_BASE_URL}/api/auth/login/` : '/api/auth/login/';
     
+    // Tentar obter domain do parâmetro, localStorage ou deixar vazio
+    let finalDomain = domain;
+    if (!finalDomain) {
+      // Tentar obter do localStorage (tenant salvo)
+      const tenantStr = localStorage.getItem('tenant');
+      if (tenantStr) {
+        try {
+          const tenant = JSON.parse(tenantStr);
+          // Usar domínio diretamente se disponível, senão construir a partir do schema_name
+          finalDomain = tenant.domain || (tenant.schema_name ? `${tenant.schema_name}.localhost` : undefined);
+        } catch (e) {
+          // Ignorar erro de parsing
+        }
+      }
+    }
+    
     // Configurar headers para passar o domínio do tenant se fornecido
     const headers: Record<string, string> = {};
-    if (domain) {
-      headers['X-Tenant-Domain'] = domain;
+    if (finalDomain) {
+      headers['X-Tenant-Domain'] = finalDomain;
     }
     
     const response = await axios.post(url, {
       username,
       password,
-      domain, // Também enviar no body como fallback
+      domain: finalDomain, // Também enviar no body como fallback
     }, { headers });
     
     const { access, refresh, user, tenant, requires_selection } = response.data;
@@ -47,11 +63,14 @@ export const authService = {
   },
 
   /**
-   * Realiza logout (remove tokens)
+   * Realiza logout (remove tokens, mas mantém tenant para facilitar próximo login)
    */
   logout: (): void => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    // NÃO remover tenant do localStorage para facilitar próximo login
+    // O tenant será usado automaticamente na próxima tentativa de login
   },
 
   /**
