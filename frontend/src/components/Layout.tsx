@@ -1,9 +1,14 @@
-import { useState, ReactNode } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
 
 interface LayoutProps {
   children: ReactNode;
+}
+
+interface UserInfo {
+  empresa?: { id: number; nome: string };
+  filial?: { id: number; nome: string };
 }
 
 function Layout({ children }: LayoutProps) {
@@ -12,8 +17,31 @@ function Layout({ children }: LayoutProps) {
     financeiro: false,
     faturamento: false,
   });
+  const [userInfo, setUserInfo] = useState<UserInfo>({});
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    // Buscar informações do usuário ao montar o componente
+    const fetchUserInfo = async () => {
+      try {
+        console.log('[Layout] Buscando informações do usuário...');
+        const data = await authService.getCurrentUser();
+        console.log('[Layout] Dados recebidos:', data);
+        setUserInfo({
+          empresa: data.empresa,
+          filial: data.filial,
+        });
+        console.log('[Layout] UserInfo atualizado:', { empresa: data.empresa, filial: data.filial });
+      } catch (error) {
+        console.error('[Layout] Erro ao buscar informações do usuário:', error);
+      }
+    };
+
+    if (authService.isAuthenticated()) {
+      fetchUserInfo();
+    }
+  }, []);
 
   const handleLogout = (): void => {
     authService.logout();
@@ -267,6 +295,28 @@ function Layout({ children }: LayoutProps) {
             </li>
           </ul>
         </nav>
+
+        {/* Informações da Empresa e Filial - Acima do botão de sair */}
+        {(userInfo.empresa || userInfo.filial) && (
+          <div className="px-4 py-3 border-t border-gray-700 bg-gray-800">
+            {userInfo.empresa && (
+              <div className="mb-2">
+                <div className="text-xs text-gray-400 font-medium mb-1">Empresa</div>
+                <div className="text-sm text-white font-semibold truncate" title={userInfo.empresa.nome}>
+                  {userInfo.empresa.nome}
+                </div>
+              </div>
+            )}
+            {userInfo.filial && (
+              <div>
+                <div className="text-xs text-gray-400 font-medium mb-1">Filial</div>
+                <div className="text-sm text-white font-semibold truncate" title={userInfo.filial.nome}>
+                  {userInfo.filial.nome}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Botão de Logout */}
         <div className="p-4 border-t border-gray-700">
