@@ -54,7 +54,6 @@ def login(request):
             from tenants.models import Domain as TenantDomain
             try:
                 # Buscar o tenant pelo domínio (no schema público)
-                from django_tenants.utils import schema_context
                 with schema_context('public'):
                     tenant_domain = TenantDomain.objects.select_related('tenant').get(domain=domain)
                     tenant = tenant_domain.tenant
@@ -69,7 +68,6 @@ def login(request):
     
     # Se ainda não identificou o tenant, tentar buscar pelo username (último recurso)
     if not tenant:
-        from django_tenants.utils import schema_context
         with schema_context('public'):
             # Buscar tenant pelo membership do usuário
             membership = TenantMembership.objects.filter(
@@ -97,20 +95,23 @@ def login(request):
     # Verificar membership primeiro (no schema público)
     # O usuário deve existir no schema público para ter membership
     try:
-        membership = TenantMembership.objects.filter(
-            user__username=username,
-            tenant=tenant, 
-            is_active=True
-        ).first()
-        
-        if not membership:
-            return Response(
-                {'error': 'Usuário não tem acesso a este tenant'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Usar o user do membership (schema público)
-        user_public = membership.user
+        # IMPORTANTE: TenantMembership está no schema público, não no schema do tenant
+        # Precisamos garantir que estamos buscando no schema público
+        with schema_context('public'):
+            membership = TenantMembership.objects.filter(
+                user__username=username,
+                tenant=tenant, 
+                is_active=True
+            ).first()
+            
+            if not membership:
+                return Response(
+                    {'error': 'Usuário não tem acesso a este tenant'}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Usar o user do membership (schema público)
+            user_public = membership.user
         
         # Verificar senha autenticando no schema do tenant
         with schema_context(tenant.schema_name):
