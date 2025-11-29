@@ -316,6 +316,14 @@ def current_user(request):
             'email': request.user.email,
             'first_name': request.user.first_name,
             'last_name': request.user.last_name,
+            'is_staff': request.user.is_staff,
+            'is_active': request.user.is_active,
+            'date_joined': request.user.date_joined.isoformat() if request.user.date_joined else None,
+        },
+        'profile': {
+            'phone': profile.phone or '',
+            'created_at': profile.created_at.isoformat() if profile.created_at else None,
+            'updated_at': profile.updated_at.isoformat() if profile.updated_at else None,
         },
     }
     
@@ -334,17 +342,20 @@ def current_user(request):
         
         if membership:
             response_data['user']['role'] = membership.role
+            response_data['user']['role_display'] = membership.get_role_display()
         
         if profile.current_empresa:
             response_data['empresa'] = {
                 'id': profile.current_empresa.id,
                 'nome': profile.current_empresa.nome,
+                'razao_social': profile.current_empresa.razao_social if hasattr(profile.current_empresa, 'razao_social') else None,
             }
             
             if profile.current_filial:
                 response_data['filial'] = {
                     'id': profile.current_filial.id,
                     'nome': profile.current_filial.nome,
+                    'codigo_filial': profile.current_filial.codigo_filial if hasattr(profile.current_filial, 'codigo_filial') else None,
                 }
     
     return Response(response_data, status=status.HTTP_200_OK)

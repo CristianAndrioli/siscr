@@ -140,10 +140,38 @@ export const authService = {
    * Obtém informações do usuário atual (incluindo empresa e filial)
    */
   getCurrentUser: async (): Promise<{
-    user: any;
-    tenant?: any;
-    empresa?: { id: number; nome: string };
-    filial?: { id: number; nome: string };
+    user: {
+      id: number;
+      username: string;
+      email: string;
+      first_name?: string;
+      last_name?: string;
+      is_staff?: boolean;
+      is_active?: boolean;
+      date_joined?: string;
+      role?: string;
+      role_display?: string;
+    };
+    profile: {
+      phone?: string;
+      created_at?: string;
+      updated_at?: string;
+    };
+    tenant?: {
+      id: number;
+      name: string;
+      schema_name: string;
+    };
+    empresa?: {
+      id: number;
+      nome: string;
+      razao_social?: string;
+    };
+    filial?: {
+      id: number;
+      nome: string;
+      codigo_filial?: string;
+    };
   }> => {
     const response = await api.get('/auth/me/');
     return response.data;
