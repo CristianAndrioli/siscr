@@ -1,12 +1,20 @@
-# cadastros/api/viewsets.py
-# ViewSets movidos de core/api/viewsets.py
+"""
+ViewSets da API de cadastros.
+
+IMPORTANTE sobre permissões:
+- O projeto usa permissões do Django (add/change/delete/view) configuradas via admin
+- Para `ProdutoViewSet`, precisamos respeitar essas permissões de modelo
+  para que, ao remover permissões de Produtos no admin, o usuário perca acesso à API também.
+"""
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import DjangoModelPermissions
 from django.db.models import Max
 from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
 from cadastros.utils import filter_by_empresa_filial, get_current_empresa_filial
+from accounts.permissions import HasProdutoPermission
 from .serializers import (
     PessoaSerializer, ProdutoSerializer, ServicoSerializer,
     ContaReceberSerializer, ContaPagarSerializer
@@ -41,6 +49,9 @@ class PessoaViewSet(viewsets.ModelViewSet):
 class ProdutoViewSet(viewsets.ModelViewSet):
     queryset = Produto.objects.all().order_by('codigo_produto')
     serializer_class = ProdutoSerializer
+    # Respeitar permissões baseadas na role do usuário no tenant (TenantMembership.role),
+    # usando o campo `role` presente no token JWT.
+    permission_classes = (HasProdutoPermission,)
     # Campos que serão pesquisados pelo SearchFilter do DRF
     search_fields = ['nome', 'descricao', 'codigo_ncm']
 
