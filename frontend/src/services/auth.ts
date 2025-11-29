@@ -2,6 +2,7 @@
  * Service para autenticação
  */
 import axios from 'axios';
+import api from './api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -132,6 +133,19 @@ export const authService = {
         new_password: newPassword,
       }
     );
+    return response.data;
+  },
+
+  /**
+   * Obtém informações do usuário atual (incluindo empresa e filial)
+   */
+  getCurrentUser: async (): Promise<{
+    user: any;
+    tenant?: any;
+    empresa?: { id: number; nome: string };
+    filial?: { id: number; nome: string };
+  }> => {
+    const response = await api.get('/auth/me/');
     return response.data;
   },
 };
