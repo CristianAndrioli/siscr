@@ -142,11 +142,38 @@ class TenantMembership(SiscrModelBase):
         """
         Verifica se o membro tem uma permissão específica
         Baseado no papel (role)
+        
+        Admin do tenant tem permissões absolutas em:
+        - Todas as empresas e filiais do tenant
+        - Gerenciamento de usuários do tenant
+        - Configurações do sistema do tenant
+        - Integração com Stripe e recorrência de pagamento
+        - Todas as operações CRUD em todos os módulos
         """
         permission_map = {
-            'admin': ['view', 'add', 'change', 'delete', 'manage_users'],
+            'admin': [
+                # Permissões básicas CRUD
+                'view', 'add', 'change', 'delete',
+                # Gerenciamento de usuários e permissões
+                'manage_users', 'manage_permissions', 'manage_roles',
+                # Gerenciamento de empresas e filiais
+                'manage_empresas', 'manage_filiais',
+                # Configurações do sistema
+                'manage_settings', 'manage_configurations',
+                # Integração Stripe e pagamentos
+                'manage_stripe', 'manage_subscriptions', 'manage_payments',
+                # Acesso total ao sistema do tenant
+                'full_access',
+            ],
             'manager': ['view', 'add', 'change'],
             'user': ['view', 'add'],
             'viewer': ['view'],
         }
         return permission in permission_map.get(self.role, [])
+    
+    def is_tenant_admin(self):
+        """
+        Verifica se o membro é admin do tenant
+        Admin do tenant tem permissões absolutas em todas as empresas e filiais do tenant
+        """
+        return self.role == 'admin' and self.is_active

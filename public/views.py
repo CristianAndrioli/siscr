@@ -243,6 +243,8 @@ def signup(request):
             logger.warning(f'Erro ao executar migrations do tenant {tenant.schema_name}: {e}')
         
         # Criar usuário admin no schema do tenant E no schema público
+        # IMPORTANTE: NÃO criar como superuser para evitar acesso ao admin global
+        # O admin do tenant terá permissões absolutas apenas dentro do seu tenant
         # Primeiro criar no schema público (para TenantMembership)
         # Verificar se o usuário já existe (pode ser um usuário órfão que não foi deletado)
         user_public = User.objects.filter(username=admin_username).first()
@@ -252,8 +254,9 @@ def signup(request):
             user_public.set_password(admin_password)
             user_public.first_name = admin_first_name
             user_public.last_name = admin_last_name
-            user_public.is_staff = True
-            user_public.is_superuser = True
+            # NÃO definir is_staff nem is_superuser para evitar acesso ao admin global
+            user_public.is_staff = False
+            user_public.is_superuser = False
             user_public.save()
         else:
             # Se não existe, criar novo
@@ -263,8 +266,8 @@ def signup(request):
                 password=admin_password,
                 first_name=admin_first_name,
                 last_name=admin_last_name,
-                is_staff=True,
-                is_superuser=True,
+                is_staff=False,  # Não dar acesso ao Django Admin global
+                is_superuser=False,  # Não dar acesso a todos os tenants
             )
         
         # Depois criar no schema do tenant (para uso dentro do tenant)
@@ -279,8 +282,10 @@ def signup(request):
                 user_tenant.set_password(admin_password)
                 user_tenant.first_name = admin_first_name
                 user_tenant.last_name = admin_last_name
-                user_tenant.is_staff = True
-                user_tenant.is_superuser = True
+                # No schema do tenant, pode ser staff para acesso ao admin do tenant (se necessário)
+                # Mas não superuser para evitar problemas
+                user_tenant.is_staff = False
+                user_tenant.is_superuser = False
                 user_tenant.save()
             else:
                 user_tenant = User.objects.create_user(
@@ -289,8 +294,8 @@ def signup(request):
                     password=admin_password,
                     first_name=admin_first_name,
                     last_name=admin_last_name,
-                    is_staff=True,
-                    is_superuser=True,
+                    is_staff=False,  # Não dar acesso ao Django Admin global
+                    is_superuser=False,  # Não dar acesso a todos os tenants
                 )
             
             # Criar empresa
