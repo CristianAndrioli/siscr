@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { publicService, type Plan } from '../services/public';
 import { authService } from '../services/auth';
+import { paymentsService } from '../services/payments';
 
 function Plans() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [testingCheckout, setTestingCheckout] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setIsAuthenticated(authService.isAuthenticated());
@@ -34,6 +37,39 @@ function Plans() {
       style: 'currency',
       currency: 'BRL',
     });
+  };
+
+  const handleQuickTest = async () => {
+    if (!isAuthenticated) {
+      navigate('/login?redirect=/plans');
+      return;
+    }
+
+    // Buscar plano Pro
+    const proPlan = plans.find((p) => p.slug === 'pro' || p.name.toLowerCase().includes('pro'));
+    if (!proPlan) {
+      setError('Plano Pro não encontrado');
+      return;
+    }
+
+    setTestingCheckout(true);
+    setError('');
+
+    try {
+      const { checkout_url } = await paymentsService.createCheckoutSession(
+        proPlan.id,
+        'monthly'
+      );
+      
+      // Redirecionar para checkout do Stripe
+      window.location.href = checkout_url;
+    } catch (err: any) {
+      setError(
+        err.response?.data?.error ||
+        'Erro ao criar checkout. Verifique se está logado e tente novamente.'
+      );
+      setTestingCheckout(false);
+    }
   };
 
   if (loading) {
@@ -87,9 +123,38 @@ function Plans() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             Escolha o Plano Ideal
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-xl text-gray-600 mb-6">
             Planos flexíveis para empresas de todos os tamanhos
           </p>
+          
+          {/* Botão de Teste Rápido */}
+          {isAuthenticated && (
+            <div className="mb-8">
+              <button
+                onClick={handleQuickTest}
+                disabled={testingCheckout || loading}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg"
+              >
+                {testingCheckout ? (
+                  <>
+                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                    Criando checkout...
+                  </>
+                ) : (
+                  '🧪 Teste Rápido - Checkout Pro (Mensal)'
+                )}
+              </button>
+              <p className="text-sm text-gray-500 mt-2">
+                Teste rápido do checkout com plano Pro - Redireciona direto para Stripe
+              </p>
+            </div>
+          )}
+          
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 max-w-2xl mx-auto">
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
