@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { publicService, type Plan } from '../services/public';
+import { authService } from '../services/auth';
 
 function Plans() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setIsAuthenticated(authService.isAuthenticated());
+  }, []);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -149,7 +155,7 @@ function Plans() {
               </ul>
 
               <Link
-                to={`/signup?plan=${plan.id}`}
+                to={isAuthenticated ? `/checkout?plan_id=${plan.id}` : `/signup?plan=${plan.id}`}
                 className={`block w-full text-center py-3 rounded-lg font-semibold ${
                   plan.is_trial
                     ? 'bg-indigo-600 text-white hover:bg-indigo-700'

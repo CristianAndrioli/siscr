@@ -6,6 +6,7 @@ function Login() {
   const [searchParams] = useSearchParams();
   // Tentar obter domain dos searchParams, localStorage (tenant salvo) ou deixar vazio
   const domainFromParams = searchParams.get('domain') || '';
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
   const tenantFromStorage = localStorage.getItem('tenant');
   let domainFromStorage = '';
   if (tenantFromStorage) {
@@ -31,7 +32,7 @@ function Login() {
 
     try {
       await authService.login(username, password, domain);
-      navigate('/dashboard');
+      navigate(redirectTo);
     } catch (err) {
       const axiosError = err as { response?: { data?: { error?: string; detail?: string } } };
       setError(axiosError.response?.data?.error || axiosError.response?.data?.detail || 'Erro ao fazer login. Verifique suas credenciais.');
