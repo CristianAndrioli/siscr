@@ -19,5 +19,9 @@ urlpatterns = [
     
     # Subscriptions
     path('subscriptions/create/', views.create_subscription, name='create_subscription'),
+    
+    # Checkout
+    path('checkout/create/', views.create_checkout_session, name='create_checkout_session'),
+    path('checkout/session/<str:session_id>/', views.get_checkout_session, name='get_checkout_session'),
 ]
 

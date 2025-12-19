@@ -409,7 +409,8 @@ elif ENVIRONMENT == 'homologation':
 # STRIPE CONFIGURATION
 # ============================================
 # Modo do Stripe: simulated (dev), test (homolog/preprod), live (production)
-STRIPE_MODE = os.environ.get('STRIPE_MODE', 'simulated' if ENVIRONMENT == 'development' else 'test')
+# Em development, usar 'test' para usar Stripe real (sandbox) ou 'simulated' para simular
+STRIPE_MODE = os.environ.get('STRIPE_MODE', 'test' if ENVIRONMENT == 'development' else 'test')
 
 # Chaves do Stripe por ambiente
 if ENVIRONMENT == 'production':
@@ -421,6 +422,8 @@ elif ENVIRONMENT in ['preprod', 'homologation']:
     STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY_TEST', '')
     STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET_TEST', '')
 else:  # development
+    # Chaves de teste do Stripe (sandbox)
+    # Configure via variáveis de ambiente: STRIPE_SECRET_KEY_TEST e STRIPE_PUBLISHABLE_KEY_TEST
     STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY_TEST', '')
     STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY_TEST', '')
     STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET_TEST', '')

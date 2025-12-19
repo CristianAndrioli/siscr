@@ -25,7 +25,9 @@ class StripeService:
         if self.stripe_mode == 'live':
             stripe.api_key = settings.STRIPE_SECRET_KEY
         elif self.stripe_mode == 'test':
-            stripe.api_key = settings.STRIPE_SECRET_KEY_TEST
+            stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY_TEST', '')
+            # Configurar versão da API
+            stripe.api_version = getattr(settings, 'STRIPE_API_VERSION', '2024-11-20.acacia')
         # Se simulado, não configura stripe.api_key
     
     def _is_simulated(self):
@@ -211,6 +213,59 @@ class StripeService:
             return stripe.Subscription.retrieve(subscription_id)
         except Exception as e:
             raise Exception(f"Erro ao atualizar subscription no Stripe: {str(e)}")
+    
+    def create_checkout_session(self, price_id, customer_id=None, customer_email=None, success_url=None, cancel_url=None, metadata=None):
+        """
+        Cria uma sessão de checkout do Stripe
+        Usado para redirecionar o cliente para o checkout do Stripe
+        """
+        if self._is_simulated():
+            # Simular criação de checkout session
+            return {
+                'id': f'cs_simulated_{timezone.now().timestamp()}',
+                'url': f'http://localhost:5173/checkout/success?session_id=cs_simulated_{timezone.now().timestamp()}',
+                'payment_status': 'unpaid',
+            }
+        
+        try:
+            checkout_data = {
+                'mode': 'subscription',
+                'line_items': [{
+                    'price': price_id,
+                    'quantity': 1,
+                }],
+                'success_url': success_url or 'http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url': cancel_url or 'http://localhost:5173/checkout/cancel',
+            }
+            
+            if customer_id:
+                checkout_data['customer'] = customer_id
+            elif customer_email:
+                checkout_data['customer_email'] = customer_email
+            
+            if metadata:
+                checkout_data['metadata'] = metadata
+            
+            session = stripe.checkout.Session.create(**checkout_data)
+            return session
+        except Exception as e:
+            raise Exception(f"Erro ao criar checkout session no Stripe: {str(e)}")
+    
+    def retrieve_checkout_session(self, session_id):
+        """
+        Recupera uma sessão de checkout do Stripe
+        """
+        if self._is_simulated():
+            return {
+                'id': session_id,
+                'payment_status': 'paid',
+                'subscription': f'sub_simulated_{timezone.now().timestamp()}',
+            }
+        
+        try:
+            return stripe.checkout.Session.retrieve(session_id)
+        except Exception as e:
+            raise Exception(f"Erro ao recuperar checkout session no Stripe: {str(e)}")
 
 
 # Instância global do serviço

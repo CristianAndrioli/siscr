@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.db import connection
+from django.conf import settings
 from ..models import PaymentMethod, Payment, Invoice
 from ..services import stripe_service
 from ..api.serializers import (
@@ -257,3 +258,133 @@ def create_subscription(request):
         }
     }, status=status.HTTP_201_CREATED)
 
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_checkout_session(request):
+    """
+    Cria uma sessão de checkout do Stripe para assinatura
+    Retorna URL para redirecionar o cliente
+    """
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    plan_id = request.data.get('plan_id')
+    billing_cycle = request.data.get('billing_cycle', 'monthly')
+    
+    if not plan_id:
+        return Response(
+            {'error': 'plan_id é obrigatório'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Buscar plano
+    try:
+        plan = Plan.objects.get(id=plan_id, is_active=True)
+    except Plan.DoesNotExist:
+        return Response(
+            {'error': 'Plano não encontrado'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Obter Stripe Price ID
+    price_id = plan.get_stripe_price_id(billing_cycle)
+    if not price_id:
+        return Response(
+            {'error': f'Plano {plan.name} não tem Stripe Price ID configurado para {billing_cycle}'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Buscar ou criar customer no Stripe
+    existing_pm = PaymentMethod.objects.filter(
+        tenant=tenant,
+        is_active=True
+    ).first()
+    
+    customer_id = None
+    if existing_pm and existing_pm.stripe_customer_id:
+        customer_id = existing_pm.stripe_customer_id
+    else:
+        # Criar customer se não existir
+        customer = stripe_service.create_customer(
+            tenant=tenant,
+            email=request.user.email,
+            name=request.user.get_full_name() or request.user.username
+        )
+        customer_id = customer['id']
+    
+    # URLs de sucesso e cancelamento
+    frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+    success_url = f"{frontend_url}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{frontend_url}/checkout/cancel"
+    
+    # Metadata para identificar tenant e plano
+    metadata = {
+        'tenant_id': str(tenant.id),
+        'tenant_name': tenant.name,
+        'plan_id': str(plan.id),
+        'plan_slug': plan.slug,
+        'billing_cycle': billing_cycle,
+    }
+    
+    # Criar checkout session
+    try:
+        session = stripe_service.create_checkout_session(
+            price_id=price_id,
+            customer_id=customer_id,
+            customer_email=request.user.email if not customer_id else None,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata=metadata,
+        )
+        
+        return Response({
+            'checkout_url': session['url'],
+            'session_id': session['id'],
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao criar checkout session: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_checkout_session(request, session_id):
+    """
+    Recupera informações de uma sessão de checkout
+    Usado após redirecionamento do Stripe
+    """
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        session = stripe_service.retrieve_checkout_session(session_id)
+        
+        # Verificar se a sessão pertence ao tenant
+        if session.get('metadata', {}).get('tenant_id') != str(tenant.id):
+            return Response(
+                {'error': 'Sessão não pertence a este tenant'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        return Response({
+            'session_id': session['id'],
+            'payment_status': session.get('payment_status'),
+            'subscription_id': session.get('subscription'),
+            'customer_id': session.get('customer'),
+        })
+    except Exception as e:
+        return Response(
+            {'error': f'Erro ao recuperar checkout session: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

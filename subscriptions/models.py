@@ -79,6 +79,22 @@ class Plan(SiscrModelBase):
         verbose_name='Funcionalidades'
     )
     
+    # Stripe Price IDs
+    stripe_price_id_monthly = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Stripe Price ID (Mensal)',
+        help_text='ID do preço mensal no Stripe (ex: price_xxx)'
+    )
+    stripe_price_id_yearly = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Stripe Price ID (Anual)',
+        help_text='ID do preço anual no Stripe (ex: price_xxx)'
+    )
+    
     class Meta:
         verbose_name = 'Plano'
         verbose_name_plural = 'Planos'
@@ -89,6 +105,14 @@ class Plan(SiscrModelBase):
     
     def __str__(self):
         return self.name
+    
+    def get_stripe_price_id(self, billing_cycle='monthly'):
+        """
+        Retorna o Stripe Price ID baseado no ciclo de cobrança
+        """
+        if billing_cycle == 'yearly':
+            return self.stripe_price_id_yearly or self.stripe_price_id_monthly
+        return self.stripe_price_id_monthly
 
 
 class Feature(SiscrModelBase):
