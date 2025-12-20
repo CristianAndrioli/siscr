@@ -40,15 +40,23 @@ function Plans() {
   };
 
   const handleQuickTest = async () => {
-    if (!isAuthenticated) {
+    // Verificar autenticação
+    const authenticated = authService.isAuthenticated();
+    if (!authenticated) {
       navigate('/login?redirect=/plans');
       return;
     }
 
-    // Buscar plano Pro
-    const proPlan = plans.find((p) => p.slug === 'pro' || p.name.toLowerCase().includes('pro'));
+    // Buscar plano Pro (tentar por slug primeiro, depois por nome)
+    const proPlan = plans.find((p) => 
+      p.slug === 'pro' || 
+      p.slug === 'Pro' ||
+      p.name.toLowerCase().includes('pro') ||
+      p.name.toLowerCase() === 'pro'
+    );
+    
     if (!proPlan) {
-      setError('Plano Pro não encontrado');
+      setError('Plano Pro não encontrado. Planos disponíveis: ' + plans.map(p => p.name).join(', '));
       return;
     }
 
@@ -56,14 +64,17 @@ function Plans() {
     setError('');
 
     try {
+      console.log('Criando checkout para plano:', proPlan);
       const { checkout_url } = await paymentsService.createCheckoutSession(
         proPlan.id,
         'monthly'
       );
       
+      console.log('Checkout criado, redirecionando para:', checkout_url);
       // Redirecionar para checkout do Stripe
       window.location.href = checkout_url;
     } catch (err: any) {
+      console.error('Erro ao criar checkout:', err);
       setError(
         err.response?.data?.error ||
         'Erro ao criar checkout. Verifique se está logado e tente novamente.'
@@ -128,27 +139,27 @@ function Plans() {
           </p>
           
           {/* Botão de Teste Rápido */}
-          {isAuthenticated && (
-            <div className="mb-8">
-              <button
-                onClick={handleQuickTest}
-                disabled={testingCheckout || loading}
-                className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg"
-              >
-                {testingCheckout ? (
-                  <>
-                    <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
-                    Criando checkout...
-                  </>
-                ) : (
-                  '🧪 Teste Rápido - Checkout Pro (Mensal)'
-                )}
-              </button>
-              <p className="text-sm text-gray-500 mt-2">
-                Teste rápido do checkout com plano Pro - Redireciona direto para Stripe
-              </p>
-            </div>
-          )}
+          <div className="mb-8">
+            <button
+              onClick={handleQuickTest}
+              disabled={testingCheckout || loading}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg"
+            >
+              {testingCheckout ? (
+                <>
+                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                  Criando checkout...
+                </>
+              ) : (
+                '🧪 Teste Rápido - Checkout Pro (Mensal)'
+              )}
+            </button>
+            <p className="text-sm text-gray-500 mt-2">
+              {isAuthenticated 
+                ? 'Teste rápido do checkout com plano Pro - Redireciona direto para Stripe'
+                : '⚠️ Faça login primeiro para usar o teste rápido'}
+            </p>
+          </div>
           
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 max-w-2xl mx-auto">
