@@ -24,8 +24,14 @@ class StripeService:
         # Configurar Stripe apenas se não estiver em modo simulado
         if self.stripe_mode == 'live':
             stripe.api_key = settings.STRIPE_SECRET_KEY
+            stripe.api_version = getattr(settings, 'STRIPE_API_VERSION', '2024-11-20.acacia')
         elif self.stripe_mode == 'test':
-            stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY_TEST', '')
+            stripe_secret_key = getattr(settings, 'STRIPE_SECRET_KEY_TEST', '')
+            if not stripe_secret_key:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning('STRIPE_SECRET_KEY_TEST não configurado. Configure via variável de ambiente.')
+            stripe.api_key = stripe_secret_key
             # Configurar versão da API
             stripe.api_version = getattr(settings, 'STRIPE_API_VERSION', '2024-11-20.acacia')
         # Se simulado, não configura stripe.api_key
@@ -228,6 +234,13 @@ class StripeService:
             }
         
         try:
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # Verificar se Stripe está configurado
+            if not stripe.api_key:
+                raise Exception('Stripe não está configurado. Configure STRIPE_SECRET_KEY_TEST via variável de ambiente.')
+            
             checkout_data = {
                 'mode': 'subscription',
                 'line_items': [{
@@ -246,9 +259,19 @@ class StripeService:
             if metadata:
                 checkout_data['metadata'] = metadata
             
+            logger.info(f'Criando checkout session no Stripe com price_id: {price_id}, customer_id: {customer_id}')
             session = stripe.checkout.Session.create(**checkout_data)
+            logger.info(f'Checkout session criada: {session.id}')
             return session
+        except stripe.error.StripeError as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro do Stripe: {str(e)}')
+            raise Exception(f"Erro do Stripe ao criar checkout session: {str(e)}")
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro ao criar checkout session: {str(e)}')
             raise Exception(f"Erro ao criar checkout session no Stripe: {str(e)}")
     
     def retrieve_checkout_session(self, session_id):

@@ -8,7 +8,10 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.db import connection
 from django.conf import settings
+import logging
 from ..models import PaymentMethod, Payment, Invoice
+
+logger = logging.getLogger(__name__)
 from ..services import stripe_service
 from ..api.serializers import (
     PaymentMethodSerializer, PaymentSerializer, InvoiceSerializer,
@@ -268,6 +271,7 @@ def create_checkout_session(request):
     """
     tenant = getattr(connection, 'tenant', None)
     if not tenant:
+        logger.error('Tenant não identificado ao criar checkout session')
         return Response(
             {'error': 'Tenant não identificado'}, 
             status=status.HTTP_400_BAD_REQUEST
@@ -277,27 +281,54 @@ def create_checkout_session(request):
     billing_cycle = request.data.get('billing_cycle', 'monthly')
     
     if not plan_id:
+        logger.error('plan_id não fornecido')
         return Response(
             {'error': 'plan_id é obrigatório'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
+    # Verificar se Stripe está configurado
+    stripe_mode = getattr(settings, 'STRIPE_MODE', 'simulated')
+    stripe_secret_key = getattr(settings, 'STRIPE_SECRET_KEY_TEST', '')
+    
+    if stripe_mode == 'test' and not stripe_secret_key:
+        logger.error('STRIPE_SECRET_KEY_TEST não configurado')
+        return Response(
+            {
+                'error': 'Stripe não está configurado. Configure STRIPE_SECRET_KEY_TEST via variável de ambiente.',
+                'details': 'Adicione STRIPE_SECRET_KEY_TEST ao docker-compose.yml ou variáveis de ambiente'
+            }, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
     # Buscar plano
     try:
         plan = Plan.objects.get(id=plan_id, is_active=True)
+        logger.info(f'Plano encontrado: {plan.name} (ID: {plan.id}, Slug: {plan.slug})')
     except Plan.DoesNotExist:
+        logger.error(f'Plano não encontrado: ID {plan_id}')
         return Response(
-            {'error': 'Plano não encontrado'}, 
+            {'error': f'Plano com ID {plan_id} não encontrado ou inativo'}, 
             status=status.HTTP_404_NOT_FOUND
         )
     
     # Obter Stripe Price ID
     price_id = plan.get_stripe_price_id(billing_cycle)
     if not price_id:
+        logger.error(f'Plano {plan.name} não tem Stripe Price ID configurado para {billing_cycle}')
+        logger.info(f'stripe_price_id_monthly: {plan.stripe_price_id_monthly}')
+        logger.info(f'stripe_price_id_yearly: {plan.stripe_price_id_yearly}')
         return Response(
-            {'error': f'Plano {plan.name} não tem Stripe Price ID configurado para {billing_cycle}'}, 
+            {
+                'error': f'Plano {plan.name} não tem Stripe Price ID configurado para {billing_cycle}',
+                'details': f'Execute: python manage.py update_stripe_price_ids para configurar os Price IDs',
+                'plan_slug': plan.slug,
+                'plan_name': plan.name
+            }, 
             status=status.HTTP_400_BAD_REQUEST
         )
+    
+    logger.info(f'Price ID encontrado: {price_id} para plano {plan.name}')
     
     # Buscar ou criar customer no Stripe
     existing_pm = PaymentMethod.objects.filter(
@@ -333,6 +364,8 @@ def create_checkout_session(request):
     
     # Criar checkout session
     try:
+        logger.info(f'Criando checkout session para tenant {tenant.id}, plano {plan.id}, price_id {price_id}')
+        
         session = stripe_service.create_checkout_session(
             price_id=price_id,
             customer_id=customer_id,
@@ -342,13 +375,24 @@ def create_checkout_session(request):
             metadata=metadata,
         )
         
+        logger.info(f'Checkout session criada: {session.get("id")}')
+        
         return Response({
             'checkout_url': session['url'],
             'session_id': session['id'],
         }, status=status.HTTP_201_CREATED)
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f'Erro ao criar checkout session: {str(e)}\n{error_trace}')
+        
+        # Retornar mensagem de erro mais detalhada em desenvolvimento
+        error_message = str(e)
+        if settings.DEBUG:
+            error_message = f'{error_message}\n\nTraceback:\n{error_trace}'
+        
         return Response(
-            {'error': f'Erro ao criar checkout session: {str(e)}'}, 
+            {'error': f'Erro ao criar checkout session: {error_message}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
