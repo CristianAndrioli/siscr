@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=siscr_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    command: python manage.py migrate_schemas --shared --noinput && python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_NAME=siscr_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - REDIS_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      # Stripe - Chaves de teste (sandbox)
+      # IMPORTANTE: Configure as variáveis de ambiente STRIPE_SECRET_KEY_TEST e STRIPE_PUBLISHABLE_KEY_TEST
+      # no arquivo .env ou diretamente no sistema antes de executar docker-compose
+      - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
+      - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
+      - STRIPE_MODE=test
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:
+
