@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, ReactNode } from 'react';
 import { authService } from './services/auth';
 import Login from './pages/Login';
@@ -35,6 +35,8 @@ import Signup from './pages/Signup';
 import Checkout from './pages/Checkout';
 import CheckoutSuccess from './pages/CheckoutSuccess';
 import CheckoutCancel from './pages/CheckoutCancel';
+import PaymentPending from './pages/PaymentPending';
+import SubscriptionExpired from './pages/SubscriptionExpired';
 import Layout from './components/Layout';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
@@ -55,12 +57,70 @@ interface ProtectedRouteProps {
 
 function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
-    setIsAuthenticated(authService.isAuthenticated());
-  }, []);
+    const checkAuth = async () => {
+      const authenticated = authService.isAuthenticated();
+      setIsAuthenticated(authenticated);
 
-  if (isAuthenticated === null) {
+      // Se estiver autenticado e não estiver nas rotas especiais, verificar tenant e subscription
+      if (authenticated && 
+          location.pathname !== '/payment-pending' && 
+          location.pathname !== '/subscription-expired' &&
+          !location.pathname.startsWith('/checkout') &&
+          location.pathname !== '/profile') {
+        
+        // Verificar se o tenant está ativo
+        const tenantStr = localStorage.getItem('tenant');
+        if (tenantStr) {
+          try {
+            const tenant = JSON.parse(tenantStr);
+            if (tenant.is_active === false) {
+              // Tenant desativado, redirecionar para tela de assinatura expirada
+              window.location.href = '/subscription-expired';
+              return;
+            }
+          } catch (e) {
+            // Ignorar erro de parsing
+          }
+        }
+
+        // Verificar subscription
+        try {
+          const { paymentsService } = await import('./services/payments');
+          const subscription = await paymentsService.getCurrentSubscription();
+          
+          // Se subscription está pending ou past_due, redirecionar para payment-pending
+          if (subscription.status === 'pending' || subscription.status === 'past_due') {
+            window.location.href = '/payment-pending';
+            return;
+          }
+          
+          // Se subscription está canceled ou expired, redirecionar para subscription-expired
+          if (subscription.status === 'canceled' || subscription.status === 'expired') {
+            window.location.href = '/subscription-expired';
+            return;
+          }
+        } catch (err: any) {
+          // Se der erro 404, não há subscription (permitir acesso)
+          // Se der erro 402, está pending (redirecionar)
+          if (err.response?.status === 402) {
+            window.location.href = '/payment-pending';
+            return;
+          }
+          // Outros erros: permitir acesso (pode ser problema de conexão)
+        }
+      }
+      
+      setCheckingSubscription(false);
+    };
+
+    checkAuth();
+  }, [location.pathname]);
+
+  if (isAuthenticated === null || checkingSubscription) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
   }
 
@@ -80,6 +140,22 @@ function App() {
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/checkout/success" element={<CheckoutSuccess />} />
         <Route path="/checkout/cancel" element={<CheckoutCancel />} />
+        <Route
+          path="/payment-pending"
+          element={
+            <ProtectedRoute>
+              <PaymentPending />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/subscription-expired"
+          element={
+            <ProtectedRoute>
+              <SubscriptionExpired />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={

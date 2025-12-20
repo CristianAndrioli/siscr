@@ -30,8 +30,8 @@ ALLOWED_HOSTS = [
     'localhost',
     'teste-tenant.localhost',  # Domínio do tenant de teste
     'comercio_simples.localhost',  # Domínio do tenant Comércio Simples
-    '*.localhost',  # Permitir qualquer subdomínio .localhost em desenvolvimento
 ]  # Valor padrão, será sobrescrito se ENVIRONMENT estiver definido
+
 
 
 # Application definition
@@ -396,14 +396,19 @@ else:
     DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 # Allowed hosts baseado no ambiente (sobrescreve valor padrão acima)
-# ENVIRONMENT já está definido acima (linha 150)
+# ENVIRONMENT já está definido acima (linha 167)
 if ENVIRONMENT == 'production':
     ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get('ALLOWED_HOSTS') else []
 elif ENVIRONMENT == 'preprod':
     ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'preprod.siscr.com.br').split(',')
 elif ENVIRONMENT == 'homologation':
     ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'homolog.siscr.com.br').split(',')
-# development mantém valores padrão acima
+else:  # development
+    # Em desenvolvimento, manter hosts padrão
+    # O middleware não modifica mais o HTTP_HOST quando tenant já está configurado via header
+    # Isso resolve o problema de ALLOWED_HOSTS
+    # Se necessário adicionar mais hosts, adicione aqui
+    pass  # Mantém valores padrão definidos acima
 
 # ============================================
 # STRIPE CONFIGURATION
@@ -424,9 +429,13 @@ elif ENVIRONMENT in ['preprod', 'homologation']:
 else:  # development
     # Chaves de teste do Stripe (sandbox)
     # Configure via variáveis de ambiente: STRIPE_SECRET_KEY_TEST e STRIPE_PUBLISHABLE_KEY_TEST
-    STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY_TEST', '')
-    STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY_TEST', '')
-    STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET_TEST', '')
+    STRIPE_SECRET_KEY_TEST = os.environ.get('STRIPE_SECRET_KEY_TEST', '')
+    STRIPE_PUBLISHABLE_KEY_TEST = os.environ.get('STRIPE_PUBLISHABLE_KEY_TEST', '')
+    STRIPE_WEBHOOK_SECRET_TEST = os.environ.get('STRIPE_WEBHOOK_SECRET_TEST', '')
+    # Mantém compatibilidade com código que usa STRIPE_SECRET_KEY
+    STRIPE_SECRET_KEY = STRIPE_SECRET_KEY_TEST
+    STRIPE_PUBLISHABLE_KEY = STRIPE_PUBLISHABLE_KEY_TEST
+    STRIPE_WEBHOOK_SECRET = STRIPE_WEBHOOK_SECRET_TEST
 
 # URLs do Stripe
 STRIPE_API_VERSION = '2024-11-20.acacia'

@@ -55,6 +55,8 @@ export interface SignupResponse {
   };
   subscription: {
     plan: string;
+    plan_id: number;
+    is_trial: boolean;
     status: string;
     expires_at: string;
   };

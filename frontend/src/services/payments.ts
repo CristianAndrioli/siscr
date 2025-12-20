@@ -15,6 +15,22 @@ export interface CheckoutSessionStatus {
   customer_id?: string;
 }
 
+export interface SubscriptionStatus {
+  id: number;
+  status: string;
+  status_display: string;
+  plan: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  billing_cycle: string;
+  current_period_start?: string;
+  current_period_end?: string;
+  is_active: boolean;
+  requires_payment: boolean;
+}
+
 export const paymentsService = {
   /**
    * Cria uma sessão de checkout do Stripe
@@ -39,6 +55,16 @@ export const paymentsService = {
   getCheckoutSession: async (sessionId: string): Promise<CheckoutSessionStatus> => {
     const response = await api.get<CheckoutSessionStatus>(
       `/payments/checkout/session/${sessionId}/`
+    );
+    return response.data;
+  },
+
+  /**
+   * Obtém a subscription atual do tenant
+   */
+  getCurrentSubscription: async (): Promise<SubscriptionStatus> => {
+    const response = await api.get<SubscriptionStatus>(
+      '/payments/subscriptions/current/'
     );
     return response.data;
   },

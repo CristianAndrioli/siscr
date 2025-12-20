@@ -73,11 +73,33 @@ function Signup() {
 
     try {
       const result = await publicService.signup(formData);
+      
+      // Verificar se o plano é trial
+      const isTrial = result.subscription?.is_trial || false;
+      
+      // Se não for trial, fazer login automático e redirecionar para checkout
+      if (!isTrial) {
+        try {
+          // Fazer login automático
+          const { authService } = await import('../services/auth');
+          await authService.login(formData.admin_username, formData.admin_password, result.tenant.domain);
+          
+          // Redirecionar para checkout
+          navigate(`/checkout?plan_id=${result.subscription.plan_id}`);
+          return;
+        } catch (loginErr) {
+          // Se login automático falhar, redirecionar para login manual
+          console.error('Erro no login automático:', loginErr);
+          navigate(`/login?domain=${result.tenant.domain}&redirect=/checkout?plan_id=${result.subscription.plan_id}`);
+          return;
+        }
+      }
+      
+      // Se for trial, mostrar sucesso e redirecionar para login
       setSuccess(true);
-      // Redirecionar para login após 3 segundos
       setTimeout(() => {
         navigate(`/login?domain=${result.tenant.domain}`);
-      }, 3000);
+      }, 2000);
     } catch (err: any) {
       const errorMessage =
         err.response?.data?.error ||
@@ -137,6 +159,8 @@ function Signup() {
               <div className="text-gray-500">Carregando planos...</div>
             ) : (
               <select
+                name="plan_id"
+                id="plan_id"
                 value={formData.plan_id}
                 onChange={(e) =>
                   setFormData({ ...formData, plan_id: parseInt(e.target.value) })
@@ -166,11 +190,15 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="tenant_name"
+                  id="tenant_name"
                   value={formData.tenant_name}
                   onChange={(e) =>
                     setFormData({ ...formData, tenant_name: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Nome da sua empresa"
+                  autoComplete="organization"
                   required
                 />
               </div>
@@ -181,6 +209,8 @@ function Signup() {
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    name="domain"
+                    id="domain"
                     value={formData.domain}
                     onChange={(e) => {
                       const domain = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
@@ -189,6 +219,7 @@ function Signup() {
                     }}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                     placeholder="minha-empresa"
+                    autoComplete="username"
                     required
                   />
                   <button
@@ -225,11 +256,15 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="admin_username"
+                  id="admin_username"
                   value={formData.admin_username}
                   onChange={(e) =>
                     setFormData({ ...formData, admin_username: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="usuario123"
+                  autoComplete="username"
                   required
                 />
               </div>
@@ -239,11 +274,15 @@ function Signup() {
                 </label>
                 <input
                   type="email"
+                  name="admin_email"
+                  id="admin_email"
                   value={formData.admin_email}
                   onChange={(e) =>
                     setFormData({ ...formData, admin_email: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="seu@email.com"
+                  autoComplete="email"
                   required
                 />
               </div>
@@ -253,11 +292,15 @@ function Signup() {
                 </label>
                 <input
                   type="password"
+                  name="admin_password"
+                  id="admin_password"
                   value={formData.admin_password}
                   onChange={(e) =>
                     setFormData({ ...formData, admin_password: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Mínimo 8 caracteres"
+                  autoComplete="new-password"
                   minLength={8}
                   required
                 />
@@ -271,11 +314,15 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="admin_first_name"
+                  id="admin_first_name"
                   value={formData.admin_first_name}
                   onChange={(e) =>
                     setFormData({ ...formData, admin_first_name: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="João"
+                  autoComplete="given-name"
                 />
               </div>
               <div>
@@ -284,11 +331,15 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="admin_last_name"
+                  id="admin_last_name"
                   value={formData.admin_last_name}
                   onChange={(e) =>
                     setFormData({ ...formData, admin_last_name: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Silva"
+                  autoComplete="family-name"
                 />
               </div>
             </div>
@@ -306,11 +357,15 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="empresa_nome"
+                  id="empresa_nome"
                   value={formData.empresa_nome}
                   onChange={(e) =>
                     setFormData({ ...formData, empresa_nome: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Nome da Empresa"
+                  autoComplete="organization"
                   required
                 />
               </div>
@@ -320,11 +375,16 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="empresa_cnpj"
+                  id="empresa_cnpj"
                   value={formData.empresa_cnpj}
                   onChange={(e) =>
                     setFormData({ ...formData, empresa_cnpj: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="12.345.678/0001-90"
+                  autoComplete="off"
+                  pattern="[0-9]{2}\.[0-9]{3}\.[0-9]{3}/[0-9]{4}-[0-9]{2}"
                 />
               </div>
               <div className="md:col-span-2">
@@ -333,11 +393,15 @@ function Signup() {
                 </label>
                 <input
                   type="text"
+                  name="empresa_razao_social"
+                  id="empresa_razao_social"
                   value={formData.empresa_razao_social}
                   onChange={(e) =>
                     setFormData({ ...formData, empresa_razao_social: e.target.value })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Razão Social da Empresa"
+                  autoComplete="organization"
                 />
               </div>
             </div>

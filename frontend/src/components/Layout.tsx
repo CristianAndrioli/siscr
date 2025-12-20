@@ -18,10 +18,33 @@ function Layout({ children }: LayoutProps) {
     faturamento: false,
   });
   const [userInfo, setUserInfo] = useState<UserInfo>({});
+  const [tenantActive, setTenantActive] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
+    // Verificar se o tenant está ativo
+    const tenantStr = localStorage.getItem('tenant');
+    if (tenantStr) {
+      try {
+        const tenant = JSON.parse(tenantStr);
+        setTenantActive(tenant.is_active !== false);
+        
+        // Se tenant estiver desativado e não estiver na rota de subscription-expired ou profile, redirecionar
+        if (tenant.is_active === false && 
+            location.pathname !== '/subscription-expired' && 
+            location.pathname !== '/profile') {
+          navigate('/subscription-expired');
+          return;
+        }
+      } catch (e) {
+        // Ignorar erro de parsing
+        setTenantActive(true);
+      }
+    } else {
+      setTenantActive(true);
+    }
+
     // Buscar informações do usuário ao montar o componente
     const fetchUserInfo = async () => {
       try {
@@ -41,7 +64,7 @@ function Layout({ children }: LayoutProps) {
     if (authService.isAuthenticated()) {
       fetchUserInfo();
     }
-  }, []);
+  }, [navigate, location.pathname]);
 
   const handleLogout = (): void => {
     authService.logout();
@@ -72,20 +95,52 @@ function Layout({ children }: LayoutProps) {
         
         <nav className="flex-1 px-4 py-6">
           <ul className="space-y-2">
-            {/* Dashboard */}
-            <li>
-              <Link
-                to="/dashboard"
-                className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                  isActive('/dashboard') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                }`}
-              >
-                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-10l-2-2m2 2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                Dashboard
-              </Link>
-            </li>
+            {/* Se tenant estiver desativado, mostrar apenas Perfil e Assinatura */}
+            {tenantActive === false ? (
+              <>
+                <li>
+                  <Link
+                    to="/subscription-expired"
+                    className={`flex items-center p-2 rounded-lg transition duration-150 ${
+                      isActive('/subscription-expired') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                    }`}
+                  >
+                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Assinatura
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/profile"
+                    className={`flex items-center p-2 rounded-lg transition duration-150 ${
+                      isActive('/profile') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                    }`}
+                  >
+                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    Perfil
+                  </Link>
+                </li>
+              </>
+            ) : (
+              <>
+                {/* Dashboard */}
+                <li>
+                  <Link
+                    to="/dashboard"
+                    className={`flex items-center p-2 rounded-lg transition duration-150 ${
+                      isActive('/dashboard') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                    }`}
+                  >
+                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-10l-2-2m2 2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    </svg>
+                    Dashboard
+                  </Link>
+                </li>
 
             {/* Serviços Logísticos */}
             <li>
@@ -285,14 +340,19 @@ function Layout({ children }: LayoutProps) {
             {/* Perfil */}
             <li>
               <Link
-                to="/perfil"
+                to="/profile"
                 className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                  isActive('/perfil') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                  isActive('/profile') ? 'bg-gray-700' : 'hover:bg-gray-700'
                 }`}
               >
+                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
                 Meu Perfil
               </Link>
             </li>
+              </>
+            )}
           </ul>
         </nav>
 

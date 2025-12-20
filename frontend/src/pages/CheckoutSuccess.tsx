@@ -11,6 +11,7 @@ function CheckoutSuccess() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sessionStatus, setSessionStatus] = useState<any>(null);
+  const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
     if (!sessionId) {
@@ -26,31 +27,48 @@ function CheckoutSuccess() {
     }
 
     // Verificar status da sessão
-    checkSessionStatus();
-  }, [sessionId, navigate]);
+    let countdownInterval: NodeJS.Timeout | null = null;
+    
+    const checkSessionStatus = async () => {
+      if (!sessionId) return;
 
-  const checkSessionStatus = async () => {
-    if (!sessionId) return;
-
-    try {
-      const status = await paymentsService.getCheckoutSession(sessionId);
-      setSessionStatus(status);
-      
-      // Se pagamento foi bem-sucedido, aguardar alguns segundos e redirecionar
-      if (status.payment_status === 'paid') {
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 3000);
+      try {
+        const status = await paymentsService.getCheckoutSession(sessionId);
+        setSessionStatus(status);
+        
+        // Se pagamento foi bem-sucedido, aguardar alguns segundos e redirecionar
+        if (status.payment_status === 'paid') {
+          // Contador regressivo visível
+          countdownInterval = setInterval(() => {
+            setCountdown((prev) => {
+              if (prev <= 1) {
+                if (countdownInterval) clearInterval(countdownInterval);
+                navigate('/dashboard');
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+      } catch (err: any) {
+        setError(
+          err.response?.data?.error ||
+          'Erro ao verificar status do pagamento'
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-        'Erro ao verificar status do pagamento'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    checkSessionStatus();
+
+    // Limpar intervalo se componente for desmontado
+    return () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    };
+  }, [sessionId, navigate]);
 
   if (loading) {
     return (
@@ -99,7 +117,7 @@ function CheckoutSuccess() {
               </h2>
               <p className="text-gray-600 mb-6">
                 Sua assinatura foi ativada com sucesso. Você será redirecionado
-                para o dashboard em instantes.
+                para o dashboard em <strong className="text-indigo-600">{countdown}</strong> segundo{countdown !== 1 ? 's' : ''}.
               </p>
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <p className="text-sm text-gray-600">

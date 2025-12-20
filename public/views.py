@@ -323,11 +323,13 @@ def signup(request):
         # Criar assinatura
         period_start = timezone.now()
         if plan.is_trial:
+            # Planos trial são ativados imediatamente
             period_end = period_start + timedelta(days=plan.trial_days)
             subscription_status = 'trial'
         else:
+            # Planos pagos começam como 'pending' até pagamento confirmado
             period_end = period_start + timedelta(days=30)
-            subscription_status = 'active'
+            subscription_status = 'pending'  # Aguardando pagamento
         
         subscription = Subscription.objects.create(
             tenant=tenant,
@@ -384,6 +386,8 @@ Bem-vindo ao SISCR!
             },
             'subscription': {
                 'plan': plan.name,
+                'plan_id': plan.id,
+                'is_trial': plan.is_trial,
                 'status': subscription_status,
                 'expires_at': period_end.isoformat(),
             },

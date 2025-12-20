@@ -118,24 +118,27 @@ class TenantDomainHeaderMiddleware(MiddlewareMixin):
                 # a execução do TenantMainMiddleware, então não precisamos modificar o HTTP_HOST
                 original_host = request.META.get('HTTP_HOST', '')
                 
-                # Verificar se o tenant_domain contém underscore
-                # Se contiver, não modificar o HTTP_HOST para evitar erro de validação
-                if '_' in tenant_domain:
-                    print(f'[TenantDomainHeaderMiddleware] ⚠️ Domínio contém underscore, mantendo HTTP_HOST original para evitar erro de validação', flush=True)
-                    print(f'[TenantDomainHeaderMiddleware] HTTP_HOST original: {original_host}', flush=True)
-                    print(f'[TenantDomainHeaderMiddleware] Tenant configurado via request.tenant, não é necessário modificar HTTP_HOST', flush=True)
-                else:
-                    # Se não contiver underscore, podemos modificar o HTTP_HOST
-                    if ':' in original_host:
-                        port = original_host.split(':')[1]
-                        new_host_with_port = f'{tenant_domain}:{port}'
-                    else:
-                        new_host_with_port = tenant_domain
-                    
-                    request.META['HTTP_HOST'] = new_host_with_port
-                    request.META['ORIGINAL_HTTP_HOST'] = original_host  # Preservar para CORS
-                    msg = f'[TenantDomainHeaderMiddleware] Host modificado: {original_host} -> {new_host_with_port}'
-                    print(msg, flush=True)
+                # NÃO modificar HTTP_HOST quando tenant já está configurado via header
+                # Isso evita problemas com ALLOWED_HOSTS e é desnecessário já que request.tenant está configurado
+                # O CustomTenantMainMiddleware vai usar request.tenant se existir
+                print(f'[TenantDomainHeaderMiddleware] ⚠️ Mantendo HTTP_HOST original para evitar erro de validação ALLOWED_HOSTS', flush=True)
+                print(f'[TenantDomainHeaderMiddleware] HTTP_HOST original: {original_host}', flush=True)
+                print(f'[TenantDomainHeaderMiddleware] Tenant configurado via request.tenant, não é necessário modificar HTTP_HOST', flush=True)
+                
+                # Apenas preservar informações para referência
+                request.META['ORIGINAL_HTTP_HOST'] = original_host  # Preservar para CORS
+                # Preservar domínio do tenant (pegar do header ou do tenant encontrado)
+                tenant_domain_to_save = tenant_domain
+                if not tenant_domain_to_save and hasattr(request, 'tenant') and request.tenant:
+                    # Tentar pegar do domain do tenant
+                    try:
+                        from tenants.models import Domain
+                        domain_obj = Domain.objects.filter(tenant=request.tenant, is_primary=True).first()
+                        if domain_obj:
+                            tenant_domain_to_save = domain_obj.domain
+                    except Exception:
+                        pass
+                request.META['X-TENANT-DOMAIN-ORIGINAL'] = tenant_domain_to_save or ''  # Preservar domínio do tenant
                 
                 # IMPORTANTE: Como já configuramos request.tenant, o CustomTenantMainMiddleware vai pular
                 # a execução do TenantMainMiddleware, então não precisamos modificar o HTTP_HOST

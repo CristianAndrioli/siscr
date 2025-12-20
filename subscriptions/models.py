@@ -145,6 +145,7 @@ class Subscription(SiscrModelBase):
     """
     STATUS_CHOICES = [
         ('trial', 'Trial'),
+        ('pending', 'Aguardando Pagamento'),
         ('active', 'Ativa'),
         ('past_due', 'Pagamento Atrasado'),
         ('canceled', 'Cancelada'),
@@ -228,6 +229,7 @@ class Subscription(SiscrModelBase):
     @property
     def is_active(self):
         """Verifica se assinatura está ativa"""
+        # 'pending' não é considerado ativo - precisa pagamento confirmado
         if self.status not in ['active', 'trial']:
             return False
         return self.current_period_end > timezone.now()

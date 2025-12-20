@@ -399,10 +399,60 @@ def create_checkout_session(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_current_subscription(request):
+    """
+    Retorna a subscription atual do tenant
+    """
+    from django.db import connection
+    from subscriptions.models import Subscription
+    
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        subscription = Subscription.objects.filter(tenant=tenant).first()
+        
+        if not subscription:
+            return Response(
+                {'error': 'Assinatura não encontrada'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        return Response({
+            'id': subscription.id,
+            'status': subscription.status,
+            'status_display': subscription.get_status_display(),
+            'plan': {
+                'id': subscription.plan.id,
+                'name': subscription.plan.name,
+                'slug': subscription.plan.slug,
+            },
+            'billing_cycle': subscription.billing_cycle,
+            'current_period_start': subscription.current_period_start.isoformat() if subscription.current_period_start else None,
+            'current_period_end': subscription.current_period_end.isoformat() if subscription.current_period_end else None,
+            'is_active': subscription.is_active,
+            'requires_payment': subscription.status in ['pending', 'past_due'],
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f'Erro ao buscar subscription: {str(e)}', exc_info=True)
+        return Response(
+            {'error': 'Erro ao buscar assinatura'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_checkout_session(request, session_id):
     """
     Recupera informações de uma sessão de checkout
     Usado após redirecionamento do Stripe
+    Se o pagamento foi bem-sucedido, atualiza a subscription automaticamente
+    (solução alternativa quando webhook não está disponível)
     """
     tenant = getattr(connection, 'tenant', None)
     if not tenant:
@@ -415,19 +465,39 @@ def get_checkout_session(request, session_id):
         session = stripe_service.retrieve_checkout_session(session_id)
         
         # Verificar se a sessão pertence ao tenant
-        if session.get('metadata', {}).get('tenant_id') != str(tenant.id):
+        metadata = session.get('metadata', {})
+        if metadata.get('tenant_id') != str(tenant.id):
             return Response(
                 {'error': 'Sessão não pertence a este tenant'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        payment_status = session.get('payment_status')
+        subscription_id = session.get('subscription')
+        
+        # Se o pagamento foi bem-sucedido, atualizar a subscription manualmente
+        # (Isso é uma solução alternativa quando o webhook não está disponível)
+        if payment_status == 'paid':
+            try:
+                subscription = Subscription.objects.filter(tenant=tenant).first()
+                if subscription and subscription.status == 'pending':
+                    logger.info(f'[CHECKOUT] Atualizando subscription {subscription.id} de "pending" para "active" (pagamento confirmado via checkout session)')
+                    subscription.status = 'active'
+                    subscription.payment_gateway_id = subscription_id
+                    subscription.save()
+                    logger.info(f'[CHECKOUT] ✅ Subscription {subscription.id} atualizada com sucesso')
+            except Exception as e:
+                logger.warning(f'[CHECKOUT] Erro ao atualizar subscription manualmente: {str(e)}')
+                # Não falhar a requisição, apenas logar o erro
+        
         return Response({
             'session_id': session['id'],
-            'payment_status': session.get('payment_status'),
-            'subscription_id': session.get('subscription'),
+            'payment_status': payment_status,
+            'subscription_id': subscription_id,
             'customer_id': session.get('customer'),
         })
     except Exception as e:
+        logger.error(f'[CHECKOUT] Erro ao recuperar checkout session: {str(e)}', exc_info=True)
         return Response(
             {'error': f'Erro ao recuperar checkout session: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

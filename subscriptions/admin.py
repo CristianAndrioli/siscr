@@ -116,6 +116,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
         """Badge colorido para status"""
         colors = {
             'trial': 'blue',
+            'pending': 'yellow',
             'active': 'green',
             'past_due': 'orange',
             'canceled': 'red',

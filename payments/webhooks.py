@@ -26,9 +26,22 @@ def stripe_webhook(request):
     """
     Webhook do Stripe para processar eventos
     Suporta Stripe CLI para desenvolvimento local
+    
+    IMPORTANTE: Para desenvolvimento local, use Stripe CLI:
+    stripe listen --forward-to localhost:8000/api/webhooks/stripe/
+    
+    Os webhooks são logados no console e no Django logging.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    
+    # Log da requisição recebida
+    logger.info(f"[WEBHOOK] Requisição recebida de {request.META.get('REMOTE_ADDR', 'unknown')}")
+    logger.info(f"[WEBHOOK] Content-Type: {request.META.get('CONTENT_TYPE', 'unknown')}")
+    logger.info(f"[WEBHOOK] Payload size: {len(payload)} bytes")
     
     # Verificar assinatura do webhook
     # Stripe CLI usa um webhook secret especial (whsec_...)
@@ -39,7 +52,9 @@ def stripe_webhook(request):
         # Em modo simulado, apenas parsear JSON
         try:
             event = json.loads(payload)
+            logger.info(f"[WEBHOOK] Modo simulado - Evento parseado sem verificação")
         except json.JSONDecodeError:
+            logger.error("[WEBHOOK] Erro ao parsear JSON em modo simulado")
             return HttpResponse(status=400)
     else:
         # Verificar assinatura do webhook
@@ -50,21 +65,34 @@ def stripe_webhook(request):
                 event = stripe.Webhook.construct_event(
                     payload, sig_header, webhook_secret
                 )
-            except ValueError:
+                logger.info(f"[WEBHOOK] Assinatura verificada com sucesso")
+            except ValueError as e:
+                logger.error(f"[WEBHOOK] Erro ao parsear payload: {str(e)}")
                 return HttpResponse(status=400)
-            except stripe.error.SignatureVerificationError:
+            except stripe.error.SignatureVerificationError as e:
+                logger.error(f"[WEBHOOK] Erro na verificação de assinatura: {str(e)}")
                 return HttpResponse(status=400)
         else:
             # Sem secret configurado (desenvolvimento local com Stripe CLI)
             # Aceitar evento sem verificação (NÃO RECOMENDADO EM PRODUÇÃO)
             try:
                 event = json.loads(payload)
+                logger.warning("[WEBHOOK] ⚠️ Modo desenvolvimento - Evento aceito SEM verificação de assinatura")
             except json.JSONDecodeError:
+                logger.error("[WEBHOOK] Erro ao parsear JSON")
                 return HttpResponse(status=400)
     
     # Processar evento
     event_type = event.get('type')
+    event_id = event.get('id', 'unknown')
     event_data = event.get('data', {}).get('object', {})
+    
+    # Log do evento recebido
+    logger.info(f"[WEBHOOK] ✅ Evento recebido: {event_type} (ID: {event_id})")
+    logger.info(f"[WEBHOOK] Event data keys: {list(event_data.keys())}")
+    if 'metadata' in event_data:
+        logger.info(f"[WEBHOOK] Metadata: {event_data.get('metadata', {})}")
+    logger.debug(f"[WEBHOOK] Event data: {json.dumps(event_data, indent=2, default=str)}")
     
     try:
         if event_type == 'checkout.session.completed':
@@ -88,13 +116,12 @@ def stripe_webhook(request):
         elif event_type == 'payment_method.detached':
             handle_payment_method_detached(event_data)
         
-        return JsonResponse({'status': 'success'})
+        logger.info(f"[WEBHOOK] ✅ Evento {event_type} processado com sucesso")
+        return JsonResponse({'status': 'success', 'event_type': event_type, 'event_id': event_id})
     except Exception as e:
-        # Log do erro (em produção, usar logging)
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Erro ao processar webhook {event_type}: {str(e)}", exc_info=True)
-        return JsonResponse({'error': str(e)}, status=500)
+        # Log do erro
+        logger.error(f"[WEBHOOK] ❌ Erro ao processar webhook {event_type} (ID: {event_id}): {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e), 'event_type': event_type, 'event_id': event_id}, status=500)
 
 
 @transaction.atomic
@@ -375,10 +402,16 @@ def handle_checkout_session_completed(event_data):
     Processa conclusão de checkout session
     Cria ou atualiza subscription quando checkout é concluído
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     session_id = event_data.get('id')
     customer_id = event_data.get('customer')
     subscription_id = event_data.get('subscription')
     metadata = event_data.get('metadata', {})
+    
+    logger.info(f"[WEBHOOK] [checkout.session.completed] Processando session_id={session_id}")
+    logger.info(f"[WEBHOOK] [checkout.session.completed] Metadata recebida: {metadata}")
     
     tenant_id = metadata.get('tenant_id')
     plan_id = metadata.get('plan_id')
@@ -386,10 +419,10 @@ def handle_checkout_session_completed(event_data):
     
     if not tenant_id or not plan_id:
         # Log de erro mas não falhar (pode ser checkout de outro sistema)
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Checkout session {session_id} sem metadata de tenant/plan")
+        logger.warning(f"[WEBHOOK] [checkout.session.completed] Checkout session {session_id} sem metadata de tenant/plan. Metadata: {metadata}")
         return
+    
+    logger.info(f"[WEBHOOK] [checkout.session.completed] Tenant ID: {tenant_id}, Plan ID: {plan_id}, Billing Cycle: {billing_cycle}")
     
     try:
         tenant = Tenant.objects.get(id=tenant_id)
@@ -431,9 +464,19 @@ def handle_checkout_session_completed(event_data):
     
     if subscription:
         # Atualizar subscription existente
+        logger.info(f"[WEBHOOK] [checkout.session.completed] Subscription encontrada: ID={subscription.id}, Status atual={subscription.status}")
         subscription.plan = plan
         subscription.payment_gateway_id = subscription_id
-        subscription.status = 'active'
+        # Ativar subscription quando pagamento for confirmado
+        # Se estava 'pending', agora fica 'active'
+        old_status = subscription.status
+        if subscription.status == 'pending':
+            subscription.status = 'active'
+            logger.info(f"[WEBHOOK] [checkout.session.completed] ✅ Status alterado de 'pending' para 'active'")
+        elif subscription.status not in ['active', 'trial']:
+            # Se estava cancelada/expirada, reativar
+            subscription.status = 'active'
+            logger.info(f"[WEBHOOK] [checkout.session.completed] ✅ Status alterado de '{old_status}' para 'active'")
         subscription.billing_cycle = billing_cycle
         
         # Atualizar períodos se disponível no Stripe
@@ -447,10 +490,13 @@ def handle_checkout_session_completed(event_data):
                 subscription.current_period_end = datetime.fromtimestamp(
                     stripe_sub['current_period_end'], tz=timezone.utc
                 )
-            except Exception:
-                pass  # Se falhar, usar valores padrão
+                logger.info(f"[WEBHOOK] [checkout.session.completed] Períodos atualizados do Stripe")
+            except Exception as e:
+                logger.warning(f"[WEBHOOK] [checkout.session.completed] Erro ao buscar períodos do Stripe: {str(e)}")
+                # Se falhar, usar valores padrão
         
         subscription.save()
+        logger.info(f"[WEBHOOK] [checkout.session.completed] ✅ Subscription {subscription.id} salva com status '{subscription.status}'")
     else:
         # Criar nova subscription
         period_start = timezone.now()

@@ -21,6 +21,13 @@ class QuotaMiddleware:
         '/admin/',
     ]
     
+    # Rotas de pagamento que devem ser permitidas mesmo com subscription pending
+    PAYMENT_PATHS = [
+        '/api/payments/checkout/create/',
+        '/api/payments/checkout/session/',
+        '/api/payments/payment-methods/',
+    ]
+    
     def __init__(self, get_response):
         self.get_response = get_response
     
@@ -29,6 +36,12 @@ class QuotaMiddleware:
         # Verificar se é rota pública - SEMPRE permitir rotas públicas (retornar imediatamente)
         for public_path in self.PUBLIC_PATHS:
             if request.path.startswith(public_path):
+                return self.get_response(request)
+        
+        # Verificar se é rota de pagamento - PERMITIR mesmo com subscription pending
+        # Usuário precisa poder pagar para ativar a subscription
+        for payment_path in self.PAYMENT_PATHS:
+            if request.path.startswith(payment_path):
                 return self.get_response(request)
         
         # Se não há tenant (schema público), permitir continuar
@@ -44,25 +57,46 @@ class QuotaMiddleware:
         if request.method in ['POST', 'PUT', 'PATCH']:
             if tenant:
                 try:
-                    # Buscar subscription ativa do tenant
+                    # Buscar subscription do tenant
                     subscription = Subscription.objects.filter(
-                        tenant=tenant,
-                        status__in=['active', 'trial']
+                        tenant=tenant
                     ).first()
                     
                     if subscription:
-                        # Verificar se está expirada
+                        # Verificar se está ativa
                         if not subscription.is_active:
-                            return JsonResponse(
-                                {
-                                    'error': 'Assinatura inativa ou expirada',
-                                    'message': 'Sua assinatura expirou. Renove para continuar usando o sistema.',
-                                    'subscription_status': subscription.status,
-                                }, 
-                                status=402  # Payment Required
-                            )
+                            # Mensagens específicas por status
+                            if subscription.status == 'pending':
+                                return JsonResponse(
+                                    {
+                                        'error': 'Pagamento pendente',
+                                        'message': 'Sua assinatura está aguardando confirmação de pagamento. Complete o pagamento para continuar usando o sistema.',
+                                        'subscription_status': subscription.status,
+                                        'requires_payment': True,
+                                    }, 
+                                    status=402  # Payment Required
+                                )
+                            elif subscription.status == 'past_due':
+                                return JsonResponse(
+                                    {
+                                        'error': 'Pagamento atrasado',
+                                        'message': 'Seu pagamento está atrasado. Atualize seu método de pagamento para continuar usando o sistema.',
+                                        'subscription_status': subscription.status,
+                                        'requires_payment': True,
+                                    }, 
+                                    status=402  # Payment Required
+                                )
+                            else:
+                                return JsonResponse(
+                                    {
+                                        'error': 'Assinatura inativa ou expirada',
+                                        'message': 'Sua assinatura expirou ou foi cancelada. Renove para continuar usando o sistema.',
+                                        'subscription_status': subscription.status,
+                                    }, 
+                                    status=402  # Payment Required
+                                )
                     else:
-                        # Sem assinatura ativa
+                        # Sem assinatura
                         return JsonResponse(
                             {
                                 'error': 'Assinatura não encontrada',
