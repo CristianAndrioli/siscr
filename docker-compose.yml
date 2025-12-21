@@ -49,6 +49,59 @@ services:
       - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
       - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
       - STRIPE_MODE=test
+      # Celery
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery_worker:
+    build: .
+    command: celery -A siscr worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DB_NAME=siscr_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - REDIS_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
+      - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
+      - STRIPE_MODE=test
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery_beat:
+    build: .
+    command: celery -A siscr beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DB_NAME=siscr_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - REDIS_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
+      - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
+      - STRIPE_MODE=test
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy

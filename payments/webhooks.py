@@ -200,6 +200,9 @@ def handle_payment_intent_failed(event_data):
 @transaction.atomic
 def handle_invoice_payment_succeeded(event_data):
     """Processa fatura paga com sucesso"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     invoice_id = event_data.get('id')
     subscription_id = event_data.get('subscription')
     amount = event_data.get('amount_paid', 0) / 100
@@ -245,6 +248,20 @@ def handle_invoice_payment_succeeded(event_data):
         invoice.is_paid = True
         invoice.paid_at = timezone.now()
         invoice.save()
+    
+    # Reativar tenant se estiver suspenso
+    if not tenant.is_active:
+        tenant.is_active = True
+        tenant.save()
+        logger.info(f"[WEBHOOK] Tenant {tenant.name} reativado após pagamento bem-sucedido")
+        # Chamar tarefa Celery para reativação (envia notificação)
+        from subscriptions.tasks import reactivate_tenant
+        reactivate_tenant.delay(tenant.id)
+    else:
+        # Enviar notificação de pagamento bem-sucedido
+        from subscriptions.notifications import SubscriptionNotificationService
+        notification_service = SubscriptionNotificationService()
+        notification_service.send_payment_succeeded_notification(subscription)
 
 
 @transaction.atomic
@@ -285,6 +302,11 @@ def handle_invoice_payment_failed(event_data):
     # Atualizar subscription para past_due
     subscription.status = 'past_due'
     subscription.save()
+    
+    # Enviar notificação de pagamento falhado
+    from subscriptions.notifications import SubscriptionNotificationService
+    notification_service = SubscriptionNotificationService()
+    notification_service.send_payment_failed_notification(subscription)
 
 
 @transaction.atomic

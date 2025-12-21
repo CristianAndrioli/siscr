@@ -441,6 +441,33 @@ else:  # development
 STRIPE_API_VERSION = '2024-11-20.acacia'
 
 # ============================================
+# CELERY CONFIGURATION
+# ============================================
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+
+# Tarefas periódicas (Beat Schedule)
+CELERY_BEAT_SCHEDULE = {
+    'sync-subscriptions': {
+        'task': 'subscriptions.tasks.sync_subscriptions_with_stripe',
+        'schedule': 3600.0,  # A cada 1 hora
+    },
+    'check-expiring-subscriptions': {
+        'task': 'subscriptions.tasks.check_expiring_subscriptions',
+        'schedule': 86400.0,  # A cada 24 horas (1 dia)
+    },
+    'suspend-expired-tenants': {
+        'task': 'subscriptions.tasks.suspend_expired_tenants',
+        'schedule': 3600.0,  # A cada 1 hora
+    },
+}
+
+# ============================================
 # SENTRY (será configurado depois)
 # ============================================
 # import sentry_sdk
