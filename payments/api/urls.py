@@ -26,5 +26,8 @@ urlpatterns = [
     
     # Subscription
     path('subscriptions/current/', views.get_current_subscription, name='get_current_subscription'),
+    path('subscriptions/update/', views.update_subscription, name='update_subscription'),
+    path('subscriptions/cancel/', views.cancel_subscription, name='cancel_subscription'),
+    path('subscriptions/reactivate/', views.reactivate_subscription, name='reactivate_subscription'),
 ]
 

@@ -27,7 +27,12 @@ User = get_user_model()
 def available_plans(request):
     """
     Lista planos disponíveis para cadastro público
+    Sincroniza preços com Stripe automaticamente antes de retornar
     """
+    # Sincronizar preços do Stripe (com cache de 5 minutos)
+    from subscriptions.utils import sync_all_plans_from_stripe
+    sync_all_plans_from_stripe(force=False)
+    
     plans = Plan.objects.filter(is_active=True).order_by('display_order', 'price_monthly')
     
     return Response([

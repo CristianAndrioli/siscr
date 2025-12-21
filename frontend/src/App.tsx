@@ -27,6 +27,7 @@ import CheckListProcessos from './pages/servico-logistico/CheckListProcessos';
 import CotacaoFreteInternacionalRodoviario from './pages/servico-logistico/CotacaoFreteInternacionalRodoviario';
 import AnaliseFechamentoFrete from './pages/servico-logistico/AnaliseFechamentoFrete';
 import Perfil from './pages/Perfil';
+import SubscriptionManagement from './pages/SubscriptionManagement';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Home from './pages/Home';
@@ -65,12 +66,18 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
       const authenticated = authService.isAuthenticated();
       setIsAuthenticated(authenticated);
 
+      // Rotas que não precisam verificar subscription/tenant
+      const exemptRoutes = [
+        '/payment-pending',
+        '/subscription-expired',
+        '/profile',
+        '/perfil'
+      ];
+      const isExemptRoute = exemptRoutes.includes(location.pathname) || 
+                           location.pathname.startsWith('/checkout');
+      
       // Se estiver autenticado e não estiver nas rotas especiais, verificar tenant e subscription
-      if (authenticated && 
-          location.pathname !== '/payment-pending' && 
-          location.pathname !== '/subscription-expired' &&
-          !location.pathname.startsWith('/checkout') &&
-          location.pathname !== '/profile') {
+      if (authenticated && !isExemptRoute) {
         
         // Verificar se o tenant está ativo
         const tenantStr = localStorage.getItem('tenant');
@@ -396,6 +403,27 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/subscription-management"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <SubscriptionManagement />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Perfil />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Alias para compatibilidade */}
         <Route
           path="/perfil"
           element={

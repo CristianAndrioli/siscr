@@ -68,5 +68,42 @@ export const paymentsService = {
     );
     return response.data;
   },
+
+  /**
+   * Atualiza assinatura (upgrade/downgrade)
+   */
+  updateSubscription: async (
+    planId: number,
+    billingCycle: 'monthly' | 'yearly' = 'monthly'
+  ): Promise<{ subscription: SubscriptionStatus }> => {
+    const response = await api.post<{ subscription: SubscriptionStatus }>(
+      '/payments/subscriptions/update/',
+      {
+        plan_id: planId,
+        billing_cycle: billingCycle,
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Cancela assinatura
+   */
+  cancelSubscription: async (): Promise<{ message: string; subscription: SubscriptionStatus }> => {
+    const response = await api.post<{ message: string; subscription: SubscriptionStatus }>(
+      '/payments/subscriptions/cancel/'
+    );
+    return response.data;
+  },
+
+  /**
+   * Reativa assinatura cancelada
+   */
+  reactivateSubscription: async (): Promise<{ message: string; subscription: SubscriptionStatus }> => {
+    const response = await api.post<{ message: string; subscription: SubscriptionStatus }>(
+      '/payments/subscriptions/reactivate/'
+    );
+    return response.data;
+  },
 };
 

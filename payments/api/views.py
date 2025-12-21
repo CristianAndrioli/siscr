@@ -8,7 +8,10 @@ from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from django.db import connection
 from django.conf import settings
+from django.utils import timezone
+from datetime import datetime
 import logging
+import stripe
 from ..models import PaymentMethod, Payment, Invoice
 
 logger = logging.getLogger(__name__)
@@ -402,9 +405,11 @@ def create_checkout_session(request):
 def get_current_subscription(request):
     """
     Retorna a subscription atual do tenant
+    Sincroniza preços do plano com Stripe antes de retornar
     """
     from django.db import connection
     from subscriptions.models import Subscription
+    from subscriptions.utils import sync_all_plans_from_stripe
     
     tenant = getattr(connection, 'tenant', None)
     if not tenant:
@@ -422,6 +427,12 @@ def get_current_subscription(request):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Sincronizar preços do Stripe (com cache de 5 minutos)
+        sync_all_plans_from_stripe(force=False)
+        
+        # Recarregar plano para ter preços atualizados
+        subscription.plan.refresh_from_db()
+        
         return Response({
             'id': subscription.id,
             'status': subscription.status,
@@ -430,6 +441,8 @@ def get_current_subscription(request):
                 'id': subscription.plan.id,
                 'name': subscription.plan.name,
                 'slug': subscription.plan.slug,
+                'price_monthly': str(subscription.plan.price_monthly),
+                'price_yearly': str(subscription.plan.price_yearly) if subscription.plan.price_yearly else None,
             },
             'billing_cycle': subscription.billing_cycle,
             'current_period_start': subscription.current_period_start.isoformat() if subscription.current_period_start else None,
@@ -441,6 +454,220 @@ def get_current_subscription(request):
         logger.error(f'Erro ao buscar subscription: {str(e)}', exc_info=True)
         return Response(
             {'error': 'Erro ao buscar assinatura'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def update_subscription(request):
+    """
+    Atualiza assinatura (upgrade/downgrade de plano)
+    """
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    plan_id = request.data.get('plan_id')
+    billing_cycle = request.data.get('billing_cycle', 'monthly')
+    
+    if not plan_id:
+        return Response(
+            {'error': 'plan_id é obrigatório'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        subscription = Subscription.objects.filter(tenant=tenant).first()
+        if not subscription:
+            return Response(
+                {'error': 'Assinatura não encontrada'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if not subscription.payment_gateway_id:
+            return Response(
+                {'error': 'Assinatura não possui payment_gateway_id. Use checkout para criar nova assinatura.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        plan = Plan.objects.get(id=plan_id, is_active=True)
+        price_id = plan.get_stripe_price_id(billing_cycle)
+        
+        if not price_id:
+            return Response(
+                {'error': f'Plano {plan.name} não tem Stripe Price ID configurado para ciclo {billing_cycle}'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Atualizar no Stripe
+        stripe_subscription = stripe_service.update_subscription(
+            subscription_id=subscription.payment_gateway_id,
+            price_id=price_id
+        )
+        
+        # Atualizar localmente
+        subscription.plan = plan
+        subscription.billing_cycle = billing_cycle
+        subscription.current_period_start = datetime.fromtimestamp(
+            stripe_subscription['current_period_start'], tz=timezone.utc
+        )
+        subscription.current_period_end = datetime.fromtimestamp(
+            stripe_subscription['current_period_end'], tz=timezone.utc
+        )
+        subscription.status = stripe_subscription['status']
+        subscription.save()
+        
+        logger.info(f'Subscription {subscription.id} atualizada para plano {plan.name}')
+        
+        return Response({
+            'subscription': {
+                'id': subscription.id,
+                'plan': plan.name,
+                'status': subscription.status,
+                'billing_cycle': billing_cycle,
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Plan.DoesNotExist:
+        return Response(
+            {'error': 'Plano não encontrado'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        logger.error(f'Erro ao atualizar subscription: {str(e)}', exc_info=True)
+        return Response(
+            {'error': f'Erro ao atualizar assinatura: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def cancel_subscription(request):
+    """
+    Cancela assinatura (ao fim do período atual)
+    """
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        subscription = Subscription.objects.filter(tenant=tenant).first()
+        if not subscription:
+            return Response(
+                {'error': 'Assinatura não encontrada'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if not subscription.payment_gateway_id:
+            # Se não tem payment_gateway_id, apenas cancelar localmente
+            subscription.status = 'canceled'
+            subscription.canceled_at = timezone.now()
+            subscription.cancel_at_period_end = True
+            subscription.save()
+            
+            return Response({
+                'message': 'Assinatura cancelada localmente',
+                'subscription': {
+                    'id': subscription.id,
+                    'status': subscription.status,
+                }
+            }, status=status.HTTP_200_OK)
+        
+        # Cancelar no Stripe (ao fim do período)
+        stripe_subscription = stripe_service.cancel_subscription(
+            subscription_id=subscription.payment_gateway_id
+        )
+        
+        # Atualizar localmente
+        subscription.status = 'canceled'
+        subscription.canceled_at = timezone.now()
+        subscription.cancel_at_period_end = True
+        subscription.save()
+        
+        logger.info(f'Subscription {subscription.id} cancelada')
+        
+        return Response({
+            'message': 'Assinatura será cancelada ao fim do período atual',
+            'subscription': {
+                'id': subscription.id,
+                'status': subscription.status,
+                'cancel_at_period_end': subscription.cancel_at_period_end,
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f'Erro ao cancelar subscription: {str(e)}', exc_info=True)
+        return Response(
+            {'error': f'Erro ao cancelar assinatura: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def reactivate_subscription(request):
+    """
+    Reativa assinatura cancelada
+    """
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        subscription = Subscription.objects.filter(tenant=tenant).first()
+        if not subscription:
+            return Response(
+                {'error': 'Assinatura não encontrada'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if not subscription.payment_gateway_id:
+            return Response(
+                {'error': 'Assinatura não possui payment_gateway_id'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Reativar no Stripe
+        import stripe
+        stripe_subscription = stripe.Subscription.modify(
+            subscription.payment_gateway_id,
+            cancel_at_period_end=False,
+        )
+        
+        # Atualizar localmente
+        subscription.status = 'active'
+        subscription.canceled_at = None
+        subscription.cancel_at_period_end = False
+        subscription.save()
+        
+        logger.info(f'Subscription {subscription.id} reativada')
+        
+        return Response({
+            'message': 'Assinatura reativada com sucesso',
+            'subscription': {
+                'id': subscription.id,
+                'status': subscription.status,
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f'Erro ao reativar subscription: {str(e)}', exc_info=True)
+        return Response(
+            {'error': f'Erro ao reativar assinatura: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -484,6 +711,19 @@ def get_checkout_session(request, session_id):
                     logger.info(f'[CHECKOUT] Atualizando subscription {subscription.id} de "pending" para "active" (pagamento confirmado via checkout session)')
                     subscription.status = 'active'
                     subscription.payment_gateway_id = subscription_id
+                    # Atualizar períodos se disponível no Stripe
+                    if subscription_id and settings.STRIPE_MODE != 'simulated':
+                        try:
+                            import stripe
+                            stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                            subscription.current_period_start = datetime.fromtimestamp(
+                                stripe_sub['current_period_start'], tz=timezone.utc
+                            )
+                            subscription.current_period_end = datetime.fromtimestamp(
+                                stripe_sub['current_period_end'], tz=timezone.utc
+                            )
+                        except Exception as e:
+                            logger.warning(f"[CHECKOUT] Erro ao buscar períodos do Stripe: {str(e)}")
                     subscription.save()
                     logger.info(f'[CHECKOUT] ✅ Subscription {subscription.id} atualizada com sucesso')
             except Exception as e:
