@@ -7,6 +7,13 @@ interface LayoutProps {
 }
 
 interface UserInfo {
+  user?: {
+    id: number;
+    username: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+  };
   empresa?: { id: number; nome: string };
   filial?: { id: number; nome: string };
 }
@@ -16,6 +23,7 @@ function Layout({ children }: LayoutProps) {
     cadastros: false,
     financeiro: false,
     faturamento: false,
+    configuracoes: false,
   });
   const [userInfo, setUserInfo] = useState<UserInfo>({});
   const [tenantActive, setTenantActive] = useState<boolean | null>(null);
@@ -54,10 +62,11 @@ function Layout({ children }: LayoutProps) {
         const data = await authService.getCurrentUser();
         console.log('[Layout] Dados recebidos:', data);
         setUserInfo({
+          user: data.user,
           empresa: data.empresa,
           filial: data.filial,
         });
-        console.log('[Layout] UserInfo atualizado:', { empresa: data.empresa, filial: data.filial });
+        console.log('[Layout] UserInfo atualizado:', { user: data.user, empresa: data.empresa, filial: data.filial });
       } catch (error) {
         console.error('[Layout] Erro ao buscar informações do usuário:', error);
       }
@@ -113,33 +122,44 @@ function Layout({ children }: LayoutProps) {
                     Assinatura
                   </Link>
                 </li>
+                {/* Configurações - Menu com submenu */}
                 <li>
-                  <Link
-                    to="/subscription-management"
-                    className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                      isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                    }`}
+                  <button
+                    onClick={() => toggleMenu('configuracoes')}
+                    className="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 justify-between w-full"
                   >
-                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <span className="flex items-center">
+                      <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Configurações
+                    </span>
+                    <svg
+                      className={`w-4 h-4 transform transition-transform duration-300 ${
+                        menuOpen.configuracoes ? 'rotate-180' : ''
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                     </svg>
-                    Configurações
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/subscription-management"
-                    className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                      isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                    }`}
-                  >
-                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    Configurações
-                  </Link>
+                  </button>
+                  {menuOpen.configuracoes && (
+                    <ul className="pl-6 mt-2 space-y-1">
+                      <li>
+                        <Link
+                          to="/subscription-management"
+                          className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                            isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                          }`}
+                        >
+                          Assinatura
+                        </Link>
+                      </li>
+                    </ul>
+                  )}
                 </li>
                 <li>
                   <Link
@@ -367,20 +387,44 @@ function Layout({ children }: LayoutProps) {
               </Link>
             </li>
 
-            {/* Configurações */}
+            {/* Configurações - Menu com submenu */}
             <li>
-              <Link
-                to="/subscription-management"
-                className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                  isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                }`}
+              <button
+                onClick={() => toggleMenu('configuracoes')}
+                className="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 justify-between w-full"
               >
-                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <span className="flex items-center">
+                  <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Configurações
+                </span>
+                <svg
+                  className={`w-4 h-4 transform transition-transform duration-300 ${
+                    menuOpen.configuracoes ? 'rotate-180' : ''
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                 </svg>
-                Configurações
-              </Link>
+              </button>
+              {menuOpen.configuracoes && (
+                <ul className="pl-6 mt-2 space-y-1">
+                  <li>
+                    <Link
+                      to="/subscription-management"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Assinatura
+                    </Link>
+                  </li>
+                </ul>
+              )}
             </li>
             {/* Perfil */}
             <li>
@@ -401,9 +445,23 @@ function Layout({ children }: LayoutProps) {
           </ul>
         </nav>
 
-        {/* Informações da Empresa e Filial - Acima do botão de sair */}
-        {(userInfo.empresa || userInfo.filial) && (
+        {/* Informações do Usuário, Empresa e Filial - Acima do botão de sair */}
+        {(userInfo.user || userInfo.empresa || userInfo.filial) && (
           <div className="px-4 py-3 border-t border-gray-700 bg-gray-800">
+            {userInfo.user && (
+              <div className="mb-3">
+                <div className="text-xs text-gray-400 font-medium mb-1">Usuário</div>
+                <div className="text-sm text-white font-semibold truncate" title={
+                  userInfo.user.first_name && userInfo.user.last_name
+                    ? `${userInfo.user.first_name} ${userInfo.user.last_name}`
+                    : userInfo.user.username
+                }>
+                  {userInfo.user.first_name && userInfo.user.last_name
+                    ? `${userInfo.user.first_name} ${userInfo.user.last_name}`
+                    : userInfo.user.first_name || userInfo.user.username}
+                </div>
+              </div>
+            )}
             {userInfo.empresa && (
               <div className="mb-2">
                 <div className="text-xs text-gray-400 font-medium mb-1">Empresa</div>
