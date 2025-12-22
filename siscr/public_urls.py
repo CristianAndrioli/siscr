@@ -27,6 +27,9 @@ urlpatterns = [
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     
+    # APIs do core (incluindo backup que precisa estar no public para funcionar mesmo sem tenant identificado)
+    path('api/', include('core.api.urls')),
+    
     # Webhooks do Stripe (público, sem autenticação)
     path('api/webhooks/stripe/', webhooks.stripe_webhook, name='stripe_webhook'),
 ]

@@ -6,12 +6,19 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import connection, transaction
 from django.shortcuts import redirect
+from django.http import HttpResponse, Http404
 from django.utils.html import format_html
-from django.urls import reverse
+from django.urls import reverse, path
 from django.utils.safestring import mark_safe
 from django_tenants.admin import TenantAdminMixin
 from django_tenants.utils import schema_context
 from .models import Tenant, Domain, Empresa, Filial
+import os
+import tempfile
+import zipfile
+from datetime import datetime
+from django.conf import settings
+from django.utils import timezone
 
 
 @admin.register(Tenant)
@@ -22,6 +29,7 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
         'domains_display',
         'is_active',
         'created_at',
+        'last_backup_display',
         'actions_display'
     )
     list_filter = ('is_active', 'created_at')
@@ -30,6 +38,7 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
         'schema_name', 
         'created_at', 
         'updated_at',
+        'last_backup_at',
         'domains_list',
         'subscription_info',
         'statistics'
@@ -52,7 +61,7 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
             'classes': ('collapse',)
         }),
         ('Datas', {
-            'fields': ('created_at', 'updated_at')
+            'fields': ('created_at', 'updated_at', 'last_backup_at_display')
         }),
     )
     
@@ -165,12 +174,36 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
             return f'Erro ao carregar estatísticas: {str(e)}'
     statistics.short_description = 'Estatísticas'
     
+    def last_backup_display(self, obj):
+        """Exibe a data do último backup no fuso horário local (listagem)"""
+        if obj.last_backup_at:
+            from django.utils import timezone
+            from django.utils.dateformat import format
+            # Converter UTC para fuso horário local
+            local_time = timezone.localtime(obj.last_backup_at)
+            return format(local_time, 'd/m/Y H:i')
+        return '-'
+    last_backup_display.short_description = 'Último Backup'
+    
+    def last_backup_at_display(self, obj):
+        """Exibe a data do último backup no fuso horário local (formulário)"""
+        if obj.last_backup_at:
+            from django.utils import timezone
+            from django.utils.dateformat import format
+            # Converter UTC para fuso horário local
+            local_time = timezone.localtime(obj.last_backup_at)
+            return format(local_time, 'd/m/Y H:i:s')
+        return 'Nunca'
+    last_backup_at_display.short_description = 'Último Backup Manual'
+    
     def actions_display(self, obj):
-        """Botão de ações"""
+        """Botões de ações"""
         delete_url = reverse('admin:tenants_tenant_delete', args=[obj.pk])
+        backup_url = reverse('admin:tenants_tenant_backup', args=[obj.pk])
         return format_html(
-            '<a href="{}" class="button" style="background-color: #dc3545; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">Excluir</a>',
-            delete_url
+            '<a href="{}" class="button" style="background-color: #28a745; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px; margin-right: 5px;">💾 Backup</a> '
+            '<a href="{}" class="button" style="background-color: #dc3545; color: white; padding: 5px 10px; text-decoration: none; border-radius: 3px;">🗑️ Excluir</a>',
+            backup_url, delete_url
         )
     actions_display.short_description = 'Ações'
     
@@ -776,6 +809,85 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
         
         # Usar nossa action customizada para exclusão em massa
         self.delete_tenant_completely(request, queryset)
+    
+    def get_urls(self):
+        """Adiciona URLs customizadas para backup"""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<path:object_id>/backup/',
+                self.admin_site.admin_view(self.backup_view),
+                name='tenants_tenant_backup',
+            ),
+        ]
+        return custom_urls + urls
+    
+    def backup_view(self, request, object_id):
+        """
+        View para fazer backup do tenant e fazer download do arquivo
+        """
+        if not request.user.is_superuser:
+            messages.error(request, 'Apenas superusuários podem fazer backup de tenants.')
+            return redirect('admin:tenants_tenant_changelist')
+        
+        try:
+            obj = self.get_object(request, object_id)
+        except Tenant.DoesNotExist:
+            raise Http404
+        
+        if obj is None:
+            raise Http404
+        
+        try:
+            # Criar backup usando o comando de management
+            from django.core.management import call_command
+            import glob
+            
+            # Criar arquivo temporário para o backup
+            temp_dir = tempfile.gettempdir()
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_filename = f'backup_{obj.schema_name}_{timestamp}.zip'
+            backup_path = os.path.join(temp_dir, backup_filename)
+            
+            # Executar comando de backup
+            call_command('backup_tenant', obj.schema_name, output_dir=temp_dir)
+            
+            # Verificar se o arquivo foi criado
+            if not os.path.exists(backup_path):
+                # Tentar encontrar o arquivo com o nome correto
+                pattern = os.path.join(temp_dir, f'backup_{obj.schema_name}_*.zip')
+                files = glob.glob(pattern)
+                if files:
+                    # Pegar o mais recente
+                    backup_path = max(files, key=os.path.getctime)
+                else:
+                    raise FileNotFoundError('Arquivo de backup não foi criado')
+            
+            # Ler o arquivo e retornar para download
+            with open(backup_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{backup_filename}"'
+                response['Content-Length'] = os.path.getsize(backup_path)
+            
+            # Atualizar data do último backup
+            with schema_context('public'):
+                obj.last_backup_at = timezone.now()
+                obj.save(update_fields=['last_backup_at'])
+            
+            # Remover arquivo temporário após enviar
+            try:
+                os.remove(backup_path)
+            except:
+                pass  # Ignorar erro ao remover arquivo temporário
+            
+            messages.success(request, f'✅ Backup do tenant "{obj.name}" criado e baixado com sucesso!')
+            return response
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar backup: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            return redirect('admin:tenants_tenant_change', object_id=object_id)
 
 
 @admin.register(Domain)

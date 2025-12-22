@@ -150,6 +150,16 @@ function Layout({ children }: LayoutProps) {
                     <ul className="pl-6 mt-2 space-y-1">
                       <li>
                         <Link
+                          to="/configuracoes"
+                          className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                            isActive('/configuracoes') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                          }`}
+                        >
+                          Configurações Gerais
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
                           to="/subscription-management"
                           className={`block p-2 rounded-lg transition duration-150 text-sm ${
                             isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
@@ -413,6 +423,16 @@ function Layout({ children }: LayoutProps) {
               </button>
               {menuOpen.configuracoes && (
                 <ul className="pl-6 mt-2 space-y-1">
+                  <li>
+                    <Link
+                      to="/configuracoes"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/configuracoes') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Configurações Gerais
+                    </Link>
+                  </li>
                   <li>
                     <Link
                       to="/subscription-management"

@@ -470,10 +470,76 @@ class Command(BaseCommand):
             
             self.stdout.write(f"  ✅ {len(contas_pagar)} contas a pagar criadas")
             
-            # Criar usuários (2 por filial) - precisa fazer no schema público
+            # Criar usuário admin primeiro (um por tenant)
             self.stdout.write("\n👤 Criando usuários...")
             usuarios_criados = []
             
+            # Criar usuário admin do tenant
+            admin_nome = f"Admin {tenant_name}"
+            admin_username = f"admin.{schema_name}"
+            admin_email = f"admin@{schema_name}.com"
+            
+            with schema_context('public'):
+                user_admin, created = User.objects.get_or_create(
+                    username=admin_username,
+                    defaults={
+                        'email': admin_email,
+                        'first_name': 'Admin',
+                        'last_name': tenant_name,
+                    }
+                )
+                if created:
+                    user_admin.set_password('senha123')
+                    user_admin.save()
+                
+                # Criar perfil
+                profile_admin, _ = UserProfile.objects.get_or_create(
+                    user=user_admin,
+                    defaults={
+                        'current_tenant': tenant,
+                        'current_empresa': empresas_criadas[0] if empresas_criadas else None,
+                        'current_filial': filiais_criadas[0] if filiais_criadas else None,
+                    }
+                )
+                if not profile_admin.current_tenant:
+                    profile_admin.current_tenant = tenant
+                    if empresas_criadas:
+                        profile_admin.current_empresa = empresas_criadas[0]
+                    if filiais_criadas:
+                        profile_admin.current_filial = filiais_criadas[0]
+                    profile_admin.save()
+                
+                # Criar membership como admin
+                membership_admin, _ = TenantMembership.objects.get_or_create(
+                    user=user_admin,
+                    tenant=tenant,
+                    defaults={
+                        'role': 'admin',
+                        'is_active': True,
+                    }
+                )
+                # Garantir que seja admin mesmo se já existir
+                if membership_admin.role != 'admin':
+                    membership_admin.role = 'admin'
+                    membership_admin.save()
+            
+            # Criar no schema do tenant também
+            with schema_context(schema_name):
+                user_admin_tenant, _ = User.objects.get_or_create(
+                    username=admin_username,
+                    defaults={
+                        'email': admin_email,
+                        'first_name': 'Admin',
+                        'last_name': tenant_name,
+                    }
+                )
+                if not user_admin_tenant.has_usable_password():
+                    user_admin_tenant.set_password('senha123')
+                    user_admin_tenant.save()
+                usuarios_criados.append(user_admin_tenant)
+                self.stdout.write(f"    ✅ Admin: {admin_username} (role: admin)")
+            
+            # Criar usuários normais (2 por filial)
             for filial in filiais_criadas:
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)

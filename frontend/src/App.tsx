@@ -50,6 +50,7 @@ import ContasReceberList from './pages/financeiro/ContasReceberList';
 import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
 import ContasPagarDetail from './pages/financeiro/ContasPagarDetail';
+import Configuracoes from './pages/Configuracoes';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -409,6 +410,16 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <SubscriptionManagement />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Configuracoes />
               </Layout>
             </ProtectedRoute>
           }
