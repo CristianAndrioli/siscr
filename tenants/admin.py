@@ -236,9 +236,29 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
                     domain_count = domains.count()
                     domains.delete()
                     
-                    # 2. Remover assinaturas, quotas, pagamentos e faturas PRIMEIRO (no schema público)
+                    # 2. Cancelar assinatura no Stripe antes de remover (no schema público)
                     try:
                         from subscriptions.models import Subscription, QuotaUsage
+                        from payments.services import StripeService
+                        
+                        subscription = Subscription.objects.filter(tenant=tenant).first()
+                        if subscription and subscription.payment_gateway_id:
+                            # Tentar cancelar imediatamente no Stripe (não espera fim do período)
+                            try:
+                                stripe_service = StripeService()
+                                stripe_service.cancel_subscription_immediately(subscription.payment_gateway_id)
+                                self.message_user(
+                                    request,
+                                    f'✅ Assinatura cancelada imediatamente no Stripe para o tenant "{tenant_name}"',
+                                    level='info'
+                                )
+                            except Exception as stripe_error:
+                                # Log do erro mas continua com a exclusão
+                                error_msg = f'Aviso: Não foi possível cancelar assinatura no Stripe para "{tenant_name}": {str(stripe_error)}'
+                                errors.append(error_msg)
+                                self.message_user(request, error_msg, level='warning')
+                        
+                        # Remover assinaturas e quotas do banco local
                         Subscription.objects.filter(tenant=tenant).delete()
                         QuotaUsage.objects.filter(tenant=tenant).delete()
                     except Exception as e:
@@ -573,10 +593,23 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
                 domain_count = domains.count()
                 domains.delete()
                 
-                # 2. Remover assinaturas, quotas, pagamentos e faturas PRIMEIRO (no schema público)
-                # Isso evita que o Django tente verificar objetos relacionados
+                # 2. Cancelar assinatura no Stripe antes de remover (no schema público)
                 try:
                     from subscriptions.models import Subscription, QuotaUsage
+                    from payments.services import StripeService
+                    
+                    subscription = Subscription.objects.filter(tenant=obj).first()
+                    if subscription and subscription.payment_gateway_id:
+                        # Tentar cancelar imediatamente no Stripe (não espera fim do período)
+                        try:
+                            stripe_service = StripeService()
+                            stripe_service.cancel_subscription_immediately(subscription.payment_gateway_id)
+                            messages.info(request, f'✅ Assinatura cancelada imediatamente no Stripe para o tenant "{tenant_name}"')
+                        except Exception as stripe_error:
+                            # Log do erro mas continua com a exclusão
+                            messages.warning(request, f'Aviso: Não foi possível cancelar assinatura no Stripe para "{tenant_name}": {str(stripe_error)}')
+                    
+                    # Remover assinaturas e quotas do banco local
                     Subscription.objects.filter(tenant=obj).delete()
                     QuotaUsage.objects.filter(tenant=obj).delete()
                 except Exception as e:

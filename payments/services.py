@@ -168,7 +168,7 @@ class StripeService:
     
     def cancel_subscription(self, subscription_id):
         """
-        Cancela uma assinatura no Stripe
+        Cancela uma assinatura no Stripe (ao fim do período)
         """
         if self._is_simulated():
             # Simular cancelamento
@@ -184,6 +184,35 @@ class StripeService:
                 cancel_at_period_end=True,
             )
             return subscription
+        except Exception as e:
+            raise Exception(f"Erro ao cancelar subscription no Stripe: {str(e)}")
+    
+    def cancel_subscription_immediately(self, subscription_id):
+        """
+        Cancela uma assinatura no Stripe imediatamente (não espera o fim do período)
+        Usado quando o tenant é excluído
+        """
+        if self._is_simulated():
+            # Simular cancelamento imediato
+            return {
+                'id': subscription_id,
+                'status': 'canceled',
+                'canceled_at': int(timezone.now().timestamp()),
+            }
+        
+        try:
+            # Cancelar imediatamente usando delete (cancela e não renova)
+            subscription = stripe.Subscription.delete(subscription_id)
+            return subscription
+        except stripe.error.InvalidRequestError as e:
+            # Se a subscription já foi cancelada ou não existe, apenas logar
+            if 'No such subscription' in str(e) or 'already canceled' in str(e):
+                return {
+                    'id': subscription_id,
+                    'status': 'canceled',
+                    'deleted': True,
+                }
+            raise Exception(f"Erro ao cancelar subscription no Stripe: {str(e)}")
         except Exception as e:
             raise Exception(f"Erro ao cancelar subscription no Stripe: {str(e)}")
     
