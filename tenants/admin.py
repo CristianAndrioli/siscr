@@ -39,6 +39,7 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
         'created_at', 
         'updated_at',
         'last_backup_at',
+        'last_backup_at_display',
         'domains_list',
         'subscription_info',
         'statistics'

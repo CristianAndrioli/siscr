@@ -65,6 +65,9 @@ SHARED_APPS = [
     'public',  # App para páginas públicas (signup, etc.)
     'payments',  # App de pagamentos (Stripe)
     'accounts',  # App de autenticação e permissões (UserProfile e TenantMembership precisam estar no schema público)
+    
+    # Configuração do projeto (deve ser o último para garantir que tudo esteja pronto)
+    'siscr.apps.SiscrConfig',  # Configuração do admin personalizado
 ]
 
 TENANT_APPS = [

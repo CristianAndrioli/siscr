@@ -10,7 +10,9 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# User admin já está registrado pelo Django, não precisa registrar novamente
+# Desregistrar o UserAdmin padrão do Django para registrar um customizado
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
 
 
 class TenantMembershipInline(admin.TabularInline):
@@ -19,6 +21,87 @@ class TenantMembershipInline(admin.TabularInline):
     extra = 0
     fields = ['user', 'role', 'is_active', 'joined_at']
     readonly_fields = ['joined_at']
+
+
+@admin.register(User)
+class CustomUserAdmin(BaseUserAdmin):
+    """Admin customizado para User com informações de tenant, empresa e filial"""
+    # Adicionar campos customizados ao list_display padrão
+    list_display = list(BaseUserAdmin.list_display) + ['tenant_display', 'empresa_display', 'filial_display']
+    list_filter = list(BaseUserAdmin.list_filter) + ['profile__current_tenant']
+    
+    def get_queryset(self, request):
+        """Otimizar queries com select_related"""
+        qs = super().get_queryset(request)
+        return qs.select_related('profile__current_tenant', 'profile__current_empresa', 'profile__current_filial')
+    
+    def tenant_display(self, obj):
+        """Exibe o tenant atual do usuário"""
+        try:
+            profile = obj.profile
+            if profile and profile.current_tenant:
+                url = reverse('admin:tenants_tenant_change', args=[profile.current_tenant.pk])
+                return format_html('<a href="{}">{}</a>', url, profile.current_tenant.name)
+        except UserProfile.DoesNotExist:
+            pass
+        
+        # Se não tem profile, tentar buscar pelos memberships
+        memberships = TenantMembership.objects.filter(user=obj, is_active=True).select_related('tenant')
+        if memberships.exists():
+            tenants = [membership.tenant.name for membership in memberships[:3]]
+            if len(tenants) == 1:
+                membership = memberships.first()
+                url = reverse('admin:tenants_tenant_change', args=[membership.tenant.pk])
+                return format_html('<a href="{}">{}</a>', url, membership.tenant.name)
+            else:
+                return format_html('<span title="{}">{} tenants</span>', ', '.join(tenants), len(tenants))
+        
+        return '-'
+    tenant_display.short_description = 'Tenant'
+    
+    def empresa_display(self, obj):
+        """Exibe a empresa atual do usuário"""
+        try:
+            profile = obj.profile
+            if profile and profile.current_empresa:
+                empresa_nome = profile.current_empresa.nome
+                # Mostrar também o tenant se disponível
+                if profile.current_tenant:
+                    return format_html(
+                        '{}<br><small style="color: #666;">Tenant: {}</small>',
+                        empresa_nome,
+                        profile.current_tenant.name
+                    )
+                return empresa_nome
+        except UserProfile.DoesNotExist:
+            pass
+        return '-'
+    empresa_display.short_description = 'Empresa'
+    
+    def filial_display(self, obj):
+        """Exibe a filial atual do usuário"""
+        try:
+            profile = obj.profile
+            if profile and profile.current_filial:
+                filial_nome = profile.current_filial.nome
+                # Mostrar também a empresa e tenant se disponíveis
+                parts = [filial_nome]
+                if profile.current_empresa:
+                    parts.append(f'Empresa: {profile.current_empresa.nome}')
+                if profile.current_tenant:
+                    parts.append(f'Tenant: {profile.current_tenant.name}')
+                
+                if len(parts) > 1:
+                    return format_html(
+                        '{}<br><small style="color: #666;">{}</small>',
+                        parts[0],
+                        '<br>'.join(parts[1:])
+                    )
+                return filial_nome
+        except UserProfile.DoesNotExist:
+            pass
+        return '-'
+    filial_display.short_description = 'Filial'
 
 
 @admin.register(UserProfile)

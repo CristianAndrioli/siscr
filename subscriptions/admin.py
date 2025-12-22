@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.urls import reverse
 from .models import Plan, Feature, Subscription, QuotaUsage
+import stripe
 
 
 @admin.register(Plan)
@@ -74,20 +75,23 @@ class SubscriptionAdmin(admin.ModelAdmin):
         'updated_at',
         'days_until_expiry_display',
         'is_active_display',
+        'stripe_subscription_link',
+        'stripe_customer_info',
     ]
     
     fieldsets = (
         ('Assinatura', {
             'fields': ('tenant', 'plan', 'status', 'billing_cycle')
         }),
+        ('Stripe', {
+            'fields': ('payment_gateway_id', 'stripe_subscription_link', 'stripe_customer_info'),
+            'classes': ('collapse',)
+        }),
         ('Período', {
             'fields': ('current_period_start', 'current_period_end', 'days_until_expiry_display')
         }),
         ('Cancelamento', {
             'fields': ('cancel_at_period_end', 'canceled_at')
-        }),
-        ('Pagamento', {
-            'fields': ('payment_gateway_id',)
         }),
         ('Status', {
             'fields': ('is_active_display', 'created_at', 'updated_at')
@@ -148,6 +152,80 @@ class SubscriptionAdmin(admin.ModelAdmin):
         else:
             return format_html('<span style="color: red;">✗ Inativa</span>')
     is_active_display.short_description = 'Ativa'
+    
+    def stripe_subscription_link(self, obj):
+        """Link para a assinatura no Stripe Dashboard"""
+        if not obj.payment_gateway_id:
+            return '-'
+        
+        # Determinar URL base do Stripe baseado no ambiente
+        from django.conf import settings
+        stripe_mode = getattr(settings, 'STRIPE_MODE', 'test')
+        if stripe_mode == 'live':
+            base_url = 'https://dashboard.stripe.com'
+        else:
+            base_url = 'https://dashboard.stripe.com/test'
+        
+        url = f'{base_url}/subscriptions/{obj.payment_gateway_id}'
+        return format_html(
+            '<a href="{}" target="_blank" style="color: #635bff;">{} <span style="font-size: 12px;">🔗</span></a>',
+            url,
+            obj.payment_gateway_id
+        )
+    stripe_subscription_link.short_description = 'Stripe Subscription'
+    
+    def stripe_customer_info(self, obj):
+        """Informações do cliente no Stripe"""
+        if not obj.payment_gateway_id:
+            return '-'
+        
+        # Tentar buscar informações do Stripe se possível
+        try:
+            from payments.services import StripeService
+            stripe_service = StripeService()
+            
+            # Se estiver em modo simulado, retornar info básica
+            if stripe_service._is_simulated():
+                return format_html(
+                    '<p><strong>Modo Simulado:</strong> Informações do Stripe não disponíveis</p>'
+                )
+            
+            # Buscar subscription do Stripe
+            import stripe
+            subscription = stripe.Subscription.retrieve(obj.payment_gateway_id)
+            customer_id = subscription.customer
+            
+            # Buscar customer
+            customer = stripe.Customer.retrieve(customer_id)
+            
+            # Determinar URL base do Stripe
+            from django.conf import settings
+            stripe_mode = getattr(settings, 'STRIPE_MODE', 'test')
+            if stripe_mode == 'live':
+                base_url = 'https://dashboard.stripe.com'
+            else:
+                base_url = 'https://dashboard.stripe.com/test'
+            
+            customer_url = f'{base_url}/customers/{customer_id}'
+            
+            html = '<div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px;">'
+            html += f'<p><strong>Customer ID:</strong> <a href="{customer_url}" target="_blank">{customer_id} 🔗</a></p>'
+            if customer.email:
+                html += f'<p><strong>Email:</strong> {customer.email}</p>'
+            if customer.name:
+                html += f'<p><strong>Nome:</strong> {customer.name}</p>'
+            html += f'<p><strong>Status Stripe:</strong> {subscription.status}</p>'
+            if subscription.cancel_at_period_end:
+                html += '<p><strong style="color: orange;">⚠️ Cancelará ao fim do período</strong></p>'
+            html += '</div>'
+            
+            return format_html(html)
+        except Exception as e:
+            return format_html(
+                '<p style="color: orange;">⚠️ Erro ao buscar informações do Stripe: {}</p>',
+                str(e)
+            )
+    stripe_customer_info.short_description = 'Informações do Stripe'
     
     def activate_subscription(self, request, queryset):
         """Ativa assinaturas selecionadas"""
