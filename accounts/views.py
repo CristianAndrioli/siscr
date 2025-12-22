@@ -65,11 +65,11 @@ def login(request):
                 # Configurar o tenant na connection para uso posterior
                 # O django-tenants usa connection.set_tenant() para definir o schema
                 connection.set_tenant(tenant)
+                logger.info(f'[LOGIN] Tenant identificado pelo domínio fornecido: "{tenant.name}" ({domain})')
             except TenantDomain.DoesNotExist:
-                return Response(
-                    {'error': f'Domínio "{domain}" não encontrado. Verifique o domínio e tente novamente.'}, 
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                # Domínio não encontrado - tentar buscar pelo username (pode ser domínio antigo em cache)
+                logger.warning(f'[LOGIN] Domínio "{domain}" não encontrado. Tentando buscar tenant pelo username...')
+                tenant = None  # Continuar para buscar pelo username abaixo
     
     # IMPORTANTE: Se o tenant foi identificado pelo domínio fornecido,
     # verificar se o usuário realmente tem acesso a esse tenant

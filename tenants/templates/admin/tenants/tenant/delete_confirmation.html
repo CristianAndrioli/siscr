@@ -1,0 +1,36 @@
+{% extends "admin/delete_confirmation.html" %}
+{% load i18n %}
+
+{% block content %}
+{% if object %}
+<div style="background-color: #f8d7da; border: 3px solid #dc3545; padding: 20px; margin: 20px 0; border-radius: 5px;">
+    <h2 style="color: #721c24; margin-top: 0;">⚠️ EXCLUSÃO IRREVERSÍVEL</h2>
+    <p style="color: #721c24; font-size: 16px; font-weight: bold;">
+        Você está prestes a excluir o tenant <strong>"{{ object.name }}"</strong> (schema: <strong>{{ object.schema_name }}</strong>)
+    </p>
+    <p style="color: #721c24; font-size: 14px;">
+        Esta ação irá remover <strong>PERMANENTEMENTE</strong> e de forma <strong>IRREVERSÍVEL</strong>:
+    </p>
+    <ul style="color: #721c24; margin-left: 30px; font-size: 14px;">
+        <li>Todo o schema do banco de dados e todas as suas tabelas</li>
+        <li>Todos os usuários vinculados ao tenant</li>
+        <li>Todas as empresas e filiais</li>
+        <li>Todos os cadastros (pessoas, produtos, serviços, contas, etc.)</li>
+        <li>Todos os domínios vinculados</li>
+        <li>Todas as assinaturas e quotas</li>
+        <li>Todos os dados financeiros e históricos</li>
+    </ul>
+    <div style="background-color: #fff; border: 2px solid #dc3545; padding: 15px; margin-top: 15px; border-radius: 3px;">
+        <p style="color: #721c24; font-size: 18px; font-weight: bold; text-align: center; margin: 0;">
+            🚨 <strong>NÃO HÁ COMO RECUPERAR OS DADOS APÓS A EXCLUSÃO!</strong> 🚨
+        </p>
+    </div>
+    <p style="color: #721c24; margin-top: 15px; font-size: 14px;">
+        <strong>Recomendação:</strong> Faça backup do banco de dados antes de continuar.
+    </p>
+</div>
+{% endif %}
+
+{{ block.super }}
+{% endblock %}
+

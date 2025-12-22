@@ -29,7 +29,7 @@ services:
 
   web:
     build: .
-    command: python manage.py migrate_schemas --shared --noinput && python manage.py runserver 0.0.0.0:8000
+    command: bash -c "python manage.py makemigrations --noinput || true && python manage.py migrate_schemas --shared --noinput || true && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
     ports:
