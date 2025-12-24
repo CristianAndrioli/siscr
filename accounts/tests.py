@@ -79,13 +79,6 @@ class AuthenticationTests(TestCase):
                 if created or not user_tenant.has_usable_password():
                     user_tenant.set_password('testpass123')
                     user_tenant.save()
-                user_tenant = User.objects.create_user(
-                    username='testuser',
-                    email='test@example.com',
-                    password='testpass123',
-                    first_name='Test',
-                    last_name='User'
-                )
     
     def test_login_success(self):
         """Testa login bem-sucedido"""
