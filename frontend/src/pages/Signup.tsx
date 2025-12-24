@@ -1,6 +1,8 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { publicService, type Plan, type SignupData } from '../services/public';
+import { formatCNPJ } from '../utils/formatters';
+import { validateCNPJ, validateEmail } from '../utils/validators';
 
 function Signup() {
   const [searchParams] = useSearchParams();
@@ -12,6 +14,16 @@ function Signup() {
   const [success, setSuccess] = useState(false);
   const [domainAvailable, setDomainAvailable] = useState<boolean | null>(null);
   const [checkingDomain, setCheckingDomain] = useState(false);
+  
+  // Validações em tempo real
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [passwordStrength, setPasswordStrength] = useState<{
+    score: number;
+    label: string;
+    color: string;
+  }>({ score: 0, label: '', color: '' });
+  const [emailValid, setEmailValid] = useState<boolean | null>(null);
+  const [cnpjValid, setCnpjValid] = useState<boolean | null>(null);
 
   // Form data
   const [formData, setFormData] = useState<SignupData>({
@@ -27,6 +39,125 @@ function Signup() {
     empresa_cnpj: '',
     empresa_razao_social: '',
   });
+
+  // Função para calcular força da senha
+  const calculatePasswordStrength = useCallback((password: string) => {
+    if (!password) {
+      return { score: 0, label: '', color: '' };
+    }
+
+    let score = 0;
+    if (password.length >= 8) score += 1;
+    if (password.length >= 12) score += 1;
+    if (/[a-z]/.test(password)) score += 1;
+    if (/[A-Z]/.test(password)) score += 1;
+    if (/[0-9]/.test(password)) score += 1;
+    if (/[^a-zA-Z0-9]/.test(password)) score += 1;
+
+    const labels = ['Muito fraca', 'Fraca', 'Razoável', 'Boa', 'Forte', 'Muito forte'];
+    const colors = ['red', 'orange', 'yellow', 'yellow', 'green', 'green'];
+    
+    return {
+      score: Math.min(score, 5),
+      label: labels[Math.min(score, 5)],
+      color: colors[Math.min(score, 5)],
+    };
+  }, []);
+
+  // Validação de domínio com debounce
+  useEffect(() => {
+    if (!formData.domain || formData.domain.length < 3) {
+      setDomainAvailable(null);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setCheckingDomain(true);
+      try {
+        const result = await publicService.checkDomain(formData.domain);
+        setDomainAvailable(result.available);
+        if (!result.available) {
+          setFieldErrors((prev) => ({ ...prev, domain: 'Domínio já está em uso' }));
+        } else {
+          setFieldErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors.domain;
+            return newErrors;
+          });
+        }
+      } catch (err) {
+        setDomainAvailable(false);
+        setFieldErrors((prev) => ({ ...prev, domain: 'Erro ao verificar domínio' }));
+      } finally {
+        setCheckingDomain(false);
+      }
+    }, 800); // Debounce de 800ms
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.domain]);
+
+  // Validação de senha em tempo real
+  useEffect(() => {
+    if (formData.admin_password) {
+      const strength = calculatePasswordStrength(formData.admin_password);
+      setPasswordStrength(strength);
+      
+      if (formData.admin_password.length < 8) {
+        setFieldErrors((prev) => ({ ...prev, admin_password: 'Senha deve ter no mínimo 8 caracteres' }));
+      } else {
+        setFieldErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.admin_password;
+          return newErrors;
+        });
+      }
+    } else {
+      setPasswordStrength({ score: 0, label: '', color: '' });
+    }
+  }, [formData.admin_password, calculatePasswordStrength]);
+
+  // Validação de email em tempo real
+  useEffect(() => {
+    if (formData.admin_email) {
+      const isValid = validateEmail(formData.admin_email);
+      setEmailValid(isValid);
+      if (!isValid) {
+        setFieldErrors((prev) => ({ ...prev, admin_email: 'Email inválido' }));
+      } else {
+        setFieldErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.admin_email;
+          return newErrors;
+        });
+      }
+    } else {
+      setEmailValid(null);
+    }
+  }, [formData.admin_email]);
+
+  // Validação de CNPJ em tempo real
+  useEffect(() => {
+    if (formData.empresa_cnpj) {
+      const cleaned = formData.empresa_cnpj.replace(/\D/g, '');
+      if (cleaned.length === 14) {
+        const isValid = validateCNPJ(formData.empresa_cnpj);
+        setCnpjValid(isValid);
+        if (!isValid) {
+          setFieldErrors((prev) => ({ ...prev, empresa_cnpj: 'CNPJ inválido' }));
+        } else {
+          setFieldErrors((prev) => {
+            const newErrors = { ...prev };
+            delete newErrors.empresa_cnpj;
+            return newErrors;
+          });
+        }
+      } else {
+        setCnpjValid(null);
+      }
+    } else {
+      setCnpjValid(null);
+    }
+  }, [formData.empresa_cnpj]);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -54,13 +185,17 @@ function Signup() {
       const result = await publicService.checkDomain(formData.domain);
       setDomainAvailable(result.available);
       if (!result.available) {
-        setError(result.message || 'Domínio já está em uso');
+        setFieldErrors((prev) => ({ ...prev, domain: result.message || 'Domínio já está em uso' }));
       } else {
-        setError('');
+        setFieldErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.domain;
+          return newErrors;
+        });
       }
     } catch (err) {
       setDomainAvailable(false);
-      setError('Erro ao verificar domínio');
+      setFieldErrors((prev) => ({ ...prev, domain: 'Erro ao verificar domínio' }));
     } finally {
       setCheckingDomain(false);
     }
@@ -217,7 +352,13 @@ function Signup() {
                       setFormData({ ...formData, domain });
                       setDomainAvailable(null);
                     }}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                      domainAvailable === false
+                        ? 'border-red-500'
+                        : domainAvailable === true
+                        ? 'border-green-500'
+                        : 'border-gray-300'
+                    }`}
                     placeholder="minha-empresa"
                     autoComplete="username"
                     required
@@ -226,19 +367,33 @@ function Signup() {
                     type="button"
                     onClick={handleDomainCheck}
                     disabled={checkingDomain || !formData.domain}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50"
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {checkingDomain ? 'Verificando...' : 'Verificar'}
+                    {checkingDomain ? (
+                      <span className="flex items-center gap-2">
+                        <span className="animate-spin">⏳</span>
+                        Verificando...
+                      </span>
+                    ) : (
+                      'Verificar'
+                    )}
                   </button>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  Seu acesso será: {formData.domain || 'seu-dominio'}.localhost
+                  Seu acesso será: <span className="font-medium">{formData.domain || 'seu-dominio'}.localhost</span>
                 </p>
-                {domainAvailable === true && (
-                  <p className="text-sm text-green-600 mt-1">✓ Domínio disponível</p>
+                {checkingDomain && (
+                  <p className="text-sm text-blue-600 mt-1">⏳ Verificando disponibilidade...</p>
                 )}
-                {domainAvailable === false && (
-                  <p className="text-sm text-red-600 mt-1">✗ Domínio já está em uso</p>
+                {!checkingDomain && domainAvailable === true && (
+                  <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                    <span>✓</span> Domínio disponível
+                  </p>
+                )}
+                {!checkingDomain && domainAvailable === false && (
+                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                    <span>✗</span> {fieldErrors.domain || 'Domínio já está em uso'}
+                  </p>
                 )}
               </div>
             </div>
@@ -280,11 +435,23 @@ function Signup() {
                   onChange={(e) =>
                     setFormData({ ...formData, admin_email: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    emailValid === false
+                      ? 'border-red-500'
+                      : emailValid === true
+                      ? 'border-green-500'
+                      : 'border-gray-300'
+                  }`}
                   placeholder="seu@email.com"
                   autoComplete="email"
                   required
                 />
+                {emailValid === false && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.admin_email}</p>
+                )}
+                {emailValid === true && (
+                  <p className="text-sm text-green-600 mt-1">✓ Email válido</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -298,15 +465,58 @@ function Signup() {
                   onChange={(e) =>
                     setFormData({ ...formData, admin_password: e.target.value })
                   }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    fieldErrors.admin_password
+                      ? 'border-red-500'
+                      : formData.admin_password && passwordStrength.score >= 3
+                      ? 'border-green-500'
+                      : 'border-gray-300'
+                  }`}
                   placeholder="Mínimo 8 caracteres"
                   autoComplete="new-password"
                   minLength={8}
                   required
                 />
-                <p className="text-sm text-gray-500 mt-1">
-                  Mínimo de 8 caracteres
-                </p>
+                {formData.admin_password && (
+                  <div className="mt-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            passwordStrength.color === 'red'
+                              ? 'bg-red-500'
+                              : passwordStrength.color === 'orange'
+                              ? 'bg-orange-500'
+                              : passwordStrength.color === 'yellow'
+                              ? 'bg-yellow-500'
+                              : 'bg-green-500'
+                          }`}
+                          style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
+                        />
+                      </div>
+                      <span className={`text-sm font-medium ${
+                        passwordStrength.color === 'red'
+                          ? 'text-red-600'
+                          : passwordStrength.color === 'orange'
+                          ? 'text-orange-600'
+                          : passwordStrength.color === 'yellow'
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                      }`}>
+                        {passwordStrength.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Use letras maiúsculas, minúsculas, números e caracteres especiais para uma senha mais forte
+                    </p>
+                  </div>
+                )}
+                {fieldErrors.admin_password && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.admin_password}</p>
+                )}
+                {!formData.admin_password && (
+                  <p className="text-sm text-gray-500 mt-1">Mínimo de 8 caracteres</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -378,14 +588,27 @@ function Signup() {
                   name="empresa_cnpj"
                   id="empresa_cnpj"
                   value={formData.empresa_cnpj}
-                  onChange={(e) =>
-                    setFormData({ ...formData, empresa_cnpj: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => {
+                    const formatted = formatCNPJ(e.target.value);
+                    setFormData({ ...formData, empresa_cnpj: formatted });
+                  }}
+                  maxLength={18}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
+                    cnpjValid === false
+                      ? 'border-red-500'
+                      : cnpjValid === true
+                      ? 'border-green-500'
+                      : 'border-gray-300'
+                  }`}
                   placeholder="12.345.678/0001-90"
                   autoComplete="off"
-                  pattern="[0-9]{2}\.[0-9]{3}\.[0-9]{3}/[0-9]{4}-[0-9]{2}"
                 />
+                {cnpjValid === false && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.empresa_cnpj}</p>
+                )}
+                {cnpjValid === true && (
+                  <p className="text-sm text-green-600 mt-1">✓ CNPJ válido</p>
+                )}
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -411,10 +634,24 @@ function Signup() {
           <div className="border-t pt-6">
             <button
               type="submit"
-              disabled={loading || domainAvailable === false}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={
+                loading ||
+                domainAvailable === false ||
+                Object.keys(fieldErrors).length > 0 ||
+                (formData.admin_password && passwordStrength.score < 2) ||
+                emailValid === false ||
+                cnpjValid === false
+              }
+              className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? 'Criando conta...' : 'Criar Conta'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin">⏳</span>
+                  Criando conta...
+                </span>
+              ) : (
+                'Criar Conta'
+              )}
             </button>
             <p className="text-center text-sm text-gray-600 mt-4">
               Já tem uma conta?{' '}
