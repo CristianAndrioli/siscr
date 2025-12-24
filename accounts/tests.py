@@ -1,7 +1,7 @@
 """
 Testes para autenticação e contas
 """
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -13,6 +13,14 @@ from subscriptions.models import Plan
 User = get_user_model()
 
 
+@override_settings(
+    RATELIMIT_ENABLE=False,  # Desabilitar rate limiting nos testes
+    CACHES={
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+)
 class AuthenticationTests(TestCase):
     """Testes de autenticação"""
     
