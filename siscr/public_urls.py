@@ -8,12 +8,22 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 from payments import webhooks
 from accounts import views as accounts_views
 
 urlpatterns = [
     # Admin (apenas para superusuários do schema público)
     path('admin/', admin.site.urls),
+    
+    # Swagger/OpenAPI Documentation
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # API de login multi-tenant (aceita domínio via header ou body)
     # Esta rota funciona tanto no schema público quanto no tenant

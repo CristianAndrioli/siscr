@@ -36,3 +36,6 @@ stripe>=7.0.0
 # Monitoring
 sentry-sdk>=1.32.0
 
+# API Documentation
+drf-spectacular>=0.27.0
+

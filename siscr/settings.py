@@ -52,6 +52,7 @@ SHARED_APPS = [
     # Third-party apps (shared):
     'rest_framework',
     'rest_framework_simplejwt',
+    'drf_spectacular',  # Swagger/OpenAPI documentation
     'corsheaders',
     'guardian',
     'django_extensions',
@@ -277,6 +278,32 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# ============================================
+# SPECTACULAR SETTINGS (Swagger/OpenAPI)
+# ============================================
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'SISCR API',
+    'DESCRIPTION': 'Sistema de Gestão Empresarial - API Documentation',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/',
+    'AUTHENTICATION_WHITELIST': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'APPEND_COMPONENTS': {
+        'securitySchemes': {
+            'Bearer': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            }
+        }
+    },
+    'SECURITY': [{'Bearer': []}],
 }
 
 # ============================================
