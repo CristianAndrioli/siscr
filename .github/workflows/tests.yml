@@ -220,8 +220,17 @@ jobs:
           echo "📄 Verificando package.json:"
           cat package.json | head -30
           echo ""
-          echo "📦 Executando npm ci..."
-          npm ci
+          echo "📄 Verificando se package-lock.json existe:"
+          if [ -f "package-lock.json" ]; then
+            echo "✅ package-lock.json encontrado, usando npm ci (instalação limpa)"
+            npm ci
+          else
+            echo "⚠️ package-lock.json não encontrado, gerando e instalando..."
+            echo "📦 Executando npm install para gerar package-lock.json..."
+            npm install
+            echo ""
+            echo "💡 Dica: Considere commitar o package-lock.json para builds mais rápidos e reproduzíveis"
+          fi
           echo ""
           echo "✅ Dependências instaladas"
           echo "📦 Pacotes instalados:"

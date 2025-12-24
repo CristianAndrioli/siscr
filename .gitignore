@@ -83,8 +83,8 @@ yarn-error.log*
 node_modules/
 npm-debug.log
 yarn-error.log
-package-lock.json
-yarn.lock
+# package-lock.json - DEVE estar no repositório para builds reproduzíveis
+# yarn.lock
 
 # Frontend React
 frontend/node_modules/
