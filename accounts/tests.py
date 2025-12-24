@@ -151,6 +151,13 @@ class AuthenticationTests(TestCase):
             'domain': 'test.localhost'
         }
         login_response = self.client.post(login_url, login_data, format='json')
+        
+        # Verificar se login foi bem-sucedido
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK, 
+                        f"Login falhou: {login_response.data}")
+        self.assertIn('access', login_response.data, 
+                     f"Resposta do login não contém 'access': {login_response.data}")
+        
         access_token = login_response.data['access']
         
         # Verificar token
