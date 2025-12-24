@@ -170,3 +170,20 @@ secrets.json
 *.cert
 .secrets/
 
+# Terraform
+terraform/environments/*/terraform.tfvars
+terraform/environments/*/.terraform/
+terraform/environments/*/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+

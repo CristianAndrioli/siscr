@@ -1,0 +1,5 @@
+# Exemplo de arquivo terraform.tfvars para UAT
+# Copie este arquivo para terraform.tfvars e preencha com seus valores
+
+aws_key_pair_name = "siscr-keypair"
+
