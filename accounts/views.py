@@ -538,17 +538,50 @@ def select_empresa_filial(request):
         )
 
 
-@api_view(['GET'])
+@api_view(['GET', 'PUT', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def current_user(request):
     """
-    Retorna informações do usuário atual e contexto (tenant, empresa, filial)
+    GET: Retorna informações do usuário atual e contexto (tenant, empresa, filial)
+    PUT/PATCH: Atualiza informações do usuário e perfil
     """
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
         profile = UserProfile.objects.create(user=request.user)
     
+    if request.method in ['PUT', 'PATCH']:
+        # Atualizar dados do usuário
+        user_data = request.data.get('user', {})
+        if 'first_name' in user_data:
+            request.user.first_name = user_data['first_name']
+        if 'last_name' in user_data:
+            request.user.last_name = user_data['last_name']
+        if 'email' in user_data:
+            request.user.email = user_data['email']
+        request.user.save()
+        
+        # Atualizar dados do perfil
+        profile_data = request.data.get('profile', {})
+        if 'phone' in profile_data:
+            profile.phone = profile_data['phone']
+        profile.save()
+        
+        return Response({
+            'message': 'Perfil atualizado com sucesso',
+            'user': {
+                'id': request.user.id,
+                'username': request.user.username,
+                'email': request.user.email,
+                'first_name': request.user.first_name,
+                'last_name': request.user.last_name,
+            },
+            'profile': {
+                'phone': profile.phone or '',
+            },
+        }, status=status.HTTP_200_OK)
+    
+    # GET - retornar dados
     response_data = {
         'user': {
             'id': request.user.id,
