@@ -40,25 +40,73 @@ jobs:
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Debug - Listar arquivos do projeto
+        run: |
+          echo "📁 Estrutura do projeto:"
+          ls -la
+          echo ""
+          echo "📁 Conteúdo do diretório raiz:"
+          find . -maxdepth 2 -type f -name "*.py" | head -10
+          echo ""
+          echo "📁 Verificando requirements.txt:"
+          if [ -f "requirements.txt" ]; then
+            echo "✅ requirements.txt encontrado"
+            head -5 requirements.txt
+          else
+            echo "❌ requirements.txt NÃO encontrado"
+          fi
 
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
+
+      - name: Debug - Versões do Python
+        run: |
+          echo "🐍 Python version:"
+          python --version
+          echo ""
+          echo "📦 pip version:"
+          pip --version
+          echo ""
+          echo "📁 Python path:"
+          which python
 
       - name: Instalar dependências do sistema
         run: |
+          echo "📦 Atualizando pacotes do sistema..."
           sudo apt-get update
+          echo "📦 Instalando postgresql-client e libpq-dev..."
           sudo apt-get install -y postgresql-client libpq-dev
+          echo "✅ Dependências do sistema instaladas"
+          echo ""
+          echo "🔍 Verificando instalação:"
+          psql --version || echo "⚠️ psql não encontrado no PATH"
 
       - name: Instalar dependências Python
         run: |
+          echo "📦 Atualizando pip..."
           python -m pip install --upgrade pip
+          echo ""
+          echo "📦 Instalando dependências do requirements.txt..."
+          echo "📄 Conteúdo do requirements.txt (primeiras 10 linhas):"
+          head -10 requirements.txt
+          echo ""
           pip install -r requirements.txt
+          echo ""
+          echo "✅ Dependências Python instaladas"
+          echo "📦 Pacotes instalados:"
+          pip list | head -20
 
       - name: Configurar variáveis de ambiente
         run: |
+          echo "🔧 Configurando variáveis de ambiente..."
           echo "DB_NAME=siscr_test" >> $GITHUB_ENV
           echo "DB_USER=postgres" >> $GITHUB_ENV
           echo "DB_PASSWORD=postgres" >> $GITHUB_ENV
@@ -69,21 +117,36 @@ jobs:
           echo "ENVIRONMENT=test" >> $GITHUB_ENV
           echo "CELERY_BROKER_URL=redis://localhost:6379/0" >> $GITHUB_ENV
           echo "CELERY_RESULT_BACKEND=redis://localhost:6379/0" >> $GITHUB_ENV
+          echo "✅ Variáveis de ambiente configuradas"
+          echo ""
+          echo "🔍 Verificando conexão com PostgreSQL..."
+          pg_isready -h localhost -p 5432 -U postgres || echo "⚠️ PostgreSQL ainda não está pronto"
 
       - name: Executar migrations
         run: |
-          python manage.py migrate_schemas --shared --noinput || true
+          echo "🔄 Executando migrations..."
+          python manage.py migrate_schemas --shared --noinput || echo "⚠️ Algumas migrations falharam (continuando...)"
+          echo "✅ Migrations concluídas"
 
       - name: Executar testes unitários
         run: |
+          echo "🧪 Executando testes unitários do Django..."
+          echo "📊 Verbosidade: 2 (detalhado)"
           python manage.py test --verbosity=2 --noinput
+          echo ""
+          echo "✅ Testes concluídos com sucesso!"
         continue-on-error: false
 
       - name: Verificar cobertura (opcional)
         run: |
+          echo "📊 Instalando coverage..."
           pip install coverage
+          echo ""
+          echo "📊 Executando testes com coverage..."
           coverage run --source='.' manage.py test
-          coverage report --fail-under=70 || true # Falha se cobertura < 70%
+          echo ""
+          echo "📊 Relatório de cobertura:"
+          coverage report --fail-under=70 || echo "⚠️ Cobertura abaixo de 70% (não falha o build)"
 
   test-frontend:
     name: Testes Frontend (React)
@@ -92,31 +155,116 @@ jobs:
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Debug - Verificar estrutura do frontend
+        run: |
+          echo "📁 Estrutura do diretório frontend:"
+          if [ -d "frontend" ]; then
+            echo "✅ Diretório frontend existe"
+            ls -la frontend/ | head -20
+            echo ""
+            echo "📄 Verificando package.json:"
+            if [ -f "frontend/package.json" ]; then
+              echo "✅ package.json encontrado"
+              cat frontend/package.json | head -20
+            else
+              echo "❌ package.json NÃO encontrado"
+            fi
+            echo ""
+            echo "📄 Verificando package-lock.json:"
+            if [ -f "frontend/package-lock.json" ]; then
+              echo "✅ package-lock.json encontrado"
+              ls -lh frontend/package-lock.json
+            else
+              echo "❌ package-lock.json NÃO encontrado"
+              echo "⚠️ Tentando gerar package-lock.json..."
+            fi
+          else
+            echo "❌ Diretório frontend NÃO existe"
+            exit 1
+          fi
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          # Cache será configurado manualmente se package-lock.json existir
+
+      - name: Configurar cache do npm (se package-lock.json existir)
+        if: hashFiles('frontend/package-lock.json') != ''
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+        continue-on-error: true # Não falha se o cache não funcionar
+
+      - name: Debug - Versões do Node.js
+        run: |
+          echo "📦 Node.js version:"
+          node --version
+          echo ""
+          echo "📦 npm version:"
+          npm --version
+          echo ""
+          echo "📁 Node.js path:"
+          which node
 
       - name: Instalar dependências
         working-directory: ./frontend
-        run: npm ci
+        run: |
+          echo "📦 Instalando dependências do frontend..."
+          echo "📄 Verificando package.json:"
+          cat package.json | head -30
+          echo ""
+          echo "📦 Executando npm ci..."
+          npm ci
+          echo ""
+          echo "✅ Dependências instaladas"
+          echo "📦 Pacotes instalados:"
+          npm list --depth=0 | head -20
 
       - name: Executar linter
         working-directory: ./frontend
-        run: npm run lint || true # Não falha o build se houver warnings
+        run: |
+          echo "🔍 Executando linter..."
+          if npm run lint 2>&1; then
+            echo "✅ Linter passou sem erros"
+          else
+            echo "⚠️ Linter encontrou problemas (não falha o build)"
+          fi
 
       - name: Build do frontend
         working-directory: ./frontend
-        run: npm run build
+        run: |
+          echo "🏗️ Executando build do frontend..."
+          echo "📄 Scripts disponíveis no package.json:"
+          npm run --silent 2>&1 | grep -E "^\s+\w+" || true
+          echo ""
+          npm run build
+          echo ""
+          echo "✅ Build concluído"
+          echo "📁 Conteúdo do diretório após build:"
+          ls -la | head -20
 
       - name: Verificar build
         working-directory: ./frontend
         run: |
-          if [ ! -d "dist" ]; then
-            echo "Erro: Build não gerou diretório dist"
+          echo "🔍 Verificando resultado do build..."
+          if [ -d "dist" ]; then
+            echo "✅ Diretório dist criado com sucesso"
+            echo "📁 Conteúdo do dist:"
+            ls -lah dist/ | head -20
+            echo ""
+            echo "📊 Tamanho do build:"
+            du -sh dist/
+          else
+            echo "❌ Erro: Build não gerou diretório dist"
+            echo "📁 Conteúdo do diretório atual:"
+            ls -la
             exit 1
           fi
 
@@ -127,27 +275,60 @@ jobs:
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      - name: Debug - Versões
+        run: |
+          echo "🐍 Python version:"
+          python --version
+          echo ""
+          echo "📦 pip version:"
+          pip --version
+
       - name: Instalar ferramentas de lint
         run: |
+          echo "📦 Instalando ferramentas de linting..."
           pip install flake8 black isort
-          # Adicione outras ferramentas conforme necessário
+          echo ""
+          echo "✅ Ferramentas instaladas:"
+          echo "📦 black version:"
+          black --version
+          echo "📦 isort version:"
+          isort --version
+          echo "📦 flake8 version:"
+          flake8 --version
 
       - name: Executar Black (formatação)
         run: |
-          black --check . || true
+          echo "🎨 Verificando formatação com Black..."
+          if black --check . 2>&1; then
+            echo "✅ Black: código está formatado corretamente"
+          else
+            echo "⚠️ Black: código precisa de formatação (não falha o build)"
+          fi
 
       - name: Executar isort (imports)
         run: |
-          isort --check-only . || true
+          echo "📦 Verificando ordenação de imports com isort..."
+          if isort --check-only . 2>&1; then
+            echo "✅ isort: imports estão ordenados corretamente"
+          else
+            echo "⚠️ isort: imports precisam ser ordenados (não falha o build)"
+          fi
 
       - name: Executar flake8 (linting)
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || true
+          echo "🔍 Executando flake8 (erros críticos)..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "⚠️ Flake8 encontrou erros críticos (não falha o build)"
+          echo ""
+          echo "🔍 Executando flake8 (análise completa)..."
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || echo "⚠️ Flake8 encontrou problemas (não falha o build)"
+          echo ""
+          echo "✅ Linting concluído"
 
