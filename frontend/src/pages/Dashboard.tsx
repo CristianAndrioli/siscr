@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { metricsService, type MetricsResponse, type Quota } from '../services/metrics';
 
 interface Shipment {
   id: string;
@@ -26,6 +27,27 @@ function Dashboard() {
   ]);
 
   const [filteredShipments, setFilteredShipments] = useState<Shipment[]>(shipments);
+  const [metrics, setMetrics] = useState<MetricsResponse | null>(null);
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
+  const [errorMetrics, setErrorMetrics] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        setLoadingMetrics(true);
+        const data = await metricsService.getMetrics();
+        setMetrics(data);
+        setErrorMetrics(null);
+      } catch (err: any) {
+        console.error('Erro ao carregar métricas:', err);
+        setErrorMetrics(err.response?.data?.error || 'Erro ao carregar métricas');
+      } finally {
+        setLoadingMetrics(false);
+      }
+    };
+
+    loadMetrics();
+  }, []);
 
   const updateDashboard = (data: Shipment[]): DashboardStats => {
     const total = data.length;
@@ -59,8 +81,129 @@ function Dashboard() {
     }
   };
 
+  const getQuotaColor = (quota: Quota): string => {
+    if (quota.critical) return 'bg-red-500';
+    if (quota.warning) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
+
+  const getQuotaTextColor = (quota: Quota): string => {
+    if (quota.critical) return 'text-red-600';
+    if (quota.warning) return 'text-yellow-600';
+    return 'text-green-600';
+  };
+
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('pt-BR');
+  };
+
   return (
     <div className="space-y-8">
+      {/* Seção de Métricas e Quotas */}
+      {metrics && (
+        <div className="bg-white p-8 rounded-xl shadow-2xl">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">Uso e Quotas</h2>
+            {metrics.subscription && (
+              <div className="text-right">
+                <p className="text-sm text-gray-600">Plano Atual</p>
+                <p className="text-lg font-semibold text-indigo-600">{metrics.subscription.plan_name}</p>
+                {metrics.subscription.is_trial && (
+                  <span className="inline-block mt-1 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded">
+                    Trial
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {loadingMetrics ? (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <p className="mt-2 text-gray-600">Carregando métricas...</p>
+            </div>
+          ) : errorMetrics ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {errorMetrics}
+            </div>
+          ) : metrics.quotas.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {metrics.quotas.map((quota) => (
+                <div key={quota.type} className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">{quota.name}</h3>
+                    <span className={`text-sm font-bold ${getQuotaTextColor(quota)}`}>
+                      {quota.percentage}%
+                    </span>
+                  </div>
+                  
+                  <div className="mb-2">
+                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                      <span>{quota.used} {quota.unit || ''}</span>
+                      <span>{quota.limit} {quota.unit || ''}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div
+                        className={`h-3 rounded-full transition-all duration-300 ${getQuotaColor(quota)}`}
+                        style={{ width: `${Math.min(100, quota.percentage)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {quota.warning && !quota.critical && (
+                    <p className="text-xs text-yellow-600 mt-2">
+                      ⚠️ Uso próximo do limite ({quota.percentage}%)
+                    </p>
+                  )}
+                  {quota.critical && (
+                    <p className="text-xs text-red-600 mt-2">
+                      🚨 Limite quase atingido ({quota.percentage}%)
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Nenhuma métrica disponível
+            </div>
+          )}
+
+          {metrics.subscription && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Status</p>
+                  <p className={`font-semibold ${
+                    metrics.subscription.is_active ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {metrics.subscription.is_active ? 'Ativa' : 'Inativa'}
+                  </p>
+                </div>
+                {metrics.subscription.current_period_end && (
+                  <div>
+                    <p className="text-gray-600">Próxima Renovação</p>
+                    <p className="font-semibold text-gray-800">
+                      {formatDate(metrics.subscription.current_period_end)}
+                    </p>
+                  </div>
+                )}
+                {metrics.subscription.expires_at && (
+                  <div>
+                    <p className="text-gray-600">Expira em</p>
+                    <p className="font-semibold text-gray-800">
+                      {formatDate(metrics.subscription.expires_at)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cards de Estatísticas de Movimentações */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Card Total */}
         <div 

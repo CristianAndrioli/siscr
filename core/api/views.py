@@ -124,6 +124,134 @@ def api_root(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def metrics(request):
+    """
+    Retorna métricas de uso e quotas do tenant atual
+    """
+    from django.db import connection
+    from subscriptions.models import Subscription, QuotaUsage
+    from django_tenants.utils import schema_context
+    
+    tenant = getattr(connection, 'tenant', None)
+    if not tenant:
+        # Tentar buscar pelo usuário (schema público)
+        with schema_context('public'):
+            from accounts.models import UserProfile
+            try:
+                profile = request.user.profile
+                tenant = profile.current_tenant
+            except UserProfile.DoesNotExist:
+                return Response(
+                    {'error': 'Tenant não identificado'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+    
+    if not tenant:
+        return Response(
+            {'error': 'Tenant não identificado'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Buscar assinatura e quota usage (sempre no schema público)
+    with schema_context('public'):
+        subscription = Subscription.objects.filter(tenant=tenant).first()
+        quota_usage = QuotaUsage.objects.filter(tenant=tenant).first()
+        
+        if not subscription:
+            return Response({
+                'subscription': None,
+                'quota_usage': None,
+                'message': 'Nenhuma assinatura encontrada'
+            })
+        
+        plan = subscription.plan
+        
+        # Calcular métricas de quota
+        quotas = []
+        
+        if quota_usage:
+            # Usuários
+            users_percent = (quota_usage.users_count / plan.max_users * 100) if plan.max_users > 0 else 0
+            quotas.append({
+                'type': 'users',
+                'name': 'Usuários',
+                'used': quota_usage.users_count,
+                'limit': plan.max_users,
+                'percentage': min(100, round(users_percent, 1)),
+                'warning': users_percent >= 80,
+                'critical': users_percent >= 95,
+            })
+            
+            # Empresas
+            empresas_percent = (quota_usage.empresas_count / plan.max_empresas * 100) if plan.max_empresas > 0 else 0
+            quotas.append({
+                'type': 'empresas',
+                'name': 'Empresas',
+                'used': quota_usage.empresas_count,
+                'limit': plan.max_empresas,
+                'percentage': min(100, round(empresas_percent, 1)),
+                'warning': empresas_percent >= 80,
+                'critical': empresas_percent >= 95,
+            })
+            
+            # Filiais
+            filiais_percent = (quota_usage.filiais_count / plan.max_filiais * 100) if plan.max_filiais > 0 else 0
+            quotas.append({
+                'type': 'filiais',
+                'name': 'Filiais',
+                'used': quota_usage.filiais_count,
+                'limit': plan.max_filiais,
+                'percentage': min(100, round(filiais_percent, 1)),
+                'warning': filiais_percent >= 80,
+                'critical': filiais_percent >= 95,
+            })
+            
+            # Storage (converter MB para GB)
+            storage_gb_used = quota_usage.storage_mb / 1024
+            storage_percent = (storage_gb_used / plan.max_storage_gb * 100) if plan.max_storage_gb > 0 else 0
+            quotas.append({
+                'type': 'storage',
+                'name': 'Armazenamento',
+                'used': round(storage_gb_used, 2),
+                'limit': plan.max_storage_gb,
+                'used_raw': quota_usage.storage_mb,
+                'limit_raw': plan.max_storage_gb * 1024,
+                'unit': 'GB',
+                'percentage': min(100, round(storage_percent, 1)),
+                'warning': storage_percent >= 80,
+                'critical': storage_percent >= 95,
+            })
+        
+        return Response({
+            'subscription': {
+                'id': subscription.id,
+                'plan_name': plan.name,
+                'plan_slug': plan.slug,
+                'status': subscription.status,
+                'is_active': subscription.is_active,
+                'is_trial': subscription.is_trial,
+                'expires_at': subscription.expires_at.isoformat() if subscription.expires_at else None,
+                'current_period_start': subscription.current_period_start.isoformat() if subscription.current_period_start else None,
+                'current_period_end': subscription.current_period_end.isoformat() if subscription.current_period_end else None,
+            },
+            'plan': {
+                'id': plan.id,
+                'name': plan.name,
+                'description': plan.description,
+                'price_monthly': str(plan.price_monthly),
+                'max_users': plan.max_users,
+                'max_empresas': plan.max_empresas,
+                'max_filiais': plan.max_filiais,
+                'max_storage_gb': plan.max_storage_gb,
+            },
+            'quotas': quotas,
+            'has_warnings': any(q.get('warning', False) for q in quotas),
+            'has_critical': any(q.get('critical', False) for q in quotas),
+        })
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def backup_tenant(request):
