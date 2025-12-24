@@ -166,12 +166,23 @@ function Perfil() {
     );
   }
 
-  if (!data) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-red-600">Erro ao carregar perfil</p>
-          {error && <p className="text-sm text-gray-500 mt-2">{error}</p>}
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando perfil...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md">
+          <p className="text-red-600 text-lg font-semibold mb-2">Erro ao carregar perfil</p>
+          {error && <p className="text-sm text-gray-500">{error}</p>}
         </div>
       </div>
     );

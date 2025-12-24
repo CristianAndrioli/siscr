@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { paymentsService } from '../services/payments';
 import { publicService, type Plan } from '../services/public';
 import { authService } from '../services/auth';
+import ErrorMessage from '../components/common/ErrorMessage';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 
 function Checkout() {
   const [searchParams] = useSearchParams();
@@ -228,9 +230,7 @@ function Checkout() {
 
               {/* Erro */}
               {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-                  {error}
-                </div>
+                <ErrorMessage message={error} onClose={() => setError('')} />
               )}
 
               {/* Botão de Checkout */}
