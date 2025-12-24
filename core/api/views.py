@@ -3,22 +3,107 @@ API Views for core app
 """
 from rest_framework import viewsets
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse, Http404
 from django.core.management import call_command
+from django.db import connection
+from django.core.cache import cache
 from accounts.permissions import IsTenantAdmin
 from django_tenants.utils import schema_context
 from tenants.models import Tenant
 from django.utils import timezone
+from django.conf import settings
 import os
 import tempfile
 import glob
 from datetime import datetime
+import redis
 
 User = get_user_model()
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request):
+    """
+    Health check endpoint para monitoramento e deploy
+    Verifica status de serviços críticos (DB, Redis, etc.)
+    """
+    health_status = {
+        'status': 'healthy',
+        'timestamp': timezone.now().isoformat(),
+        'version': '1.0.0',
+        'services': {}
+    }
+    
+    overall_healthy = True
+    
+    # Verificar banco de dados
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        health_status['services']['database'] = {
+            'status': 'healthy',
+            'message': 'Database connection successful'
+        }
+    except Exception as e:
+        overall_healthy = False
+        health_status['services']['database'] = {
+            'status': 'unhealthy',
+            'message': f'Database connection failed: {str(e)}'
+        }
+    
+    # Verificar Redis/Cache
+    try:
+        cache.set('health_check', 'ok', 10)
+        cache_result = cache.get('health_check')
+        if cache_result == 'ok':
+            health_status['services']['cache'] = {
+                'status': 'healthy',
+                'message': 'Cache (Redis) connection successful'
+            }
+        else:
+            raise Exception('Cache test failed')
+    except Exception as e:
+        overall_healthy = False
+        health_status['services']['cache'] = {
+            'status': 'unhealthy',
+            'message': f'Cache (Redis) connection failed: {str(e)}'
+        }
+    
+    # Verificar configurações básicas
+    try:
+        required_settings = ['SECRET_KEY', 'DATABASES']
+        missing_settings = []
+        for setting in required_settings:
+            if not hasattr(settings, setting) or not getattr(settings, setting, None):
+                missing_settings.append(setting)
+        
+        if missing_settings:
+            raise Exception(f'Missing required settings: {", ".join(missing_settings)}')
+        
+        health_status['services']['configuration'] = {
+            'status': 'healthy',
+            'message': 'Required settings are configured'
+        }
+    except Exception as e:
+        overall_healthy = False
+        health_status['services']['configuration'] = {
+            'status': 'unhealthy',
+            'message': f'Configuration check failed: {str(e)}'
+        }
+    
+    # Atualizar status geral
+    health_status['status'] = 'healthy' if overall_healthy else 'unhealthy'
+    
+    # Retornar status HTTP apropriado
+    http_status = status.HTTP_200_OK if overall_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
+    
+    return Response(health_status, status=http_status)
 
 
 @api_view(['GET'])
@@ -33,6 +118,7 @@ def api_root(request):
         'user': request.user.username,
         'endpoints': {
             'auth': '/api/auth/',
+            'health': '/api/health/',
             # Add more endpoints as they are created
         }
     })

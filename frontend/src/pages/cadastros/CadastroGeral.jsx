@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { pessoasService } from '../../services/cadastros/pessoas';
 import { Input, Select, Textarea, Button, Alert } from '../../components/common';
@@ -43,37 +43,42 @@ function CadastroGeral() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const carregarProximoCodigo = useCallback(async () => {
+    try {
+      const response = await pessoasService.proximoCodigo();
+      setFormData((prev) => ({ ...prev, codigo_cadastro: response.proximo_codigo || 'NOVO' }));
+    } catch (error) {
+      console.error('Erro ao carregar próximo código:', error);
+      setError('Erro ao carregar próximo código');
+    }
+  }, [setFormData]);
+
+  const carregarDados = useCallback(async () => {
+    if (!codigo) return;
+    
+    try {
+      setLoading(true);
+      setError('');
+      const dados = await pessoasService.get(codigo);
+      setFormData({
+        ...dados,
+        tipo_classificacao: dados.tipo === 'PF' ? 'PF' : 'PJ',
+      });
+    } catch (error) {
+      console.error('Erro ao carregar dados do cadastro:', error);
+      setError('Erro ao carregar dados do cadastro');
+    } finally {
+      setLoading(false);
+    }
+  }, [codigo, setFormData]);
+
   useEffect(() => {
     if (editando) {
       carregarDados();
     } else {
       carregarProximoCodigo();
     }
-  }, [codigo]);
-
-  const carregarProximoCodigo = async () => {
-    try {
-      const response = await pessoasService.proximoCodigo();
-      setFormData((prev) => ({ ...prev, codigo_cadastro: response.proximo_codigo || 'NOVO' }));
-    } catch (err) {
-      console.error('Erro ao carregar próximo código:', err);
-    }
-  };
-
-  const carregarDados = async () => {
-    try {
-      setLoading(true);
-      const dados = await pessoasService.get(codigo);
-      setFormData({
-        ...dados,
-        tipo_classificacao: dados.tipo === 'PF' ? 'PF' : 'PJ',
-      });
-    } catch (err) {
-      setError('Erro ao carregar dados do cadastro');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [editando, carregarDados, carregarProximoCodigo]);
 
   // Formatação automática de campos
   const handleFormattedChange = (e) => {
