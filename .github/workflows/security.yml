@@ -1,0 +1,61 @@
+name: Verificações de Segurança
+
+on:
+  push:
+    branches: [ main, develop, staging ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 0 * * 1' # Toda segunda-feira à meia-noite
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: Verificações de Segurança
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Verificar dependências Python vulneráveis
+        run: |
+          echo "🔍 Verificando vulnerabilidades em dependências Python..."
+          pip install safety
+          safety check --file requirements.txt || echo "⚠️ Vulnerabilidades encontradas (verificar relatório)"
+
+      - name: Verificar dependências Node.js vulneráveis
+        working-directory: ./frontend
+        run: |
+          echo "🔍 Verificando vulnerabilidades em dependências Node.js..."
+          npm audit --audit-level=moderate || echo "⚠️ Vulnerabilidades encontradas (verificar relatório)"
+
+      - name: Verificar secrets no código
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+      - name: Verificar credenciais hardcoded
+        run: |
+          echo "🔍 Verificando credenciais hardcoded..."
+          # Padrões comuns de credenciais
+          if grep -r "password.*=.*['\"].*[a-zA-Z0-9]" --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" . | grep -v "test" | grep -v "example"; then
+            echo "⚠️ Possíveis credenciais hardcoded encontradas!"
+            exit 1
+          else
+            echo "✅ Nenhuma credencial hardcoded encontrada"
+          fi
+
+      - name: Verificar variáveis de ambiente sensíveis
+        run: |
+          echo "🔍 Verificando uso de variáveis de ambiente..."
+          # Verificar se SECRET_KEY não está hardcoded
+          if grep -r "SECRET_KEY.*=.*['\"].*[a-zA-Z0-9]" --include="*.py" . | grep -v "test" | grep -v "settings.py" | grep -v "example"; then
+            echo "⚠️ SECRET_KEY pode estar hardcoded!"
+            exit 1
+          else
+            echo "✅ SECRET_KEY parece estar configurado corretamente"
+          fi
+

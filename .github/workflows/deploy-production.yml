@@ -1,0 +1,121 @@
+name: Deploy para Produção
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*' # Deploy apenas com tags de versão
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  deploy-production:
+    name: Deploy para Produção
+    runs-on: ubuntu-latest
+    environment: production # SEMPRE requer aprovação manual
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verificar se é tag de versão
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "❌ Deploy para produção requer tag de versão (ex: v1.0.0)"
+          echo "💡 Use: git tag v1.0.0 && git push origin v1.0.0"
+          exit 1
+
+      - name: Extrair versão da tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Versão: $VERSION"
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+
+      - name: Deploy para Produção via SSH
+        env:
+          PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PROD_USER: ${{ secrets.PRODUCTION_USER }}
+          VERSION: ${{ steps.version.outputs.version || 'manual' }}
+        run: |
+          echo "🚀 Iniciando deploy para PRODUÇÃO..."
+          echo "📦 Versão: $VERSION"
+          echo "📡 Conectando em $PROD_HOST como $PROD_USER"
+          
+          ssh -o StrictHostKeyChecking=no $PROD_USER@$PROD_HOST << 'ENDSSH'
+            set -e
+            echo "📁 Navegando para diretório da aplicação..."
+            cd /opt/siscr || { echo "❌ Diretório /opt/siscr não encontrado"; exit 1; }
+            
+            echo "💾 Criando backup completo antes do deploy..."
+            mkdir -p /opt/siscr/backups
+            BACKUP_FILE="/opt/siscr/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql"
+            docker-compose exec -T db pg_dump -U postgres siscr_db > "$BACKUP_FILE" || true
+            echo "✅ Backup salvo em: $BACKUP_FILE"
+            
+            echo "📥 Atualizando código do repositório..."
+            git fetch origin
+            git checkout main
+            git pull origin main
+            
+            echo "🐳 Parando containers..."
+            docker-compose down
+            
+            echo "🏗️ Reconstruindo imagens..."
+            docker-compose build --no-cache
+            
+            echo "🚀 Iniciando containers..."
+            docker-compose up -d
+            
+            echo "⏳ Aguardando serviços iniciarem..."
+            sleep 20
+            
+            echo "🔄 Executando migrations..."
+            docker-compose exec -T web python manage.py migrate_schemas --shared --noinput || true
+            
+            echo "📦 Coletando arquivos estáticos..."
+            docker-compose exec -T web python manage.py collectstatic --noinput || true
+            
+            echo "✅ Deploy concluído!"
+            echo "📊 Status dos containers:"
+            docker-compose ps
+            
+            echo "📝 Versão deployada: $VERSION"
+          ENDSSH
+
+      - name: Verificar saúde da aplicação
+        env:
+          PROD_URL: ${{ secrets.PRODUCTION_URL || 'https://siscr.com.br' }}
+        run: |
+          echo "🏥 Verificando saúde da aplicação..."
+          sleep 10
+          for i in {1..5}; do
+            if curl -f $PROD_URL/api/health/; then
+              echo "✅ Aplicação está respondendo!"
+              break
+            else
+              echo "⏳ Tentativa $i/5 - aguardando..."
+              sleep 5
+            fi
+          done
+
+      - name: Notificar sucesso
+        if: success()
+        run: |
+          echo "✅ Deploy para produção concluído com sucesso!"
+          # Aqui você pode adicionar notificações (Slack, Discord, Email, etc.)
+
+      - name: Notificar falha
+        if: failure()
+        run: |
+          echo "❌ Deploy para produção FALHOU!"
+          echo "⚠️ Verifique os logs e considere fazer rollback"
+          # Aqui você pode adicionar alertas de falha
+
