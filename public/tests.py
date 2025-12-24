@@ -6,10 +6,9 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 from django_tenants.utils import schema_context
-from tenants.models import Tenant, Domain
+from tenants.models import Tenant, Domain, Empresa
 from subscriptions.models import Plan, Subscription
 from accounts.models import UserProfile, TenantMembership
-from cadastros.models import Empresa
 
 User = get_user_model()
 

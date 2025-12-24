@@ -58,8 +58,8 @@ class AuthenticationTests(TestCase):
             TenantMembership.objects.create(
                 user=self.user,
                 tenant=self.tenant,
-                is_active=True,
-                is_tenant_admin=True
+                role='admin',
+                is_active=True
             )
             profile.current_tenant = self.tenant
             profile.save()
