@@ -469,6 +469,15 @@ docker-compose up -d --build
 
 ---
 
+## 📚 Documentação
+
+Documentação completa disponível na pasta `docs/`:
+
+- **[Documentação da API](./docs/API_DOCUMENTATION.md)** - Guia completo de todos os endpoints da API
+- **[Guia de Setup para Desenvolvimento](./docs/SETUP_DEVELOPMENT.md)** - Como configurar o ambiente de desenvolvimento
+- **[Guia de Testes](./docs/TESTES.md)** - Como executar e escrever testes
+- **[Roadmap CI/CD](./docs/CI_CD_ROADMAP.md)** - Estratégia de CI/CD e deploy
+
 ## 📞 Suporte
 
 Para problemas ou dúvidas:
