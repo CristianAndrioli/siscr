@@ -67,6 +67,13 @@ class AuthenticationTests(TestCase):
             # Criar usuário no schema do tenant também (necessário para autenticação)
             with schema_context(self.tenant.schema_name):
                 # Criar usuário no schema do tenant com mesma senha
+                User.objects.create_user(
+                    username='testuser',
+                    email='test@example.com',
+                    password='testpass123',
+                    first_name='Test',
+                    last_name='User'
+                )
                 user_tenant = User.objects.create_user(
                     username='testuser',
                     email='test@example.com',
