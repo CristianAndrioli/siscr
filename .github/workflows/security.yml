@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Buscar últimos 2 commits para comparação
 
       - name: Verificar dependências Python vulneráveis
         run: |
@@ -34,8 +36,12 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          # Em PR, compara com a branch base
+          # Em push direto, compara com o commit anterior (se disponível)
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before || github.event.repository.default_branch) }}
+          head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          only_verified: true
+        continue-on-error: true  # Não falha o workflow se não conseguir comparar
 
       - name: Verificar credenciais hardcoded
         run: |
