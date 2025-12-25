@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Observabilidade - SISCR</title>
+    <!-- Tailwind CSS via CDN (apenas para desenvolvimento) -->
+    <!-- Para produção, instale via npm: npm install -D tailwindcss -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
@@ -36,10 +38,11 @@
                     🔄 Atualizar Agora
                 </button>
                 <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()" class="w-4 h-4">
+                    <input type="checkbox" id="auto-refresh" class="w-4 h-4">
                     <span class="text-sm text-gray-600">Auto-refresh (30s)</span>
                 </label>
                 <span class="text-xs text-gray-500" id="last-update">Última atualização: agora</span>
+                <span class="text-xs text-gray-500" id="countdown" style="display: none;">Próximo refresh em: <span id="countdown-seconds">30</span>s</span>
             </div>
         </div>
 
@@ -240,34 +243,44 @@
         </div>
         {% endif %}
 
-        <!-- Gráfico de Erros -->
+        <!-- Análise de Erros Avançada -->
         {% if data.errors_analysis %}
         <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">📉 Análise de Erros</h2>
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">📉 Análise de Erros Avançada</h2>
             {% if data.errors_analysis.error %}
             <p class="text-red-600">{{ data.errors_analysis.error }}</p>
             {% else %}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <canvas id="errorsChart" width="400" height="200"></canvas>
+            <!-- Estatísticas Gerais -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="border rounded-lg p-4 bg-red-50">
+                    <p class="text-sm text-gray-600 mb-1">Total de Erros</p>
+                    <p class="text-2xl font-bold text-red-600">{{ data.errors_analysis.total_recent_errors }}</p>
                 </div>
-                <div class="space-y-4">
-                    <div class="border rounded-lg p-4">
-                        <p class="text-sm text-gray-600 mb-2">Estatísticas Recentes</p>
-                        <div class="space-y-2">
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">Erros (últimas 100 linhas)</span>
-                                <span class="font-bold text-red-600">{{ data.errors_analysis.total_recent_errors }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">Warnings (últimas 100 linhas)</span>
-                                <span class="font-bold text-yellow-600">{{ data.errors_analysis.total_recent_warnings }}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span class="text-gray-600">Linhas analisadas</span>
-                                <span class="font-bold text-gray-600">{{ data.errors_analysis.lines_analyzed }}</span>
-                            </div>
-                        </div>
+                <div class="border rounded-lg p-4 bg-yellow-50">
+                    <p class="text-sm text-gray-600 mb-1">Total de Warnings</p>
+                    <p class="text-2xl font-bold text-yellow-600">{{ data.errors_analysis.total_recent_warnings }}</p>
+                </div>
+                <div class="border rounded-lg p-4 bg-gray-50">
+                    <p class="text-sm text-gray-600 mb-1">Linhas Analisadas</p>
+                    <p class="text-2xl font-bold text-gray-600">{{ data.errors_analysis.lines_analyzed }}</p>
+                </div>
+            </div>
+
+            <!-- Gráficos -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Gráfico de Erros por Hora (últimas 24h) -->
+                <div class="border rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">Erros por Hora (Últimas 24h)</h3>
+                    <div style="height: 180px; position: relative;">
+                        <canvas id="errorsByHourChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Gráfico de Tipos de Erro (Top 5) -->
+                <div class="border rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-3">Tipos de Erro Mais Comuns (Top 5)</h3>
+                    <div style="height: 180px; position: relative;">
+                        <canvas id="errorTypesChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -294,6 +307,415 @@
                 <p class="text-xs text-gray-500 bg-gray-50 p-2 rounded">{{ data.sentry.how_to_enable }}</p>
                 {% endif %}
             </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Métricas de Performance -->
+        {% if data.performance %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">⚡ Métricas de Performance</h2>
+            {% if data.performance.error %}
+            <p class="text-red-600">{{ data.performance.error }}</p>
+            {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Gráfico de Tempo de Resposta -->
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Tempo de Resposta (últimas 50 requisições)</h3>
+                    <div style="height: 200px; position: relative;">
+                        <canvas id="responseTimeChart"></canvas>
+                    </div>
+                    <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+                        <div class="p-2 bg-blue-50 rounded">
+                            <p class="text-xs text-gray-600">Média</p>
+                            <p class="font-bold text-blue-600">{{ data.performance.avg_response_time }}ms</p>
+                        </div>
+                        <div class="p-2 bg-green-50 rounded">
+                            <p class="text-xs text-gray-600">Mínimo</p>
+                            <p class="font-bold text-green-600">{{ data.performance.min_response_time }}ms</p>
+                        </div>
+                        <div class="p-2 bg-red-50 rounded">
+                            <p class="text-xs text-gray-600">Máximo</p>
+                            <p class="font-bold text-red-600">{{ data.performance.max_response_time }}ms</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Estatísticas Gerais -->
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Estatísticas</h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Total de Requisições Monitoradas</span>
+                            <span class="font-bold text-gray-800">{{ data.performance.total_requests }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Tempo Médio de Resposta</span>
+                            <span class="font-bold text-blue-600">{{ data.performance.avg_response_time }}ms</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Top 10 Requisições Mais Lentas -->
+            {% if data.performance.slow_requests %}
+            <div class="mt-6">
+                <h3 class="font-semibold text-gray-700 mb-3">🐌 Top 10 Requisições Mais Lentas (>500ms)</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Endpoint</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Método</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tempo</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Queries</th>
+                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for req in data.performance.slow_requests %}
+                            <tr>
+                                <td class="px-4 py-2 text-sm text-gray-900">{{ req.path|truncatechars:50 }}</td>
+                                <td class="px-4 py-2 text-sm">
+                                    <span class="px-2 py-1 rounded text-xs {% if req.method == 'GET' %}bg-blue-100 text-blue-800{% elif req.method == 'POST' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                                        {{ req.method }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-sm font-bold text-red-600">{{ req.duration_ms }}ms</td>
+                                <td class="px-4 py-2 text-sm">
+                                    <span class="px-2 py-1 rounded text-xs {% if req.status_code >= 500 %}bg-red-100 text-red-800{% elif req.status_code >= 400 %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
+                                        {{ req.status_code }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ req.query_count|default:0 }}</td>
+                                <td class="px-4 py-2 text-sm text-gray-600">{{ req.tenant|default:"N/A" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="mt-6">
+                <p class="text-sm text-gray-600">✅ Nenhuma requisição lenta registrada recentemente</p>
+            </div>
+            {% endif %}
+            
+            <!-- Top 10 Endpoints Mais Acessados -->
+            {% if data.performance.top_endpoints %}
+            <div class="mt-6">
+                <h3 class="font-semibold text-gray-700 mb-3">📊 Top 10 Endpoints Mais Acessados</h3>
+                <div class="space-y-2">
+                    {% for endpoint in data.performance.top_endpoints %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <div class="flex items-center gap-3">
+                            <span class="px-2 py-1 rounded text-xs {% if endpoint.method == 'GET' %}bg-blue-100 text-blue-800{% elif endpoint.method == 'POST' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ endpoint.method }}
+                            </span>
+                            <span class="text-sm text-gray-800 font-mono">{{ endpoint.path|truncatechars:60 }}</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-sm text-gray-600">{{ endpoint.count }} requisições</span>
+                            <span class="text-sm font-semibold text-blue-600">{{ endpoint.avg_time_ms }}ms (média)</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="mt-6">
+                <p class="text-sm text-gray-600">ℹ️ Dados de endpoints ainda não disponíveis (aguarde algumas requisições)</p>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Métricas de Sistema (CPU, Memória, Disco) -->
+        {% if data.system_metrics %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">💻 Métricas de Sistema</h2>
+            {% if data.system_metrics.error %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p class="text-yellow-800">{{ data.system_metrics.error }}</p>
+                {% if 'psutil' in data.system_metrics.error %}
+                <p class="text-sm text-yellow-700 mt-2">💡 Execute: <code class="bg-yellow-100 px-2 py-1 rounded">pip install psutil>=5.9.0</code></p>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- CPU -->
+                <div class="border rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-semibold text-gray-700">CPU</h3>
+                        {% if data.system_metrics.cpu.status == 'healthy' %}
+                        <span class="px-2 py-1 rounded text-xs status-healthy">✅ Saudável</span>
+                        {% elif data.system_metrics.cpu.status == 'degraded' %}
+                        <span class="px-2 py-1 rounded text-xs status-degraded">⚠️ Degradado</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded text-xs status-unhealthy">🔴 Crítico</span>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-sm text-gray-600">Uso</span>
+                            <span class="font-bold text-gray-800">{{ data.system_metrics.cpu.percent }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="h-3 rounded-full {% if data.system_metrics.cpu.percent > 80 %}bg-red-500{% elif data.system_metrics.cpu.percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}" 
+                                 style="width: {{ data.system_metrics.cpu.percent }}%"></div>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        <p>Núcleos: <span class="font-semibold">{{ data.system_metrics.cpu.count }}</span></p>
+                    </div>
+                </div>
+
+                <!-- Memória -->
+                <div class="border rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-semibold text-gray-700">Memória</h3>
+                        {% if data.system_metrics.memory.status == 'healthy' %}
+                        <span class="px-2 py-1 rounded text-xs status-healthy">✅ Saudável</span>
+                        {% elif data.system_metrics.memory.status == 'degraded' %}
+                        <span class="px-2 py-1 rounded text-xs status-degraded">⚠️ Degradado</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded text-xs status-unhealthy">🔴 Crítico</span>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-sm text-gray-600">Uso</span>
+                            <span class="font-bold text-gray-800">{{ data.system_metrics.memory.percent }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="h-3 rounded-full {% if data.system_metrics.memory.percent > 80 %}bg-red-500{% elif data.system_metrics.memory.percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}" 
+                                 style="width: {{ data.system_metrics.memory.percent }}%"></div>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-1">
+                        <p>Usado: <span class="font-semibold">{{ data.system_metrics.memory.used_gb }} GB</span> / {{ data.system_metrics.memory.total_gb }} GB</p>
+                        <p>Disponível: <span class="font-semibold">{{ data.system_metrics.memory.available_gb }} GB</span></p>
+                    </div>
+                </div>
+
+                <!-- Disco -->
+                <div class="border rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-semibold text-gray-700">Disco</h3>
+                        {% if data.system_metrics.disk.status == 'healthy' %}
+                        <span class="px-2 py-1 rounded text-xs status-healthy">✅ Saudável</span>
+                        {% elif data.system_metrics.disk.status == 'degraded' %}
+                        <span class="px-2 py-1 rounded text-xs status-degraded">⚠️ Degradado</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded text-xs status-unhealthy">🔴 Crítico</span>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-sm text-gray-600">Uso</span>
+                            <span class="font-bold text-gray-800">{{ data.system_metrics.disk.percent }}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="h-3 rounded-full {% if data.system_metrics.disk.percent > 80 %}bg-red-500{% elif data.system_metrics.disk.percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}" 
+                                 style="width: {{ data.system_metrics.disk.percent }}%"></div>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-1">
+                        <p>Usado: <span class="font-semibold">{{ data.system_metrics.disk.used_gb }} GB</span> / {{ data.system_metrics.disk.total_gb }} GB</p>
+                        <p>Livre: <span class="font-semibold">{{ data.system_metrics.disk.free_gb }} GB</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Uptime -->
+            <div class="mt-4 pt-4 border-t">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-gray-600">⏱️ Uptime do Sistema:</span>
+                    <span class="font-semibold text-gray-800">{{ data.system_metrics.uptime }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Métricas de Redis/Cache -->
+        {% if data.redis_metrics %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🔴 Métricas de Redis/Cache</h2>
+            {% if data.redis_metrics.error %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p class="text-yellow-800">{{ data.redis_metrics.error }}</p>
+            </div>
+            {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Taxa de Hit/Miss -->
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Taxa de Cache</h3>
+                    <div style="height: 150px; position: relative;">
+                        <canvas id="cacheHitRateChart"></canvas>
+                    </div>
+                    <div class="mt-4 grid grid-cols-2 gap-2 text-center">
+                        <div class="p-2 bg-green-50 rounded">
+                            <p class="text-xs text-gray-600">Hit Rate</p>
+                            <p class="font-bold text-green-600">{{ data.redis_metrics.hit_rate }}%</p>
+                        </div>
+                        <div class="p-2 bg-red-50 rounded">
+                            <p class="text-xs text-gray-600">Miss Rate</p>
+                            <p class="font-bold text-red-600">{{ data.redis_metrics.miss_rate }}%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Estatísticas -->
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Estatísticas</h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Status</span>
+                            {% if data.redis_metrics.status == 'healthy' %}
+                            <span class="px-2 py-1 rounded text-xs status-healthy">✅ Saudável</span>
+                            {% elif data.redis_metrics.status == 'degraded' %}
+                            <span class="px-2 py-1 rounded text-xs status-degraded">⚠️ Degradado</span>
+                            {% else %}
+                            <span class="px-2 py-1 rounded text-xs status-unhealthy">🔴 Crítico</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Cache Hits</span>
+                            <span class="font-bold text-green-600">{{ data.redis_metrics.keyspace_hits|default:0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Cache Misses</span>
+                            <span class="font-bold text-red-600">{{ data.redis_metrics.keyspace_misses|default:0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Total de Requisições</span>
+                            <span class="font-bold text-gray-800">{{ data.redis_metrics.total_requests|default:0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Memória Usada</span>
+                            <span class="font-bold text-gray-800">{{ data.redis_metrics.used_memory_human|default:data.redis_metrics.used_memory_mb }}MB</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Total de Chaves</span>
+                            <span class="font-bold text-gray-800">{{ data.redis_metrics.total_keys|default:'N/A' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Métricas de Celery -->
+        {% if data.celery_metrics %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">⚙️ Métricas de Celery</h2>
+            {% if data.celery_metrics.error %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p class="text-yellow-800">{{ data.celery_metrics.error }}</p>
+            </div>
+            {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Status dos Workers -->
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Workers</h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Status</span>
+                            {% if data.celery_metrics.workers.status == 'healthy' %}
+                            <span class="px-2 py-1 rounded text-xs status-healthy">✅ Saudável</span>
+                            {% else %}
+                            <span class="px-2 py-1 rounded text-xs status-degraded">⚠️ Degradado</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Número de Workers</span>
+                            <span class="font-bold text-gray-800">{{ data.celery_metrics.workers.count }}</span>
+                        </div>
+                        {% if data.celery_metrics.workers.names %}
+                        <div class="p-3 bg-gray-50 rounded">
+                            <p class="text-sm text-gray-600 mb-2">Workers Ativos:</p>
+                            <div class="flex flex-wrap gap-2">
+                                {% for worker in data.celery_metrics.workers.names %}
+                                <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">{{ worker }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Tarefas -->
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Tarefas</h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center p-3 bg-blue-50 rounded">
+                            <span class="text-sm text-gray-600">Em Execução</span>
+                            <span class="font-bold text-blue-600">{{ data.celery_metrics.tasks.active }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-yellow-50 rounded">
+                            <span class="text-sm text-gray-600">Em Fila</span>
+                            <span class="font-bold text-yellow-600">{{ data.celery_metrics.tasks.reserved }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-purple-50 rounded">
+                            <span class="text-sm text-gray-600">Agendadas</span>
+                            <span class="font-bold text-purple-600">{{ data.celery_metrics.tasks.scheduled }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Total na Fila</span>
+                            <span class="font-bold text-gray-800">{{ data.celery_metrics.tasks.total_in_queue }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Estatísticas -->
+            <div class="mt-6 pt-6 border-t">
+                <h3 class="font-semibold text-gray-700 mb-3">Estatísticas</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-4 bg-green-50 rounded-lg">
+                        <p class="text-sm text-gray-600 mb-1">Tarefas Processadas</p>
+                        <p class="text-2xl font-bold text-green-600">{{ data.celery_metrics.statistics.processed|default:0 }}</p>
+                    </div>
+                    <div class="p-4 bg-red-50 rounded-lg">
+                        <p class="text-sm text-gray-600 mb-1">Tarefas Falhadas</p>
+                        <p class="text-2xl font-bold text-red-600">{{ data.celery_metrics.statistics.failed|default:0 }}</p>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-lg">
+                        <p class="text-sm text-gray-600 mb-1">Taxa de Sucesso</p>
+                        <p class="text-2xl font-bold text-blue-600">{{ data.celery_metrics.statistics.success_rate|default:0 }}%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarefas Ativas -->
+            {% if data.celery_metrics.active_tasks_list %}
+            <div class="mt-6 pt-6 border-t">
+                <h3 class="font-semibold text-gray-700 mb-3">Tarefas em Execução (Top 10)</h3>
+                <div class="space-y-2">
+                    {% for task in data.celery_metrics.active_tasks_list %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <div class="flex-1">
+                            <p class="text-sm font-medium text-gray-800">{{ task.name }}</p>
+                            <p class="text-xs text-gray-500">Worker: {{ task.worker }}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">ID: {{ task.id|truncatechars:20 }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if data.celery_metrics.message %}
+            <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                <p class="text-sm text-yellow-800">{{ data.celery_metrics.message }}</p>
+            </div>
+            {% endif %}
             {% endif %}
         </div>
         {% endif %}
@@ -328,83 +750,386 @@
     </div>
 
     <script>
-        // Formatar timestamp
-        const timestamp = '{{ data.system.timestamp }}';
-        if (timestamp) {
-            const date = new Date(timestamp);
-            document.getElementById('timestamp').textContent = date.toLocaleString('pt-BR');
-            updateLastUpdate();
-        }
-        
-        // Formatar health check duration
-        const healthDuration = {{ data.health.health_check_duration_ms|default:0 }};
-        if (healthDuration) {
-            document.getElementById('health-duration').textContent = healthDuration.toFixed(2);
-        }
-        
-        // Auto-refresh
+        // Auto-refresh - Definir no escopo global
         let autoRefreshInterval;
-        function toggleAutoRefresh() {
-            const checkbox = document.getElementById('auto-refresh');
-            if (checkbox.checked) {
-                autoRefreshInterval = setInterval(() => {
-                    location.reload();
-                }, 30000); // 30 segundos
-                updateLastUpdate();
-            } else {
-                if (autoRefreshInterval) {
-                    clearInterval(autoRefreshInterval);
+        let countdownInterval;
+        let countdownSeconds = 30;
+        
+        // Função para atualizar contador regressivo
+        function updateCountdown() {
+            const countdownEl = document.getElementById('countdown');
+            const countdownSecondsEl = document.getElementById('countdown-seconds');
+            if (countdownEl && countdownSecondsEl) {
+                countdownSecondsEl.textContent = countdownSeconds;
+                if (countdownSeconds <= 0) {
+                    countdownSeconds = 30; // Reset
                 }
             }
         }
         
+        // Função no escopo global para ser acessível
+        window.toggleAutoRefresh = function() {
+            const checkbox = document.getElementById('auto-refresh');
+            const countdownEl = document.getElementById('countdown');
+            
+            if (checkbox && checkbox.checked) {
+                // Mostrar contador
+                if (countdownEl) {
+                    countdownEl.style.display = 'inline';
+                }
+                
+                // Reset contador
+                countdownSeconds = 30;
+                updateCountdown();
+                
+                // Iniciar contador regressivo (atualizar a cada segundo)
+                countdownInterval = setInterval(() => {
+                    countdownSeconds--;
+                    updateCountdown();
+                    if (countdownSeconds <= 0) {
+                        countdownSeconds = 30; // Reset para próximo ciclo
+                    }
+                }, 1000);
+                
+                // Iniciar auto-refresh (recarregar a cada 30 segundos)
+                autoRefreshInterval = setInterval(() => {
+                    location.reload();
+                }, 30000); // 30 segundos
+                
+                updateLastUpdate();
+            } else {
+                // Esconder contador
+                if (countdownEl) {
+                    countdownEl.style.display = 'none';
+                }
+                
+                // Parar intervalos
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                    countdownInterval = null;
+                }
+            }
+        };
+        
+        // Adicionar event listener quando o DOM estiver pronto
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkbox = document.getElementById('auto-refresh');
+            if (checkbox) {
+                checkbox.addEventListener('change', window.toggleAutoRefresh);
+            }
+        });
+        
+        // Também tentar adicionar imediatamente (caso o DOM já esteja carregado)
+        (function() {
+            const checkbox = document.getElementById('auto-refresh');
+            if (checkbox) {
+                checkbox.addEventListener('change', window.toggleAutoRefresh);
+            }
+        })();
+        
         // Atualizar indicador de última atualização
         function updateLastUpdate() {
             const now = new Date();
-            document.getElementById('last-update').textContent = 
-                `Última atualização: ${now.toLocaleTimeString('pt-BR')}`;
+            const lastUpdateEl = document.getElementById('last-update');
+            if (lastUpdateEl) {
+                lastUpdateEl.textContent = `Última atualização: ${now.toLocaleTimeString('pt-BR')}`;
+            }
         }
+        
+        // Formatar timestamp
+        const timestamp = '{{ data.system.timestamp }}';
+        if (timestamp) {
+            try {
+                const date = new Date(timestamp);
+                const timestampEl = document.getElementById('timestamp');
+                if (timestampEl) {
+                    timestampEl.textContent = date.toLocaleString('pt-BR');
+                }
+                updateLastUpdate();
+            } catch (e) {
+                console.error('Erro ao formatar timestamp:', e);
+            }
+        }
+        
+        // Formatar health check duration
+        (function() {
+            try {
+                {% if data.health and data.health.health_check_duration_ms %}
+                // Converter valor para string e depois parsear, garantindo formato numérico válido
+                // O Django pode renderizar com vírgula, então precisamos substituir por ponto
+                const healthDurationRaw = '{{ data.health.health_check_duration_ms }}';
+                const healthDurationValue = parseFloat(healthDurationRaw.replace(',', '.'));
+                if (!isNaN(healthDurationValue) && healthDurationValue >= 0) {
+                    const healthDurationEl = document.getElementById('health-duration');
+                    if (healthDurationEl) {
+                        healthDurationEl.textContent = healthDurationValue.toFixed(2);
+                    }
+                } else {
+                    const healthDurationEl = document.getElementById('health-duration');
+                    if (healthDurationEl) {
+                        healthDurationEl.textContent = '0.00';
+                    }
+                }
+                {% else %}
+                // Se não houver valor, definir como 0
+                const healthDurationEl = document.getElementById('health-duration');
+                if (healthDurationEl) {
+                    healthDurationEl.textContent = '0.00';
+                }
+                {% endif %}
+            } catch (e) {
+                console.error('Erro ao formatar health duration:', e);
+                const healthDurationEl = document.getElementById('health-duration');
+                if (healthDurationEl) {
+                    healthDurationEl.textContent = 'N/A';
+                }
+            }
+        })();
         
         // Atualizar a cada segundo o indicador
         setInterval(updateLastUpdate, 1000);
         
-        // Gráfico de erros
-        {% if data.errors_analysis and not data.errors_analysis.error %}
-        const errorsCtx = document.getElementById('errorsChart');
-        if (errorsCtx) {
-            new Chart(errorsCtx, {
+        // Gráfico de Erros por Hora (últimas 24h)
+        {% if data.errors_analysis and not data.errors_analysis.error and data.errors_analysis.errors_by_hour %}
+        const errorsByHourCtx = document.getElementById('errorsByHourChart');
+        if (errorsByHourCtx) {
+            const errorsByHourLabels = [{% for label in data.errors_analysis.errors_by_hour.labels %}'{{ label }}'{% if not forloop.last %},{% endif %}{% endfor %}];
+            const errorsByHourData = [{% for value in data.errors_analysis.errors_by_hour.data %}{{ value }}{% if not forloop.last %},{% endif %}{% endfor %}];
+            
+            new Chart(errorsByHourCtx, {
+                type: 'line',
+                data: {
+                    labels: errorsByHourLabels,
+                    datasets: [{
+                        label: 'Erros por Hora',
+                        data: errorsByHourData,
+                        borderColor: 'rgba(239, 68, 68, 1)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y + ' erro(s)';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            },
+                            title: {
+                                display: true,
+                                text: 'Quantidade de Erros'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Hora'
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        {% endif %}
+
+        // Gráfico de Tipos de Erro (Top 5)
+        {% if data.errors_analysis and not data.errors_analysis.error and data.errors_analysis.top_error_types %}
+        const errorTypesCtx = document.getElementById('errorTypesChart');
+        if (errorTypesCtx) {
+            const errorTypesLabels = [{% for label in data.errors_analysis.top_error_types.labels %}'{{ label }}'{% if not forloop.last %},{% endif %}{% endfor %}];
+            const errorTypesData = [{% for value in data.errors_analysis.top_error_types.data %}{{ value }}{% if not forloop.last %},{% endif %}{% endfor %}];
+            
+            // Cores diferentes para cada barra
+            const backgroundColors = [
+                'rgba(239, 68, 68, 0.8)',   // Red
+                'rgba(234, 179, 8, 0.8)',  // Yellow
+                'rgba(59, 130, 246, 0.8)',  // Blue
+                'rgba(16, 185, 129, 0.8)', // Green
+                'rgba(139, 92, 246, 0.8)'  // Purple
+            ];
+            
+            new Chart(errorTypesCtx, {
+                type: 'bar',
+                data: {
+                    labels: errorTypesLabels,
+                    datasets: [{
+                        label: 'Ocorrências',
+                        data: errorTypesData,
+                        backgroundColor: backgroundColors.slice(0, errorTypesLabels.length),
+                        borderColor: backgroundColors.slice(0, errorTypesLabels.length).map(c => c.replace('0.8', '1')),
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.y + ' ocorrência(s)';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            },
+                            title: {
+                                display: true,
+                                text: 'Quantidade de Ocorrências'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Tipo de Erro'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        {% endif %}
+        
+        // Gráfico de Tempo de Resposta
+        {% if data.performance and not data.performance.error and data.performance.response_times %}
+        const responseTimeCtx = document.getElementById('responseTimeChart');
+        if (responseTimeCtx) {
+            const responseTimes = [{% for time in data.performance.response_times %}{{ time }}{% if not forloop.last %},{% endif %}{% endfor %}];
+            const labels = responseTimes.map((_, i) => `Req ${i + 1}`);
+            
+            new Chart(responseTimeCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Tempo de Resposta (ms)',
+                        data: responseTimes,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        },
+                        title: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + 'ms';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Tempo (ms)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Requisições (mais recentes)'
+                            },
+                            ticks: {
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        {% endif %}
+
+        // Gráfico de Taxa de Hit/Miss do Cache
+        {% if data.redis_metrics and not data.redis_metrics.error %}
+        const cacheHitRateCtx = document.getElementById('cacheHitRateChart');
+        if (cacheHitRateCtx) {
+            // Converter valores para garantir formato numérico válido (substituir vírgula por ponto)
+            const hitRateRaw = '{{ data.redis_metrics.hit_rate|default:0 }}';
+            const missRateRaw = '{{ data.redis_metrics.miss_rate|default:0 }}';
+            const hitRate = parseFloat(hitRateRaw.replace(',', '.'));
+            const missRate = parseFloat(missRateRaw.replace(',', '.'));
+            
+            new Chart(cacheHitRateCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['Erros', 'Warnings', 'Sem problemas'],
+                    labels: ['Cache Hits', 'Cache Misses'],
                     datasets: [{
-                        data: [
-                            {{ data.errors_analysis.total_recent_errors }},
-                            {{ data.errors_analysis.total_recent_warnings }},
-                            {{ data.errors_analysis.ok_lines|default:0 }}
-                        ],
+                        data: [hitRate, missRate],
                         backgroundColor: [
-                            'rgba(239, 68, 68, 0.8)',  // Red para erros
-                            'rgba(234, 179, 8, 0.8)', // Yellow para warnings
-                            'rgba(34, 197, 94, 0.8)'  // Green para sem problemas
+                            'rgba(34, 197, 94, 0.8)',  // Green para hits
+                            'rgba(239, 68, 68, 0.8)'   // Red para misses
                         ],
                         borderColor: [
-                            'rgba(239, 68, 68, 1)',
-                            'rgba(234, 179, 8, 1)',
-                            'rgba(34, 197, 94, 1)'
+                            'rgba(34, 197, 94, 1)',
+                            'rgba(239, 68, 68, 1)'
                         ],
                         borderWidth: 2
                     }]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: {
                             position: 'bottom',
                         },
-                        title: {
-                            display: true,
-                            text: 'Distribuição de Erros e Warnings'
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    return label + ': ' + value.toFixed(2) + '%';
+                                }
+                            }
                         }
                     }
                 }

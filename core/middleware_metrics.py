@@ -2,10 +2,12 @@
 Middleware para coletar métricas básicas de performance
 """
 import time
+import json
 import logging
 from django.utils.deprecation import MiddlewareMixin
 from django.db import connection
 from django.core.cache import cache
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,68 @@ class MetricsMiddleware(MiddlewareMixin):
                     'username': username,
                 }
             )
+        
+        # Armazenar métricas no Redis para análise
+        try:
+            duration_ms = round(duration * 1000, 2)
+            
+            # 1. Armazenar tempo de resposta (últimas 100 requisições)
+            cache.lpush('metrics:response_times', duration_ms)
+            cache.ltrim('metrics:response_times', 0, 99)  # Manter apenas 100
+            
+            # 2. Armazenar requisições lentas (top 10, >500ms)
+            if duration > 0.5:
+                slow_request = {
+                    'path': path,
+                    'method': method,
+                    'duration_ms': duration_ms,
+                    'status_code': status_code,
+                    'query_count': query_count,
+                    'tenant': tenant_name,
+                    'username': username,
+                    'timestamp': timezone.now().isoformat(),
+                }
+                cache.lpush('metrics:slow_requests', json.dumps(slow_request))
+                cache.ltrim('metrics:slow_requests', 0, 9)  # Top 10
+            
+            # 3. Contar requisições por endpoint
+            # Ignorar requisições estáticas e do próprio dashboard
+            if not path.startswith('/static/') and not path.startswith('/media/') and '/observability/' not in path:
+                endpoint_key = f'metrics:endpoint:{method}:{path}'
+                cache.incr(endpoint_key)
+                cache.expire(endpoint_key, 86400)  # Expirar após 24 horas
+                
+                # Armazenar tempo médio por endpoint
+                avg_key = f'metrics:endpoint_avg:{method}:{path}'
+                current_avg = cache.get(avg_key)
+                if current_avg:
+                    # Calcular média móvel (simplificado)
+                    new_avg = (float(current_avg) + duration_ms) / 2
+                else:
+                    new_avg = duration_ms
+                cache.set(avg_key, new_avg, 86400)
+                
+                # Manter lista de endpoints únicos (para buscar depois)
+                endpoints_list_key = 'metrics:endpoints_list'
+                endpoints_list = []
+                try:
+                    existing = cache.get(endpoints_list_key)
+                    if existing:
+                        endpoints_list = json.loads(existing)
+                except:
+                    pass
+                
+                # Adicionar endpoint se não existir
+                endpoint_info = {'method': method, 'path': path}
+                if endpoint_info not in endpoints_list:
+                    endpoints_list.append(endpoint_info)
+                    # Manter apenas últimos 100 endpoints
+                    if len(endpoints_list) > 100:
+                        endpoints_list = endpoints_list[-100:]
+                    cache.set(endpoints_list_key, json.dumps(endpoints_list), 86400)
+        except Exception as e:
+            # Não quebrar a requisição se houver erro ao armazenar métricas
+            logger.debug(f'Erro ao armazenar métricas: {str(e)}')
         
         # Adicionar headers de métricas na resposta (opcional, útil para debugging)
         if hasattr(request, 'user') and request.user.is_staff:
