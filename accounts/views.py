@@ -616,6 +616,21 @@ def current_user(request):
         if membership:
             response_data['user']['role'] = membership.role
             response_data['user']['role_display'] = membership.get_role_display()
+            
+            # Incluir informações de permissões se for role customizado
+            from accounts.models_roles import CustomRole
+            system_roles = [choice[0] for choice in TenantMembership.ROLE_CHOICES]
+            if membership.role not in system_roles:
+                try:
+                    custom_role = CustomRole.objects.get(
+                        tenant=profile.current_tenant,
+                        code=membership.role,
+                        is_active=True
+                    )
+                    response_data['user']['is_custom_role'] = True
+                    response_data['user']['custom_role_id'] = custom_role.id
+                except CustomRole.DoesNotExist:
+                    response_data['user']['is_custom_role'] = False
         
         if profile.current_empresa:
             response_data['empresa'] = {

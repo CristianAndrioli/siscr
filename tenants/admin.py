@@ -359,7 +359,33 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
                         transaction.savepoint_rollback(sid)
                         errors.append(f'Erro ao remover empresas do schema público: {str(e)}')
                     
-                    # 5. Remover memberships, profiles e usuários relacionados
+                    # 5. Remover roles customizados e permissões de módulo do tenant
+                    # CustomRole e ModulePermission estão no schema público e têm ForeignKey para Tenant
+                    try:
+                        sid = transaction.savepoint()
+                        with connection.cursor() as cursor:
+                            # Primeiro remover permissões de módulo (elas referenciam roles)
+                            cursor.execute("""
+                                DELETE FROM accounts_modulepermission 
+                                WHERE role_id IN (
+                                    SELECT id FROM accounts_customrole WHERE tenant_id = %s
+                                )
+                            """, [tenant_id])
+                            
+                            # Depois remover roles customizados
+                            cursor.execute(
+                                "DELETE FROM accounts_customrole WHERE tenant_id = %s",
+                                [tenant_id]
+                            )
+                        transaction.savepoint_commit(sid)
+                    except Exception as e:
+                        # Fazer rollback do savepoint em caso de erro, mas continuar
+                        transaction.savepoint_rollback(sid)
+                        # Verificar se o erro é porque as tabelas não existem (migration não aplicada)
+                        if 'does not exist' not in str(e).lower():
+                            errors.append(f'Erro ao remover roles customizados: {str(e)}')
+                    
+                    # 6. Remover memberships, profiles e usuários relacionados
                     # Usamos SQL direto para evitar que o Django tente verificar objetos relacionados
                     try:
                         sid = transaction.savepoint()
@@ -436,7 +462,7 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
                         transaction.savepoint_rollback(sid)
                         errors.append(f'Erro ao remover memberships: {str(e)}')
                     
-                    # 6. Remover o schema do banco de dados ANTES de deletar o objeto
+                    # 7. Remover o schema do banco de dados ANTES de deletar o objeto
                     # Isso é crítico: o schema deve ser removido antes para evitar que o Django
                     # tente verificar objetos relacionados no schema do tenant
                     schema_removed = False
@@ -452,7 +478,7 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
                         except Exception as e:
                             errors.append(f'Erro ao remover schema {schema_name}: {str(e)}')
                     
-                    # 7. Remover o tenant diretamente do banco usando SQL
+                    # 8. Remover o tenant diretamente do banco usando SQL
                     # Isso evita que o Django tente verificar objetos relacionados
                     with connection.cursor() as cursor:
                         try:
@@ -709,7 +735,33 @@ class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
                     transaction.savepoint_rollback(sid)
                     messages.warning(request, f'Erro ao remover empresas do schema público: {str(e)}')
                 
-                # 5. Remover memberships e profiles relacionados usando SQL direto
+                # 5. Remover roles customizados e permissões de módulo do tenant
+                # CustomRole e ModulePermission estão no schema público e têm ForeignKey para Tenant
+                try:
+                    sid = transaction.savepoint()
+                    with connection.cursor() as cursor:
+                        # Primeiro remover permissões de módulo (elas referenciam roles)
+                        cursor.execute("""
+                            DELETE FROM accounts_modulepermission 
+                            WHERE role_id IN (
+                                SELECT id FROM accounts_customrole WHERE tenant_id = %s
+                            )
+                        """, [tenant_id])
+                        
+                        # Depois remover roles customizados
+                        cursor.execute(
+                            "DELETE FROM accounts_customrole WHERE tenant_id = %s",
+                            [tenant_id]
+                        )
+                    transaction.savepoint_commit(sid)
+                except Exception as e:
+                    # Fazer rollback do savepoint em caso de erro, mas continuar
+                    transaction.savepoint_rollback(sid)
+                    # Verificar se o erro é porque as tabelas não existem (migration não aplicada)
+                    if 'does not exist' not in str(e).lower():
+                        messages.warning(request, f'Erro ao remover roles customizados: {str(e)}')
+                
+                # 6. Remover memberships e profiles relacionados usando SQL direto
                 # Usamos SQL direto para evitar que o Django tente verificar objetos relacionados
                 try:
                     sid = transaction.savepoint()

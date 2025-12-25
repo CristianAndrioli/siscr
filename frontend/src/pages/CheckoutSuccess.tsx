@@ -43,7 +43,7 @@ function CheckoutSuccess() {
             setCountdown((prev) => {
               if (prev <= 1) {
                 if (countdownInterval) clearInterval(countdownInterval);
-                navigate('/dashboard');
+                navigate('/app');
                 return 0;
               }
               return prev - 1;
@@ -117,7 +117,7 @@ function CheckoutSuccess() {
               </h2>
               <p className="text-gray-600 mb-6">
                 Sua assinatura foi ativada com sucesso. Você será redirecionado
-                para o dashboard em <strong className="text-indigo-600">{countdown}</strong> segundo{countdown !== 1 ? 's' : ''}.
+                para a home em <strong className="text-indigo-600">{countdown}</strong> segundo{countdown !== 1 ? 's' : ''}.
               </p>
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <p className="text-sm text-gray-600">
@@ -131,10 +131,10 @@ function CheckoutSuccess() {
                 )}
               </div>
               <Link
-                to="/dashboard"
+                to="/app"
                 className="block w-full text-center bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold"
               >
-                Ir para Dashboard
+                Ir para Home
               </Link>
             </>
           ) : (
@@ -152,10 +152,10 @@ function CheckoutSuccess() {
                 confirmado.
               </p>
               <Link
-                to="/dashboard"
+                to="/app"
                 className="block w-full text-center bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 font-semibold"
               >
-                Ir para Dashboard
+                Ir para Home
               </Link>
             </>
           )}

@@ -58,9 +58,9 @@ function SubscriptionExpired() {
           },
         }));
 
-        // Se subscription está ativa, redirecionar para dashboard
+        // Se subscription está ativa, redirecionar para home
         if (subscription.status === 'active' || subscription.status === 'trial') {
-          navigate('/dashboard');
+          navigate('/app');
           return;
         }
 
@@ -84,7 +84,7 @@ function SubscriptionExpired() {
     } catch (err: any) {
       console.error('Erro ao verificar status do tenant:', err);
       // Se não conseguir verificar, assumir que está tudo ok
-      navigate('/dashboard');
+      navigate('/app');
       return;
     } finally {
       setLoading(false);

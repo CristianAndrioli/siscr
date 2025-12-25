@@ -10,6 +10,13 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+# Importar modelos de roles
+try:
+    from .models_roles import CustomRole, ModulePermission
+except ImportError:
+    CustomRole = None
+    ModulePermission = None
+
 # Desregistrar o UserAdmin padrão do Django para registrar um customizado
 if admin.site.is_registered(User):
     admin.site.unregister(User)
@@ -204,3 +211,89 @@ class TenantMembershipAdmin(admin.ModelAdmin):
         url = reverse('admin:tenants_tenant_change', args=[obj.tenant.pk])
         return format_html('<a href="{}">{}</a>', url, obj.tenant.name)
     tenant_link.short_description = 'Tenant'
+
+
+# Registrar modelos de roles se disponíveis
+if CustomRole and ModulePermission:
+    class ModulePermissionInline(admin.TabularInline):
+        """Inline para mostrar permissões de módulo de um role"""
+        model = ModulePermission
+        extra = 0
+        fields = ['module', 'module_display', 'actions']
+        readonly_fields = ['module_display']
+    
+    @admin.register(CustomRole)
+    class CustomRoleAdmin(admin.ModelAdmin):
+        """Admin para roles customizados"""
+        list_display = [
+            'name',
+            'code',
+            'tenant',
+            'is_active',
+            'is_system',
+            'permissions_count',
+            'created_at',
+        ]
+        list_filter = ['is_active', 'is_system', 'tenant', 'created_at']
+        search_fields = ['name', 'code', 'description', 'tenant__name']
+        readonly_fields = ['is_system', 'created_at', 'updated_at']
+        inlines = [ModulePermissionInline]
+        
+        fieldsets = (
+            ('Informações Básicas', {
+                'fields': ('tenant', 'name', 'code', 'description', 'is_active', 'is_system')
+            }),
+            ('Permissões', {
+                'fields': (),
+                'description': 'Configure as permissões por módulo usando a seção abaixo'
+            }),
+            ('Datas', {
+                'fields': ('created_at', 'updated_at')
+            }),
+        )
+        
+        def permissions_count(self, obj):
+            """Conta o número de permissões configuradas"""
+            return obj.module_permissions.count()
+        permissions_count.short_description = 'Permissões'
+        
+        def get_readonly_fields(self, request, obj=None):
+            """Torna is_system e code readonly se for role do sistema"""
+            readonly = list(self.readonly_fields)
+            if obj and obj.is_system:
+                readonly.append('code')
+                readonly.append('name')
+            return readonly
+    
+    @admin.register(ModulePermission)
+    class ModulePermissionAdmin(admin.ModelAdmin):
+        """Admin para permissões de módulo"""
+        list_display = [
+            'role',
+            'module_display',
+            'module',
+            'actions_display',
+            'created_at',
+        ]
+        list_filter = ['module', 'role__tenant', 'role']
+        search_fields = ['module', 'module_display', 'role__name']
+        readonly_fields = ['created_at', 'updated_at']
+        
+        def actions_display(self, obj):
+            """Exibe as ações de forma legível"""
+            if not obj.actions:
+                return '-'
+            action_labels = {
+                'view': 'Visualizar',
+                'add': 'Criar',
+                'change': 'Editar',
+                'delete': 'Excluir',
+                'export': 'Exportar',
+                'import': 'Importar',
+                'approve': 'Aprovar',
+                'reject': 'Rejeitar',
+                'manage': 'Gerenciar',
+            }
+            labels = [action_labels.get(action, action) for action in obj.actions]
+            return ', '.join(labels)
+        actions_display.short_description = 'Ações'

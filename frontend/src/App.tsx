@@ -31,6 +31,7 @@ import SubscriptionManagement from './pages/SubscriptionManagement';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Home from './pages/Home';
+import AppHome from './pages/AppHome';
 import Plans from './pages/Plans';
 import Signup from './pages/Signup';
 import Checkout from './pages/Checkout';
@@ -39,6 +40,7 @@ import CheckoutCancel from './pages/CheckoutCancel';
 import PaymentPending from './pages/PaymentPending';
 import SubscriptionExpired from './pages/SubscriptionExpired';
 import Layout from './components/Layout';
+import ProtectedRouteWithPermission from './components/common/ProtectedRouteWithPermission';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
 import PessoasDetail from './pages/cadastros/PessoasDetail';
@@ -51,6 +53,10 @@ import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
 import ContasPagarDetail from './pages/financeiro/ContasPagarDetail';
 import Configuracoes from './pages/Configuracoes';
+import UsuariosList from './pages/usuarios/UsuariosList';
+import UsuariosForm from './pages/usuarios/UsuariosForm';
+import RolesList from './pages/configuracoes/RolesList';
+import RolesForm from './pages/configuracoes/RolesForm';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -142,11 +148,42 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+// Componente para rota raiz - redireciona baseado em autenticação
+function RootRoute() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const authenticated = authService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+  }, []);
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return isAuthenticated ? <Navigate to="/app" replace /> : <Home />;
+}
+
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<RootRoute />} />
+        <Route
+          path="/app"
+          element={
+            <ProtectedRoute>
+              <AppHome />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/plans" element={<Plans />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
@@ -171,12 +208,15 @@ function App() {
             </ProtectedRoute>
           }
         />
+        {/* Dashboard movido para dentro do módulo financeiro */}
         <Route
-          path="/dashboard"
+          path="/financeiro/dashboard"
           element={
             <ProtectedRoute>
               <Layout>
-                <Dashboard />
+                <ProtectedRouteWithPermission requiredModule="financeiro" requiredAction="view">
+                  <Dashboard />
+                </ProtectedRouteWithPermission>
               </Layout>
             </ProtectedRoute>
           }
@@ -489,6 +529,68 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <PessoasDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rotas de gerenciamento de usuários */}
+        <Route
+          path="/usuarios"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <UsuariosList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usuarios/novo"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <UsuariosForm />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/usuarios/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <UsuariosForm />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rotas de gerenciamento de roles */}
+        <Route
+          path="/configuracoes/roles"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <RolesList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes/roles/novo"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <RolesForm />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes/roles/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <RolesForm />
               </Layout>
             </ProtectedRoute>
           }

@@ -9,6 +9,14 @@ from core.base_models import SiscrModelBase
 
 User = get_user_model()
 
+# Importar modelos de roles (evita import circular)
+try:
+    from accounts.models_roles import CustomRole, ModulePermission
+except ImportError:
+    # Se não estiver disponível ainda, definir como None
+    CustomRole = None
+    ModulePermission = None
+
 
 class UserProfile(SiscrModelBase):
     """
@@ -118,10 +126,11 @@ class TenantMembership(SiscrModelBase):
     )
     
     role = models.CharField(
-        max_length=20, 
-        choices=ROLE_CHOICES, 
+        max_length=50,  # Aumentado para suportar códigos de roles customizados
+        choices=ROLE_CHOICES,  # Mantém choices para validação, mas aceita valores customizados
         default='user',
-        verbose_name='Papel'
+        verbose_name='Papel',
+        help_text='Papel do usuário (roles do sistema: admin, manager, user, viewer ou código de role customizado)'
     )
     
     is_active = models.BooleanField(default=True, verbose_name='Ativo')

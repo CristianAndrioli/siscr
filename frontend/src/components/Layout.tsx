@@ -1,6 +1,7 @@
 import { useState, useEffect, ReactNode } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
+import { usePermissions } from '../hooks/usePermissions';
 
 interface LayoutProps {
   children: ReactNode;
@@ -29,6 +30,19 @@ function Layout({ children }: LayoutProps) {
   const [tenantActive, setTenantActive] = useState<boolean | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { hasModuleAccess, hasPermission, loading: permissionsLoading, permissions } = usePermissions();
+  
+  // Log para debug
+  useEffect(() => {
+    if (permissions) {
+      console.log('[Layout] Permissões carregadas:', permissions);
+      console.log('[Layout] hasModuleAccess("cadastros"):', hasModuleAccess('cadastros'));
+      console.log('[Layout] hasModuleAccess("financeiro"):', hasModuleAccess('financeiro'));
+      console.log('[Layout] hasModuleAccess("faturamento"):', hasModuleAccess('faturamento'));
+      console.log('[Layout] hasModuleAccess("monitoramento"):', hasModuleAccess('monitoramento'));
+      console.log('[Layout] hasModuleAccess("configuracoes"):', hasModuleAccess('configuracoes'));
+    }
+  }, [permissions, hasModuleAccess]);
 
   useEffect(() => {
     // Verificar se o tenant está ativo
@@ -96,6 +110,18 @@ function Layout({ children }: LayoutProps) {
     return false;
   };
 
+  // Aguardar carregamento das permissões antes de renderizar o menu
+  if (permissionsLoading) {
+    return (
+      <div className="flex min-h-screen bg-gray-300 items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando permissões...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-300">
       {/* Sidebar - Replica o design do base.html */}
@@ -160,6 +186,26 @@ function Layout({ children }: LayoutProps) {
                       </li>
                       <li>
                         <Link
+                          to="/usuarios"
+                          className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                            isActive('/usuarios') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                          }`}
+                        >
+                          Usuários
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
+                          to="/configuracoes/roles"
+                          className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                            isActive('/configuracoes/roles') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                          }`}
+                        >
+                          Roles e Permissões
+                        </Link>
+                      </li>
+                      <li>
+                        <Link
                           to="/subscription-management"
                           className={`block p-2 rounded-lg transition duration-150 text-sm ${
                             isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
@@ -187,37 +233,40 @@ function Layout({ children }: LayoutProps) {
               </>
             ) : (
               <>
-                {/* Dashboard */}
+                {/* Home */}
                 <li>
                   <Link
-                    to="/dashboard"
+                    to="/app"
                     className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                      isActive('/dashboard') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      isActive('/app') ? 'bg-gray-700' : 'hover:bg-gray-700'
                     }`}
                   >
                     <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-10l-2-2m2 2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                     </svg>
-                    Dashboard
+                    Home
                   </Link>
                 </li>
 
             {/* Serviços Logísticos */}
-            <li>
-              <Link
-                to="/servico-logistico"
-                className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                  isActive('/servico-logistico') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                }`}
-              >
-                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h.01M19 21H5a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2z" />
-                </svg>
-                Serviços Logísticos
-              </Link>
-            </li>
+            {hasModuleAccess('servico_logistico') && (
+              <li>
+                <Link
+                  to="/servico-logistico"
+                  className={`flex items-center p-2 rounded-lg transition duration-150 ${
+                    isActive('/servico-logistico') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                  }`}
+                >
+                  <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h.01M19 21H5a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2z" />
+                  </svg>
+                  Serviços Logísticos
+                </Link>
+              </li>
+            )}
 
             {/* Cadastros - Menu com submenu */}
+            {hasModuleAccess('cadastros') && (
             <li>
               <button
                 onClick={() => toggleMenu('cadastros')}
@@ -275,8 +324,10 @@ function Layout({ children }: LayoutProps) {
                 </ul>
               )}
             </li>
+            )}
 
             {/* Financeiro - Menu com submenu */}
+            {hasModuleAccess('financeiro') && (
             <li>
               <button
                 onClick={() => toggleMenu('financeiro')}
@@ -303,8 +354,20 @@ function Layout({ children }: LayoutProps) {
                 <ul className="pl-6 mt-2 space-y-1">
                   <li>
                     <Link
+                      to="/financeiro/dashboard"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/financeiro/dashboard') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Dashboard
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
                       to="/financeiro/contas-receber"
-                      className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/financeiro/contas-receber') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
                     >
                       Contas a Receber
                     </Link>
@@ -312,7 +375,9 @@ function Layout({ children }: LayoutProps) {
                   <li>
                     <Link
                       to="/financeiro/contas-pagar"
-                      className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/financeiro/contas-pagar') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
                     >
                       Contas a Pagar
                     </Link>
@@ -320,8 +385,10 @@ function Layout({ children }: LayoutProps) {
                 </ul>
               )}
             </li>
+            )}
 
             {/* Faturamento - Menu com submenu */}
+            {hasModuleAccess('faturamento') && (
             <li>
               <button
                 onClick={() => toggleMenu('faturamento')}
@@ -381,23 +448,27 @@ function Layout({ children }: LayoutProps) {
                 </ul>
               )}
             </li>
+            )}
 
             {/* Monitoramento */}
-            <li>
-              <Link
-                to="/monitoramento"
-                className={`flex items-center p-2 rounded-lg transition duration-150 ${
-                  isActive('/monitoramento') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                }`}
-              >
-                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Monitoramento
-              </Link>
-            </li>
+            {hasModuleAccess('monitoramento') && (
+              <li>
+                <Link
+                  to="/monitoramento"
+                  className={`flex items-center p-2 rounded-lg transition duration-150 ${
+                    isActive('/monitoramento') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                  }`}
+                >
+                  <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  Monitoramento
+                </Link>
+              </li>
+            )}
 
             {/* Configurações - Menu com submenu */}
+            {hasModuleAccess('configuracoes') && (
             <li>
               <button
                 onClick={() => toggleMenu('configuracoes')}
@@ -433,19 +504,46 @@ function Layout({ children }: LayoutProps) {
                       Configurações Gerais
                     </Link>
                   </li>
-                  <li>
-                    <Link
-                      to="/subscription-management"
-                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
-                        isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
-                      }`}
-                    >
-                      Assinatura
-                    </Link>
-                  </li>
+                  {hasPermission('manage_users') && (
+                    <li>
+                      <Link
+                        to="/usuarios"
+                        className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                          isActive('/usuarios') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                        }`}
+                      >
+                        Usuários
+                      </Link>
+                    </li>
+                  )}
+                  {hasPermission('manage_roles') && (
+                    <li>
+                      <Link
+                        to="/configuracoes/roles"
+                        className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                          isActive('/configuracoes/roles') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                        }`}
+                      >
+                        Roles e Permissões
+                      </Link>
+                    </li>
+                  )}
+                  {hasPermission('manage_subscriptions') && (
+                    <li>
+                      <Link
+                        to="/subscription-management"
+                        className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                          isActive('/subscription-management') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                        }`}
+                      >
+                        Assinatura
+                      </Link>
+                    </li>
+                  )}
                 </ul>
               )}
             </li>
+            )}
             {/* Perfil */}
             <li>
               <Link

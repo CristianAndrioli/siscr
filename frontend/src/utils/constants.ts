@@ -9,8 +9,9 @@ export const API_TIMEOUT = 30000; // 30 segundos
 // Rotas
 export const ROUTES = {
   HOME: '/',
+  APP_HOME: '/app',
   LOGIN: '/login',
-  DASHBOARD: '/dashboard',
+  DASHBOARD: '/financeiro/dashboard',
   CADASTROS: {
     GERAL: {
       LISTA: '/cadastros/geral/lista',

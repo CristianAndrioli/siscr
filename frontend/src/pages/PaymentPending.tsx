@@ -57,8 +57,8 @@ function PaymentPending() {
           }
         }
       } else if (subscription.status === 'active' || subscription.status === 'trial') {
-        // Se já está ativa, redirecionar para dashboard
-        navigate('/dashboard');
+        // Se já está ativa, redirecionar para home
+        navigate('/app');
         return;
       }
     } catch (err: any) {
@@ -76,7 +76,7 @@ function PaymentPending() {
       } else {
         console.error('Erro ao verificar subscription:', err);
         // Se não conseguir verificar, assumir que está tudo ok
-        navigate('/dashboard');
+        navigate('/app');
         return;
       }
     } finally {
@@ -127,8 +127,8 @@ function PaymentPending() {
   }
 
   if (!subscriptionStatus || subscriptionStatus.status !== 'pending') {
-    // Se não está pending, redirecionar para dashboard
-    navigate('/dashboard');
+    // Se não está pending, redirecionar para home
+    navigate('/app');
     return null;
   }
 

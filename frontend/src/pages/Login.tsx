@@ -9,7 +9,7 @@ function Login() {
   const [searchParams] = useSearchParams();
   // Tentar obter domain dos searchParams, localStorage (tenant salvo) ou deixar vazio
   const domainFromParams = searchParams.get('domain') || '';
-  const redirectTo = searchParams.get('redirect') || '/dashboard';
+  const redirectTo = searchParams.get('redirect') || '/app';
   const tenantFromStorage = localStorage.getItem('tenant');
   let domainFromStorage = '';
   if (tenantFromStorage) {

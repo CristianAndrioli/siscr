@@ -27,8 +27,10 @@ urlpatterns = [
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     
-    # API Routes
+    # API Routes - Ordem importa: rotas mais específicas primeiro
     path('api/cadastros/', include('cadastros.api.urls')),
+    path('api/accounts/', include('accounts.api.urls')),  # API de gerenciamento de usuários
+    path('api/payments/', include('payments.api.urls')),  # API de pagamentos
     path('api/', include('core.api.urls')),  # Mantém API geral do core (se houver)
     
     # APIs de autenticação multi-tenant
