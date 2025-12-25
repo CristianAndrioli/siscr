@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Observabilidade - SISCR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .status-healthy { @apply bg-green-100 text-green-800 border-green-300; }
+        .status-unhealthy { @apply bg-red-100 text-red-800 border-red-300; }
+        .status-degraded { @apply bg-yellow-100 text-yellow-800 border-yellow-300; }
+        .status-unknown { @apply bg-gray-100 text-gray-800 border-gray-300; }
+        .status-configured { @apply bg-blue-100 text-blue-800 border-blue-300; }
+        .status-not-configured { @apply bg-gray-100 text-gray-600 border-gray-300; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">📊 Dashboard de Observabilidade</h1>
+                    <p class="text-gray-600 mt-2">Monitoramento do Sistema SISCR</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">Versão {{ data.system.version }}</p>
+                    <p class="text-sm text-gray-500">Ambiente: <span class="font-semibold">{{ data.system.environment }}</span></p>
+                    <p class="text-sm text-gray-500" id="timestamp"></p>
+                </div>
+            </div>
+            <!-- Controles de Atualização -->
+            <div class="mt-4 flex items-center gap-4 pt-4 border-t">
+                <button onclick="location.reload()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition flex items-center gap-2">
+                    🔄 Atualizar Agora
+                </button>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="auto-refresh" onchange="toggleAutoRefresh()" class="w-4 h-4">
+                    <span class="text-sm text-gray-600">Auto-refresh (30s)</span>
+                </label>
+                <span class="text-xs text-gray-500" id="last-update">Última atualização: agora</span>
+            </div>
+        </div>
+
+        <!-- Status Geral -->
+        {% if data.health %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🏥 Status Geral do Sistema</h2>
+            <div class="flex items-center gap-4">
+                {% if data.health.status == 'healthy' %}
+                <span class="px-4 py-2 rounded-lg status-healthy font-semibold">
+                    ✅ Sistema Saudável
+                </span>
+                {% else %}
+                <span class="px-4 py-2 rounded-lg status-unhealthy font-semibold">
+                    ❌ Sistema com Problemas
+                </span>
+                {% endif %}
+                    <span class="text-gray-600">
+                    Health check executado em <span id="health-duration"></span>ms
+                </span>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Serviços -->
+        {% if data.health and data.health.services %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🔧 Status dos Serviços</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for service_name, service_data in data.health.services.items %}
+                <div class="border rounded-lg p-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="font-semibold text-gray-800 capitalize">{{ service_name }}</h3>
+                        {% if service_data.status == 'healthy' %}
+                        <span class="px-2 py-1 rounded text-xs status-healthy">✅ Healthy</span>
+                        {% elif service_data.status == 'unhealthy' %}
+                        <span class="px-2 py-1 rounded text-xs status-unhealthy">❌ Unhealthy</span>
+                        {% elif service_data.status == 'degraded' %}
+                        <span class="px-2 py-1 rounded text-xs status-degraded">⚠️ Degraded</span>
+                        {% elif service_data.status == 'configured' %}
+                        <span class="px-2 py-1 rounded text-xs status-configured">⚙️ Configured</span>
+                        {% elif service_data.status == 'not_configured' %}
+                        <span class="px-2 py-1 rounded text-xs status-not-configured">⚪ Not Configured</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded text-xs status-unknown">❓ Unknown</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-gray-600">{{ service_data.message }}</p>
+                    {% if service_data.response_time_ms %}
+                    <p class="text-xs text-gray-500 mt-2">Tempo de resposta: {{ service_data.response_time_ms }}ms</p>
+                    {% endif %}
+                    {% if service_data.workers %}
+                    <p class="text-xs text-gray-500 mt-2">Workers: {{ service_data.workers }}</p>
+                    {% endif %}
+                    {% if service_data.mode %}
+                    <p class="text-xs text-gray-500 mt-2">Modo: {{ service_data.mode }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Logging -->
+        {% if data.logging %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">📝 Sistema de Logs</h2>
+            {% if data.logging.enabled %}
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 rounded status-healthy text-sm font-semibold">✅ Ativo</span>
+                    <span class="text-gray-600 text-sm">Diretório: {{ data.logging.logs_directory }}</span>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold text-gray-800 mb-2">📄 django.log</h3>
+                        {% if data.logging.django_log.exists %}
+                        <p class="text-sm text-gray-600">Tamanho: {{ data.logging.django_log.size_mb }} MB</p>
+                        <span class="text-xs text-green-600">✓ Arquivo existe</span>
+                        {% else %}
+                        <span class="text-xs text-red-600">✗ Arquivo não encontrado</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold text-gray-800 mb-2">⚠️ errors.log</h3>
+                        {% if data.logging.errors_log.exists %}
+                        <p class="text-sm text-gray-600">Tamanho: {{ data.logging.errors_log.size_mb }} MB</p>
+                        <span class="text-xs text-green-600">✓ Arquivo existe</span>
+                        {% else %}
+                        <span class="text-xs text-red-600">✗ Arquivo não encontrado</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if data.logging.last_errors %}
+                <div class="mt-4">
+                    <h3 class="font-semibold text-gray-800 mb-2">🔴 Últimos Erros</h3>
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <pre class="text-xs text-red-800 whitespace-pre-wrap font-mono">{% for error in data.logging.last_errors %}{{ error }}
+{% endfor %}</pre>
+                    </div>
+                </div>
+                {% else %}
+                <div class="mt-4">
+                    <p class="text-sm text-gray-600">✅ Nenhum erro recente registrado</p>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2">
+                <span class="px-3 py-1 rounded status-unhealthy text-sm font-semibold">❌ Desativado</span>
+                <span class="text-gray-600 text-sm">{{ data.logging.message }}</span>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Estatísticas do Banco de Dados -->
+        {% if data.database_stats %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">💾 Estatísticas do Banco de Dados</h2>
+            {% if data.database_stats.error %}
+            <p class="text-red-600">{{ data.database_stats.error }}</p>
+            {% else %}
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="border rounded-lg p-4 text-center">
+                    <p class="text-3xl font-bold text-indigo-600">{{ data.database_stats.tenants_total }}</p>
+                    <p class="text-sm text-gray-600 mt-1">Total de Tenants</p>
+                </div>
+                <div class="border rounded-lg p-4 text-center">
+                    <p class="text-3xl font-bold text-green-600">{{ data.database_stats.tenants_active }}</p>
+                    <p class="text-sm text-gray-600 mt-1">Tenants Ativos</p>
+                </div>
+                <div class="border rounded-lg p-4 text-center">
+                    <p class="text-3xl font-bold text-blue-600">{{ data.database_stats.users_total }}</p>
+                    <p class="text-sm text-gray-600 mt-1">Total de Usuários</p>
+                </div>
+                <div class="border rounded-lg p-4 text-center">
+                    <p class="text-lg font-bold text-gray-700">{{ data.database_stats.database_size }}</p>
+                    <p class="text-sm text-gray-600 mt-1">Tamanho do Banco</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Estatísticas de Tenants -->
+        {% if data.tenants_stats %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🏢 Estatísticas de Tenants</h2>
+            {% if data.tenants_stats.error %}
+            <p class="text-red-600">{{ data.tenants_stats.error }}</p>
+            {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Assinaturas</h3>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center p-2 bg-green-50 rounded">
+                            <span class="text-sm text-gray-600">Assinaturas Ativas</span>
+                            <span class="font-bold text-green-600">{{ data.tenants_stats.with_active_subscription }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-2 bg-yellow-50 rounded">
+                            <span class="text-sm text-gray-600">Assinaturas Pendentes</span>
+                            <span class="font-bold text-yellow-600">{{ data.tenants_stats.with_pending_subscription|default:0 }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-2 bg-red-50 rounded">
+                            <span class="text-sm text-gray-600">Assinaturas Expiradas</span>
+                            <span class="font-bold text-red-600">{{ data.tenants_stats.with_expired_subscription }}</span>
+                        </div>
+                        <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                            <span class="text-sm text-gray-600">Sem Assinatura</span>
+                            <span class="font-bold text-gray-600">{{ data.tenants_stats.without_subscription }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-3">Top 5 Tenants</h3>
+                    <div class="space-y-2">
+                        {% for tenant in data.tenants_stats.top_tenants %}
+                        <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">{{ tenant.name }}</span>
+                                {% if tenant.is_active %}
+                                <span class="ml-2 text-xs text-green-600">● Ativo</span>
+                                {% else %}
+                                <span class="ml-2 text-xs text-red-600">● Inativo</span>
+                                {% endif %}
+                            </div>
+                            <span class="text-xs text-gray-500">{{ tenant.schema_name }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Gráfico de Erros -->
+        {% if data.errors_analysis %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">📉 Análise de Erros</h2>
+            {% if data.errors_analysis.error %}
+            <p class="text-red-600">{{ data.errors_analysis.error }}</p>
+            {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <canvas id="errorsChart" width="400" height="200"></canvas>
+                </div>
+                <div class="space-y-4">
+                    <div class="border rounded-lg p-4">
+                        <p class="text-sm text-gray-600 mb-2">Estatísticas Recentes</p>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Erros (últimas 100 linhas)</span>
+                                <span class="font-bold text-red-600">{{ data.errors_analysis.total_recent_errors }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Warnings (últimas 100 linhas)</span>
+                                <span class="font-bold text-yellow-600">{{ data.errors_analysis.total_recent_warnings }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Linhas analisadas</span>
+                                <span class="font-bold text-gray-600">{{ data.errors_analysis.lines_analyzed }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Sentry -->
+        {% if data.sentry %}
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🔔 Sentry (Error Tracking)</h2>
+            {% if data.sentry.enabled %}
+            <div class="flex items-center gap-2">
+                <span class="px-3 py-1 rounded status-configured text-sm font-semibold">✅ Configurado</span>
+                <span class="text-gray-600 text-sm">{{ data.sentry.message }}</span>
+            </div>
+            {% else %}
+            <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 rounded status-not-configured text-sm font-semibold">⚪ Não Configurado</span>
+                    <span class="text-gray-600 text-sm">{{ data.sentry.message }}</span>
+                </div>
+                {% if data.sentry.how_to_enable %}
+                <p class="text-xs text-gray-500 bg-gray-50 p-2 rounded">{{ data.sentry.how_to_enable }}</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Links Úteis -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">🔗 Links Úteis</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <a href="/api/health/" class="block border rounded-lg p-4 hover:bg-gray-50 transition">
+                    <h3 class="font-semibold text-gray-800">🏥 Health Check</h3>
+                    <p class="text-sm text-gray-600 mt-1">Verificar status dos serviços</p>
+                </a>
+                <a href="/api/observability/?format=json" class="block border rounded-lg p-4 hover:bg-gray-50 transition">
+                    <h3 class="font-semibold text-gray-800">📊 JSON API</h3>
+                    <p class="text-sm text-gray-600 mt-1">Ver dados em formato JSON</p>
+                </a>
+                <a href="/admin/" class="block border rounded-lg p-4 hover:bg-gray-50 transition">
+                    <h3 class="font-semibold text-gray-800">⚙️ Django Admin</h3>
+                    <p class="text-sm text-gray-600 mt-1">Painel administrativo</p>
+                </a>
+                <a href="/api/" class="block border rounded-lg p-4 hover:bg-gray-50 transition">
+                    <h3 class="font-semibold text-gray-800">🔌 API Root</h3>
+                    <p class="text-sm text-gray-600 mt-1">Documentação da API</p>
+                </a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-6 text-center text-gray-500 text-sm">
+            <p>Dashboard atualizado automaticamente. Recarregue a página para ver atualizações.</p>
+        </div>
+    </div>
+
+    <script>
+        // Formatar timestamp
+        const timestamp = '{{ data.system.timestamp }}';
+        if (timestamp) {
+            const date = new Date(timestamp);
+            document.getElementById('timestamp').textContent = date.toLocaleString('pt-BR');
+            updateLastUpdate();
+        }
+        
+        // Formatar health check duration
+        const healthDuration = {{ data.health.health_check_duration_ms|default:0 }};
+        if (healthDuration) {
+            document.getElementById('health-duration').textContent = healthDuration.toFixed(2);
+        }
+        
+        // Auto-refresh
+        let autoRefreshInterval;
+        function toggleAutoRefresh() {
+            const checkbox = document.getElementById('auto-refresh');
+            if (checkbox.checked) {
+                autoRefreshInterval = setInterval(() => {
+                    location.reload();
+                }, 30000); // 30 segundos
+                updateLastUpdate();
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                }
+            }
+        }
+        
+        // Atualizar indicador de última atualização
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('last-update').textContent = 
+                `Última atualização: ${now.toLocaleTimeString('pt-BR')}`;
+        }
+        
+        // Atualizar a cada segundo o indicador
+        setInterval(updateLastUpdate, 1000);
+        
+        // Gráfico de erros
+        {% if data.errors_analysis and not data.errors_analysis.error %}
+        const errorsCtx = document.getElementById('errorsChart');
+        if (errorsCtx) {
+            new Chart(errorsCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Erros', 'Warnings', 'Sem problemas'],
+                    datasets: [{
+                        data: [
+                            {{ data.errors_analysis.total_recent_errors }},
+                            {{ data.errors_analysis.total_recent_warnings }},
+                            {{ data.errors_analysis.ok_lines|default:0 }}
+                        ],
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.8)',  // Red para erros
+                            'rgba(234, 179, 8, 0.8)', // Yellow para warnings
+                            'rgba(34, 197, 94, 0.8)'  // Green para sem problemas
+                        ],
+                        borderColor: [
+                            'rgba(239, 68, 68, 1)',
+                            'rgba(234, 179, 8, 1)',
+                            'rgba(34, 197, 94, 1)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Distribuição de Erros e Warnings'
+                        }
+                    }
+                }
+            });
+        }
+        {% endif %}
+    </script>
+</body>
+</html>
+

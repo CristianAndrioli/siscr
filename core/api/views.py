@@ -30,12 +30,16 @@ User = get_user_model()
 def health_check(request):
     """
     Health check endpoint para monitoramento e deploy
-    Verifica status de serviços críticos (DB, Redis, etc.)
+    Verifica status de serviços críticos (DB, Redis, Celery, Stripe, etc.)
     """
+    import time
+    start_time = time.time()
+    
     health_status = {
         'status': 'healthy',
         'timestamp': timezone.now().isoformat(),
-        'version': '1.0.0',
+        'version': os.environ.get('APP_VERSION', '1.0.0'),
+        'environment': getattr(settings, 'ENVIRONMENT', 'unknown'),
         'services': {}
     }
     
@@ -43,12 +47,15 @@ def health_check(request):
     
     # Verificar banco de dados
     try:
+        db_start = time.time()
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
             cursor.fetchone()
+        db_duration = round((time.time() - db_start) * 1000, 2)
         health_status['services']['database'] = {
             'status': 'healthy',
-            'message': 'Database connection successful'
+            'message': 'Database connection successful',
+            'response_time_ms': db_duration
         }
     except Exception as e:
         overall_healthy = False
@@ -59,12 +66,15 @@ def health_check(request):
     
     # Verificar Redis/Cache
     try:
+        cache_start = time.time()
         cache.set('health_check', 'ok', 10)
         cache_result = cache.get('health_check')
+        cache_duration = round((time.time() - cache_start) * 1000, 2)
         if cache_result == 'ok':
             health_status['services']['cache'] = {
                 'status': 'healthy',
-                'message': 'Cache (Redis) connection successful'
+                'message': 'Cache (Redis) connection successful',
+                'response_time_ms': cache_duration
             }
         else:
             raise Exception('Cache test failed')
@@ -73,6 +83,56 @@ def health_check(request):
         health_status['services']['cache'] = {
             'status': 'unhealthy',
             'message': f'Cache (Redis) connection failed: {str(e)}'
+        }
+    
+    # Verificar Celery (opcional - apenas se configurado)
+    try:
+        from celery import current_app
+        celery_start = time.time()
+        # Verificar se há workers ativos
+        inspect = current_app.control.inspect()
+        active_workers = inspect.active()
+        celery_duration = round((time.time() - celery_start) * 1000, 2)
+        
+        if active_workers is not None:
+            worker_count = len(active_workers)
+            health_status['services']['celery'] = {
+                'status': 'healthy',
+                'message': f'Celery is running with {worker_count} worker(s)',
+                'workers': worker_count,
+                'response_time_ms': celery_duration
+            }
+        else:
+            health_status['services']['celery'] = {
+                'status': 'degraded',
+                'message': 'Celery workers not responding (may be normal if no workers are running)',
+                'response_time_ms': celery_duration
+            }
+    except Exception as e:
+        # Celery não é crítico, apenas avisar
+        health_status['services']['celery'] = {
+            'status': 'unknown',
+            'message': f'Could not check Celery status: {str(e)}'
+        }
+    
+    # Verificar Stripe (opcional - apenas se configurado)
+    try:
+        stripe_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+        if stripe_key:
+            health_status['services']['stripe'] = {
+                'status': 'configured',
+                'message': 'Stripe is configured',
+                'mode': getattr(settings, 'STRIPE_MODE', 'unknown')
+            }
+        else:
+            health_status['services']['stripe'] = {
+                'status': 'not_configured',
+                'message': 'Stripe is not configured'
+            }
+    except Exception as e:
+        health_status['services']['stripe'] = {
+            'status': 'unknown',
+            'message': f'Could not check Stripe status: {str(e)}'
         }
     
     # Verificar configurações básicas
@@ -96,6 +156,23 @@ def health_check(request):
             'status': 'unhealthy',
             'message': f'Configuration check failed: {str(e)}'
         }
+    
+    # Verificar Sentry (se configurado)
+    sentry_dsn = getattr(settings, 'SENTRY_DSN', None)
+    if sentry_dsn:
+        health_status['services']['sentry'] = {
+            'status': 'configured',
+            'message': 'Sentry error tracking is configured'
+        }
+    else:
+        health_status['services']['sentry'] = {
+            'status': 'not_configured',
+            'message': 'Sentry is not configured'
+        }
+    
+    # Calcular tempo total do health check
+    total_duration = round((time.time() - start_time) * 1000, 2)
+    health_status['health_check_duration_ms'] = total_duration
     
     # Atualizar status geral
     health_status['status'] = 'healthy' if overall_healthy else 'unhealthy'
@@ -356,6 +433,301 @@ def backup_tenant(request):
             {'error': f'Erro ao criar backup: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def observability_dashboard(request):
+    """
+    Dashboard de observabilidade - mostra métricas e status do sistema
+    Acessível sem autenticação para facilitar monitoramento
+    
+    Retorna HTML se Accept: text/html, ou JSON se Accept: application/json
+    """
+    import os
+    import logging
+    from pathlib import Path
+    from django.conf import settings
+    from django.shortcuts import render
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # Informações básicas do sistema
+        dashboard_data = {
+            'system': {
+                'version': os.environ.get('APP_VERSION', '1.0.0'),
+                'environment': getattr(settings, 'ENVIRONMENT', 'unknown'),
+                'debug': settings.DEBUG,
+                'timestamp': timezone.now().isoformat(),
+            },
+            'services': {},
+            'logging': {},
+            'sentry': {},
+            'health': None,
+        }
+        
+        # Status dos serviços (chamar health_check diretamente)
+        try:
+            # Criar uma requisição fake para o health check
+            from django.test import RequestFactory
+            factory = RequestFactory()
+            health_request = factory.get('/api/health/')
+            health_response = health_check(health_request)
+            dashboard_data['health'] = health_response.data
+        except Exception as e:
+            dashboard_data['health'] = {'error': str(e)}
+        
+        # Informações de logging
+        logs_dir = Path(settings.BASE_DIR) / 'logs'
+        if logs_dir.exists():
+            django_log = logs_dir / 'django.log'
+            errors_log = logs_dir / 'errors.log'
+            
+            dashboard_data['logging'] = {
+                'enabled': True,
+                'logs_directory': str(logs_dir),
+                'django_log': {
+                    'exists': django_log.exists(),
+                    'size_mb': round(django_log.stat().st_size / (1024 * 1024), 2) if django_log.exists() else 0,
+                },
+                'errors_log': {
+                    'exists': errors_log.exists(),
+                    'size_mb': round(errors_log.stat().st_size / (1024 * 1024), 2) if errors_log.exists() else 0,
+                },
+            }
+            
+            # Tentar ler últimas linhas do log de erros
+            if errors_log.exists():
+                try:
+                    with open(errors_log, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        last_errors = lines[-5:] if len(lines) > 5 else lines
+                        dashboard_data['logging']['last_errors'] = [
+                            line.strip() for line in last_errors if line.strip()
+                        ][-3:]  # Últimos 3 erros
+                except:
+                    dashboard_data['logging']['last_errors'] = []
+        else:
+            dashboard_data['logging'] = {
+                'enabled': False,
+                'message': 'Diretório de logs não encontrado',
+            }
+        
+        # Status do Sentry
+        sentry_dsn = getattr(settings, 'SENTRY_DSN', None)
+        if sentry_dsn:
+            dashboard_data['sentry'] = {
+                'enabled': True,
+                'configured': True,
+                'message': 'Sentry está configurado e ativo',
+            }
+        else:
+            dashboard_data['sentry'] = {
+                'enabled': False,
+                'configured': False,
+                'message': 'Sentry não está configurado (opcional)',
+                'how_to_enable': 'Configure a variável SENTRY_DSN no .env para ativar',
+            }
+        
+        # Métricas básicas do cache
+        try:
+            cache.set('observability_test', 'ok', 10)
+            cache_test = cache.get('observability_test')
+            dashboard_data['services']['cache'] = {
+                'status': 'working' if cache_test == 'ok' else 'error',
+            }
+        except:
+            dashboard_data['services']['cache'] = {
+                'status': 'error',
+            }
+    
+        # Estatísticas do banco de dados
+        try:
+            from django_tenants.utils import schema_context
+            from tenants.models import Tenant
+            from django.contrib.auth import get_user_model
+            
+            User = get_user_model()
+            
+            with schema_context('public'):
+                # Estatísticas básicas
+                tenants_count = Tenant.objects.count()
+                active_tenants = Tenant.objects.filter(is_active=True).count()
+                inactive_tenants = tenants_count - active_tenants
+                
+                # Contar usuários (no schema público)
+                users_count = User.objects.count()
+                
+                # Tamanho do banco de dados
+                db_size = None
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            SELECT pg_size_pretty(pg_database_size(current_database()))
+                        """)
+                        db_size = cursor.fetchone()[0]
+                except:
+                    pass
+                
+                dashboard_data['database_stats'] = {
+                    'tenants_total': tenants_count,
+                    'tenants_active': active_tenants,
+                    'tenants_inactive': inactive_tenants,
+                    'users_total': users_count,
+                    'database_size': db_size or 'N/A',
+                }
+                
+                # Estatísticas de tenants (top 5 por atividade)
+                try:
+                    from subscriptions.models import Subscription
+                    
+                    # Tenants com assinaturas ativas (status='active' ou 'trial' e não expiradas)
+                    now = timezone.now()
+                    active_subscriptions = Subscription.objects.filter(
+                        status__in=['active', 'trial'],
+                        current_period_end__gt=now
+                    ).count()
+                    
+                    # Tenants com assinaturas expiradas/canceladas
+                    expired_subscriptions = Subscription.objects.filter(
+                        status__in=['canceled', 'expired', 'past_due']
+                    ).count()
+                    
+                    # Tenants com assinaturas pendentes
+                    pending_subscriptions = Subscription.objects.filter(
+                        status='pending'
+                    ).count()
+                    
+                    # Tenants sem assinatura
+                    tenants_with_subscription = Subscription.objects.values('tenant').distinct().count()
+                    tenants_without_subscription = tenants_count - tenants_with_subscription
+                    
+                    dashboard_data['tenants_stats'] = {
+                        'with_active_subscription': active_subscriptions,
+                        'with_expired_subscription': expired_subscriptions,
+                        'with_pending_subscription': pending_subscriptions,
+                        'without_subscription': tenants_without_subscription,
+                        'total_with_subscription': tenants_with_subscription,
+                    }
+                    
+                    # Top 5 tenants (por nome)
+                    top_tenants = Tenant.objects.all()[:5].values('id', 'name', 'schema_name', 'is_active')
+                    dashboard_data['tenants_stats']['top_tenants'] = list(top_tenants)
+                    
+                except Exception as e:
+                    dashboard_data['tenants_stats'] = {
+                        'error': f'Erro ao buscar estatísticas: {str(e)}'
+                    }
+                    
+        except Exception as e:
+            dashboard_data['database_stats'] = {
+                'error': f'Erro ao buscar estatísticas: {str(e)}'
+            }
+            dashboard_data['tenants_stats'] = {
+                'error': f'Erro ao buscar estatísticas: {str(e)}'
+            }
+    
+        # Análise de erros para gráfico
+        try:
+            logs_dir = Path(settings.BASE_DIR) / 'logs'
+            errors_log = logs_dir / 'errors.log'
+            
+            if errors_log.exists():
+                # Ler últimas 100 linhas para análise
+                try:
+                    with open(errors_log, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                        recent_lines = lines[-100:] if len(lines) > 100 else lines
+                        
+                        # Contar erros por tipo (simples)
+                        error_count = len([l for l in recent_lines if 'ERROR' in l.upper()])
+                        warning_count = len([l for l in recent_lines if 'WARNING' in l.upper()])
+                        
+                        # Calcular linhas sem problemas
+                        ok_lines = max(0, len(recent_lines) - error_count - warning_count)
+                        
+                        # Últimas 24 horas (aproximado - últimas 100 linhas)
+                        dashboard_data['errors_analysis'] = {
+                            'total_recent_errors': error_count,
+                            'total_recent_warnings': warning_count,
+                            'ok_lines': ok_lines,
+                            'lines_analyzed': len(recent_lines),
+                        }
+                except Exception as e:
+                    dashboard_data['errors_analysis'] = {
+                        'total_recent_errors': 0,
+                        'total_recent_warnings': 0,
+                        'ok_lines': 0,
+                        'lines_analyzed': 0,
+                        'error': f'Erro ao ler arquivo: {str(e)}'
+                    }
+            else:
+                dashboard_data['errors_analysis'] = {
+                    'total_recent_errors': 0,
+                    'total_recent_warnings': 0,
+                    'ok_lines': 0,
+                    'lines_analyzed': 0,
+                }
+        except Exception as e:
+            dashboard_data['errors_analysis'] = {
+                'error': f'Erro ao analisar logs: {str(e)}'
+            }
+        
+        # Verificar se o cliente quer HTML ou JSON
+        accept_header = request.META.get('HTTP_ACCEPT', '')
+        format_param = request.GET.get('format', '')
+        
+        # Se pedir HTML explicitamente ou Accept contém text/html
+        if format_param == 'html' or 'text/html' in accept_header:
+            try:
+                return render(request, 'observability_dashboard.html', {
+                    'data': dashboard_data
+                })
+            except Exception as e:
+                logger.error(f'Erro ao renderizar template: {str(e)}', exc_info=True)
+                # Se falhar, retorna JSON com erro
+                dashboard_data['template_error'] = str(e)
+                return Response(dashboard_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Caso contrário, retorna JSON
+        return Response(dashboard_data)
+        
+    except Exception as e:
+        logger.error(f'Erro crítico no dashboard de observabilidade: {str(e)}', exc_info=True)
+        # Retornar resposta de erro básica
+        error_data = {
+            'error': 'Erro ao gerar dashboard de observabilidade',
+            'message': str(e),
+            'system': {
+                'version': os.environ.get('APP_VERSION', '1.0.0'),
+                'timestamp': timezone.now().isoformat(),
+            }
+        }
+        
+        # Tentar retornar HTML de erro se possível
+        accept_header = request.META.get('HTTP_ACCEPT', '')
+        format_param = request.GET.get('format', '')
+        if format_param == 'html' or 'text/html' in accept_header:
+            try:
+                from django.template import Template, Context
+                error_html = """
+                <!DOCTYPE html>
+                <html>
+                <head><title>Erro - Dashboard</title></head>
+                <body style="font-family: Arial; padding: 20px;">
+                    <h1>Erro ao carregar dashboard</h1>
+                    <p>{{ message }}</p>
+                    <p><a href="/api/observability/?format=json">Ver JSON</a></p>
+                </body>
+                </html>
+                """
+                template = Template(error_html)
+                return HttpResponse(template.render(Context({'message': str(e)})))
+            except:
+                pass
+        
+        return Response(error_data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])

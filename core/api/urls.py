@@ -16,6 +16,7 @@ urlpatterns = [
     path('', views.api_root, name='api-root'),
     path('health/', views.health_check, name='health-check'),
     path('metrics/', views.metrics, name='metrics'),
+    path('observability/', views.observability_dashboard, name='observability-dashboard'),
     path('tenant/backup/', views.backup_tenant, name='tenant-backup'),
     path('tenant/backup-info/', views.tenant_backup_info, name='tenant-backup-info'),
     path('', include(router.urls)),

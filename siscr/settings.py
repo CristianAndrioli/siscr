@@ -97,6 +97,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'core.middleware.AuditMiddleware',  # Middleware de auditoria (preenche created_by, updated_by, owner)
+    'core.middleware_metrics.MetricsMiddleware',  # Middleware de métricas de performance
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     
@@ -498,14 +499,141 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 # ============================================
-# SENTRY (será configurado depois)
+# LOGGING CONFIGURATION
 # ============================================
-# import sentry_sdk
-# from sentry_sdk.integrations.django import DjangoIntegration
-# 
-# sentry_sdk.init(
-#     dsn=os.environ.get('SENTRY_DSN'),
-#     integrations=[DjangoIntegration()],
-#     traces_sample_rate=1.0,
-#     send_default_pii=True,
-# )
+import logging.config
+
+# Criar diretório de logs se não existir
+LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'json': {
+            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+            'format': '%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose' if DEBUG else 'json',
+        },
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'django.log',
+            'maxBytes': 1024 * 1024 * 10,  # 10 MB
+            'backupCount': 5,
+            'formatter': 'json',
+        },
+        'error_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'errors.log',
+            'maxBytes': 1024 * 1024 * 10,  # 10 MB
+            'backupCount': 5,
+            'formatter': 'json',
+            'level': 'ERROR',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['error_file', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',  # Log queries lentas apenas
+            'propagate': False,
+        },
+        'siscr': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'payments': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'subscriptions': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'accounts': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# ============================================
+# SENTRY CONFIGURATION
+# ============================================
+# Sentry é ativado apenas se SENTRY_DSN estiver configurado
+SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.django import DjangoIntegration
+        from sentry_sdk.integrations.celery import CeleryIntegration
+        from sentry_sdk.integrations.redis import RedisIntegration
+        
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            integrations=[
+                DjangoIntegration(
+                    transaction_style='url',
+                    middleware_spans=True,
+                    signals_spans=True,
+                ),
+                CeleryIntegration(),
+                RedisIntegration(),
+            ],
+            # Performance monitoring
+            traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0.1')),  # 10% das transações
+            # Profiling (apenas em produção)
+            profiles_sample_rate=float(os.environ.get('SENTRY_PROFILES_SAMPLE_RATE', '0.0')) if ENVIRONMENT == 'production' else 0.0,
+            # Environment
+            environment=ENVIRONMENT,
+            # Release version
+            release=os.environ.get('SENTRY_RELEASE', '1.0.0'),
+            # Send PII (Personally Identifiable Information) - apenas se necessário
+            send_default_pii=os.environ.get('SENTRY_SEND_PII', 'False').lower() == 'true',
+            # Debug
+            debug=DEBUG,
+        )
+    except ImportError:
+        # Sentry SDK não instalado, continuar sem ele
+        pass
+    except Exception as e:
+        # Erro ao inicializar Sentry, logar mas não quebrar a aplicação
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f'Erro ao inicializar Sentry: {e}')
