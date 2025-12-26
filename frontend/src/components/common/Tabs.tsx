@@ -17,7 +17,11 @@ interface TabsProps {
  * Componente de abas estilo Salesforce
  */
 export default function Tabs({ tabs, defaultTab, className = '' }: TabsProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab || tabs[0]?.id || '');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (defaultTab) return defaultTab;
+    if (tabs && tabs.length > 0 && tabs[0]) return tabs[0].id;
+    return '';
+  });
 
   if (!tabs || tabs.length === 0) {
     return null;

@@ -1,11 +1,10 @@
 """
 API Views for core app
 """
-from rest_framework import viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import viewsets, status
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from rest_framework import status
 from django.contrib.auth import get_user_model
 from django.http import HttpResponse, Http404
 from django.core.management import call_command
@@ -16,6 +15,9 @@ from django_tenants.utils import schema_context
 from tenants.models import Tenant
 from django.utils import timezone
 from django.conf import settings
+from django.core.mail import send_mail, EmailMessage
+from public.models import EmailSettings
+from core.api.serializers import EmailSettingsSerializer
 import os
 import tempfile
 import glob
@@ -1283,4 +1285,130 @@ def tenant_backup_info(request):
             {'error': f'Erro ao obter informações do backup: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+class EmailSettingsViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar configurações de email
+    Apenas admins podem acessar
+    EmailSettings está no schema público (shared)
+    """
+    serializer_class = EmailSettingsSerializer
+    permission_classes = [IsAuthenticated, IsTenantAdmin]
+    
+    def get_queryset(self):
+        """Retorna configurações do schema público"""
+        with schema_context('public'):
+            return EmailSettings.objects.filter(is_active=True).order_by('-created_at')
+    
+    def get_object(self):
+        """Buscar objeto no schema público"""
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        lookup = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
+        with schema_context('public'):
+            return EmailSettings.objects.get(**lookup)
+    
+    def perform_create(self, serializer):
+        """Criar no schema público"""
+        with schema_context('public'):
+            serializer.save()
+    
+    def perform_update(self, serializer):
+        """Atualizar no schema público"""
+        with schema_context('public'):
+            serializer.save()
+    
+    def perform_destroy(self, instance):
+        """Deletar no schema público"""
+        with schema_context('public'):
+            instance.delete()
+    
+    @action(detail=False, methods=['post'], url_path='test', url_name='test-email')
+    def test_email(self, request):
+        """
+        Endpoint para testar envio de email
+        Recebe: { "to_email": "email@exemplo.com" }
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[EmailSettings] test_email chamado com data: {request.data}")
+        
+        to_email = request.data.get('to_email')
+        if not to_email:
+            return Response(
+                {'error': 'Email de destino é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar configuração ativa no schema público
+        with schema_context('public'):
+            email_settings = EmailSettings.objects.filter(is_active=True).order_by('-created_at').first()
+            
+            if not email_settings:
+                return Response(
+                    {'error': 'Nenhuma configuração de email ativa encontrada'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        try:
+            # Aplicar configurações temporariamente
+            settings_dict = email_settings.get_settings_dict()
+            original_settings = {}
+            
+            # Salvar configurações originais
+            for key, value in settings_dict.items():
+                original_settings[key] = getattr(settings, key, None)
+                setattr(settings, key, value)
+            
+            # Enviar email de teste
+            subject = 'Teste de Email - SISCR'
+            message = f'''
+Este é um email de teste do sistema SISCR.
+
+Configurações utilizadas:
+- Backend: {email_settings.get_backend_display()}
+- Servidor: {email_settings.host or 'N/A'}
+- Porta: {email_settings.port}
+- Remetente: {email_settings.from_email}
+
+Se você recebeu este email, a configuração está funcionando corretamente!
+
+Data/Hora: {timezone.now().strftime("%d/%m/%Y %H:%M:%S")}
+            '''
+            
+            send_mail(
+                subject=subject,
+                message=message,
+                from_email=email_settings.from_email,
+                recipient_list=[to_email],
+                fail_silently=False,
+            )
+            
+            # Restaurar configurações originais
+            for key, value in original_settings.items():
+                if value is not None:
+                    setattr(settings, key, value)
+            
+            return Response({
+                'success': True,
+                'message': f'Email de teste enviado com sucesso para {to_email}',
+                'settings_used': {
+                    'backend': email_settings.get_backend_display(),
+                    'host': email_settings.host,
+                    'port': email_settings.port,
+                    'from_email': email_settings.from_email,
+                }
+            })
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {
+                    'success': False,
+                    'error': f'Erro ao enviar email: {str(e)}',
+                    'details': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

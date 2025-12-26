@@ -59,6 +59,7 @@ import RolesList from './pages/configuracoes/RolesList';
 import RolesForm from './pages/configuracoes/RolesForm';
 import FiliaisList from './pages/configuracoes/FiliaisList';
 import FiliaisForm from './pages/configuracoes/FiliaisForm';
+import EmailSettingsPage from './pages/configuracoes/EmailSettings';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -624,6 +625,17 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <FiliaisForm />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rota de configurações de email */}
+        <Route
+          path="/configuracoes/email"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <EmailSettingsPage />
               </Layout>
             </ProtectedRoute>
           }

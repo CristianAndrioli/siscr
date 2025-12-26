@@ -11,6 +11,7 @@ app_name = 'api'
 # NOTA: As viewsets de cadastros (Pessoa, Produto, Servico) foram movidas para cadastros/api/urls.py
 # Mantendo apenas rotas específicas do core aqui
 router = DefaultRouter()
+router.register(r'email-settings', views.EmailSettingsViewSet, basename='email-settings')
 
 urlpatterns = [
     path('', views.api_root, name='api-root'),

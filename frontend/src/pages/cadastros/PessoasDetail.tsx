@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCrud } from '../../hooks/useCrud';
-import { DetailView, DynamicForm } from '../../components/common';
+import { DetailView, DynamicForm, Button, Alert } from '../../components/common';
 import { pessoasService } from '../../services/cadastros/pessoas';
+import { emailService } from '../../services/email';
 import { useAutoFormFields } from '../../hooks/useAutoFormFields';
 import { ESTADOS } from '../../utils/constants';
 import type { Pessoa } from '../../types';
@@ -18,6 +19,11 @@ export function PessoasDetail() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [nextCode, setNextCode] = useState<number | null>(null);
   const [formDataState, setFormDataState] = useState<Record<string, unknown> | null>(null);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [emailTestResult, setEmailTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+  
+  // Verificar se está em modo de desenvolvimento
+  const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
   
   const {
     currentRecord,
@@ -211,6 +217,32 @@ export function PessoasDetail() {
     }
   };
 
+  const handleTestEmail = useCallback(async () => {
+    if (!currentRecord) return;
+    
+    const email = (currentRecord as any).email;
+    if (!email) {
+      setEmailTestResult({ success: false, error: 'Esta pessoa não possui email cadastrado' });
+      return;
+    }
+
+    setTestingEmail(true);
+    setEmailTestResult(null);
+
+    try {
+      const result = await emailService.testEmail({ to_email: email });
+      setEmailTestResult(result);
+    } catch (err: any) {
+      console.error('Erro ao testar email:', err);
+      setEmailTestResult({
+        success: false,
+        error: err.response?.data?.error || err.response?.data?.detail || 'Erro ao enviar email de teste',
+      });
+    } finally {
+      setTestingEmail(false);
+    }
+  }, [currentRecord]);
+
   // Se for novo ou estiver editando, mostrar formulário
   if (id === 'novo' || isEditing) {
     return (
@@ -307,12 +339,78 @@ export function PessoasDetail() {
     { key: 'observacoes', label: 'Observações' },
   ];
 
+  // Gerar tabs com botão de teste de email em desenvolvimento
+  const tabs = useMemo(() => {
+    const detailTab = {
+      id: 'detalhamento',
+      label: 'Detalhamento',
+      content: (
+        <div className="space-y-6">
+          {error && (
+            <Alert type="error" message={error} onClose={() => {}} dismissible={false} />
+          )}
+          
+          {/* Botão de teste de email (apenas em desenvolvimento) */}
+          {isDevelopment && currentRecord && (currentRecord as any).email && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-yellow-800">
+                    🧪 Modo Desenvolvimento
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Teste o envio de email para: {(currentRecord as any).email}
+                  </p>
+                </div>
+                <Button
+                  onClick={handleTestEmail}
+                  variant="secondary"
+                  size="sm"
+                  disabled={testingEmail}
+                >
+                  {testingEmail ? 'Enviando...' : 'Enviar Email de Teste'}
+                </Button>
+              </div>
+              
+              {emailTestResult && (
+                <div className={`mt-3 p-3 rounded ${
+                  emailTestResult.success
+                    ? 'bg-green-50 border border-green-200 text-green-800'
+                    : 'bg-red-50 border border-red-200 text-red-800'
+                }`}>
+                  <p className="text-sm">
+                    {emailTestResult.success ? '✓ ' : '✗ '}
+                    {emailTestResult.message || emailTestResult.error}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {fields.map((field) => {
+              const value = (currentRecord as Record<string, unknown>)[field.key];
+              const displayValue = field.render ? field.render(value) : (value ?? '-');
+              return (
+                <div key={field.key} className="border-b border-gray-200 pb-2">
+                  <label className="text-sm font-medium text-gray-500">{field.label}</label>
+                  <p className="mt-1 text-sm text-gray-900">{displayValue}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ),
+    };
+    
+    return [detailTab];
+  }, [currentRecord, fields, error, isDevelopment, testingEmail, emailTestResult, handleTestEmail]);
+
   return (
     <DetailView
       title={currentRecord?.nome_completo || currentRecord?.razao_social || `Pessoa #${id}`}
       subtitle={`Código: ${currentRecord?.codigo_cadastro || id}`}
-      fields={fields}
-      data={currentRecord as Record<string, unknown>}
+      tabs={tabs}
       onEdit={() => setIsEditing(true)}
       onDelete={() => handleDeleteRecord(id!)}
       onBack={() => navigate('/cadastros/pessoas')}
