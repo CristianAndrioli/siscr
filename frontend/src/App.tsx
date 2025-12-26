@@ -57,6 +57,8 @@ import UsuariosList from './pages/usuarios/UsuariosList';
 import UsuariosForm from './pages/usuarios/UsuariosForm';
 import RolesList from './pages/configuracoes/RolesList';
 import RolesForm from './pages/configuracoes/RolesForm';
+import FiliaisList from './pages/configuracoes/FiliaisList';
+import FiliaisForm from './pages/configuracoes/FiliaisForm';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -591,6 +593,37 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <RolesForm />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rotas de gerenciamento de filiais */}
+        <Route
+          path="/configuracoes/filiais"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <FiliaisList />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes/filiais/novo"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <FiliaisForm />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/configuracoes/filiais/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <FiliaisForm />
               </Layout>
             </ProtectedRoute>
           }

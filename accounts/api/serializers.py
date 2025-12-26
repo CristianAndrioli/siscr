@@ -157,6 +157,18 @@ class UserCreateSerializer(serializers.ModelSerializer):
         if not tenant:
             raise serializers.ValidationError('Tenant não identificado')
         
+        # Validar quota antes de criar usuário
+        from subscriptions.models import QuotaUsage
+        quota_usage, _ = QuotaUsage.objects.get_or_create(tenant=tenant)
+        success, message = quota_usage.check_quota('users', 1)
+        
+        if not success:
+            raise serializers.ValidationError({
+                'quota': message,
+                'quota_type': 'users',
+                'quota_exceeded': True
+            })
+        
         # Criar usuário no schema público
         user = User.objects.create_user(
             username=validated_data['username'],
@@ -205,6 +217,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
                 membership.role = role
                 membership.is_active = True
                 membership.save()
+        
+        # Nota: O signal vai incrementar a quota de usuários automaticamente
+        # quando o usuário for criado no schema do tenant
         
         return user
 

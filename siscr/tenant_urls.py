@@ -24,6 +24,9 @@ urlpatterns = [
     # API de gerenciamento de usuários do tenant
     path('api/accounts/', include('accounts.api.urls')),
     
+    # API de empresas e filiais
+    path('api/tenants/', include('tenants.api.urls')),
+    
     # APIs de pagamentos
     path('api/payments/', include('payments.api.urls')),
     
