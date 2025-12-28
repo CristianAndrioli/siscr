@@ -125,7 +125,7 @@ export default function DetailView({
 
       {/* Abas */}
       <div className="px-8 py-6">
-        <Tabs tabs={generatedTabs} />
+        <Tabs tabs={generatedTabs} defaultTab="detalhamento" />
       </div>
     </div>
   );

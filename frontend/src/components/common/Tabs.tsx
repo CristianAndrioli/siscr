@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 
 export interface Tab {
   id: string;
@@ -22,6 +22,24 @@ export default function Tabs({ tabs, defaultTab, className = '' }: TabsProps) {
     if (tabs && tabs.length > 0 && tabs[0]) return tabs[0].id;
     return '';
   });
+
+  // Atualizar aba ativa quando as tabs mudarem (ex: quando dados são carregados)
+  useEffect(() => {
+    if (!tabs || tabs.length === 0) return;
+    
+    // Se a aba atual não existe mais nas tabs, ou se activeTab está vazio, definir a primeira aba
+    const currentTabExists = tabs.some(tab => tab.id === activeTab);
+    if (!currentTabExists || !activeTab) {
+      // Priorizar defaultTab, senão usar a primeira aba disponível
+      const tabToActivate = defaultTab && tabs.some(tab => tab.id === defaultTab)
+        ? defaultTab
+        : tabs[0]?.id;
+      
+      if (tabToActivate) {
+        setActiveTab(tabToActivate);
+      }
+    }
+  }, [tabs, defaultTab, activeTab]);
 
   if (!tabs || tabs.length === 0) {
     return null;
