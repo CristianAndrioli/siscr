@@ -226,6 +226,8 @@ echo 🌐 Abrindo páginas no navegador...
 timeout /t 2 /nobreak >nul
 start http://localhost:8000/admin/
 timeout /t 1 /nobreak >nul
+start http://localhost:8000/api/docs/
+timeout /t 1 /nobreak >nul
 start http://localhost:8000/api/observability/
 timeout /t 1 /nobreak >nul
 start http://localhost:5173
@@ -238,6 +240,7 @@ echo.
 echo 📋 Serviços disponíveis:
 echo    • Backend (Django): http://localhost:8000
 echo    • Admin Django:     http://localhost:8000/admin/
+echo    • Swagger/API Docs:    http://localhost:8000/api/docs/
 echo    • Dashboard Observabilidade: http://localhost:8000/api/observability/
 echo    • Frontend (React): http://localhost:5173
 echo.
