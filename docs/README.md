@@ -115,6 +115,7 @@ Análises técnicas, comparações e planos de evolução.
 - [Implementação de Separação de Filiais](./analysis/IMPLEMENTACAO_SEPARACAO_FILIAIS.md)
 - [Melhorias sem Infraestrutura](./analysis/MELHORIAS_SEM_INFRAESTRUTURA.md)
 - [Bibliotecas Fiscais Open Source](./analysis/BIBLIOTECAS_FISCAIS_OPEN_SOURCE.md)
+- [Estudo de Estoque Multi-Tenant](./analysis/ESTUDO_ESTOQUE_MULTITENANT.md)
 
 ### 🔧 [SaaS e Multi-tenant](./saas/)
 Documentação sobre funcionalidades SaaS e multi-tenant.
