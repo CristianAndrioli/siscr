@@ -9,6 +9,16 @@ from decimal import Decimal
 from tenants.models import Tenant, Domain, Empresa, Filial
 from cadastros.models import Produto
 from estoque.models import Location, Estoque, MovimentacaoEstoque
+from estoque.services import (
+    processar_entrada_estoque,
+    processar_saida_estoque,
+    calcular_custo_medio_ponderado,
+    validar_location_permite_entrada,
+    validar_location_permite_saida,
+    validar_estoque_disponivel,
+    validar_filial_pertence_empresa,
+    EstoqueServiceError
+)
 from subscriptions.models import Plan
 
 User = get_user_model()
@@ -674,3 +684,408 @@ class MovimentacaoEstoqueModelTests(TestCase):
                     valor_unitario=Decimal('10.50')
                 )
                 movimentacao.full_clean()
+
+
+@override_settings(
+    CACHES={
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+)
+class EstoqueServicesTests(TestCase):
+    """Testes para os serviços de estoque"""
+    
+    def setUp(self):
+        """Configuração inicial para cada teste"""
+        # Criar tenant de teste
+        with schema_context('public'):
+            self.tenant = Tenant.objects.create(
+                schema_name='test_estoque_services',
+                name='Tenant de Teste Services',
+                is_active=True
+            )
+            Domain.objects.create(
+                domain='test-services.localhost',
+                tenant=self.tenant,
+                is_primary=True
+            )
+            
+            self.plan = Plan.objects.create(
+                name='Plano Teste',
+                slug='teste',
+                price_monthly=99.00,
+                max_users=10,
+                max_empresas=5,
+                max_filiais=10,
+                is_active=True
+            )
+        
+        # Criar dados no schema do tenant
+        with schema_context(self.tenant.schema_name):
+            # Criar empresa
+            self.empresa = Empresa.objects.create(
+                tenant=self.tenant,
+                nome='Empresa Teste',
+                razao_social='Empresa Teste LTDA',
+                cnpj='12345678000190',
+                cidade='São Paulo',
+                estado='SP',
+                is_active=True
+            )
+            
+            # Criar filial
+            self.filial = Filial.objects.create(
+                empresa=self.empresa,
+                nome='Filial Teste',
+                codigo_filial='FIL001',
+                cidade='Rio de Janeiro',
+                estado='RJ',
+                is_active=True
+            )
+            
+            # Criar locations
+            self.location_entrada = Location.objects.create(
+                empresa=self.empresa,
+                nome='Loja Entrada',
+                codigo='LOC001',
+                tipo='LOJA',
+                logradouro='Rua Entrada',
+                numero='123',
+                bairro='Centro',
+                cidade='São Paulo',
+                estado='SP',
+                cep='01234-567',
+                permite_entrada=True,
+                permite_saida=True,
+                is_active=True
+            )
+            
+            self.location_saida = Location.objects.create(
+                empresa=self.empresa,
+                nome='Loja Saída',
+                codigo='LOC002',
+                tipo='LOJA',
+                logradouro='Rua Saída',
+                numero='456',
+                bairro='Centro',
+                cidade='São Paulo',
+                estado='SP',
+                cep='01234-567',
+                permite_entrada=True,
+                permite_saida=True,
+                is_active=True
+            )
+            
+            self.location_sem_entrada = Location.objects.create(
+                empresa=self.empresa,
+                nome='Loja Sem Entrada',
+                codigo='LOC003',
+                tipo='LOJA',
+                logradouro='Rua Sem Entrada',
+                numero='789',
+                bairro='Centro',
+                cidade='São Paulo',
+                estado='SP',
+                cep='01234-567',
+                permite_entrada=False,
+                permite_saida=True,
+                is_active=True
+            )
+            
+            # Criar produto
+            self.produto = Produto.objects.create(
+                nome='Produto Teste',
+                codigo='PROD001',
+                tipo='PRODUTO',
+                unidade_medida='UN',
+                valor_custo=Decimal('10.00'),
+                valor_venda=Decimal('15.00'),
+                is_active=True
+            )
+    
+    def test_processar_entrada_estoque_criar_novo(self):
+        """Testa processar entrada de estoque criando novo estoque"""
+        with schema_context(self.tenant.schema_name):
+            resultado = processar_entrada_estoque(
+                produto=self.produto,
+                location=self.location_entrada,
+                empresa=self.empresa,
+                quantidade=Decimal('100.000'),
+                valor_unitario=Decimal('10.50'),
+                origem='COMPRA',
+                documento_referencia='OC001'
+            )
+            
+            estoque = resultado['estoque']
+            movimentacao = resultado['movimentacao']
+            
+            # Verificar estoque
+            self.assertEqual(estoque.quantidade_atual, Decimal('100.000'))
+            self.assertEqual(estoque.valor_custo_medio, Decimal('10.50'))
+            self.assertEqual(estoque.quantidade_disponivel, Decimal('100.000'))
+            
+            # Verificar movimentação
+            self.assertEqual(movimentacao.tipo, 'ENTRADA')
+            self.assertEqual(movimentacao.origem, 'COMPRA')
+            self.assertEqual(movimentacao.quantidade, Decimal('100.000'))
+            self.assertEqual(movimentacao.quantidade_anterior, Decimal('0.000'))
+            self.assertEqual(movimentacao.quantidade_posterior, Decimal('100.000'))
+    
+    def test_processar_entrada_estoque_atualizar_existente(self):
+        """Testa processar entrada de estoque atualizando estoque existente"""
+        with schema_context(self.tenant.schema_name):
+            # Criar estoque inicial
+            estoque_inicial = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_entrada,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('50.000'),
+                valor_custo_medio=Decimal('10.00')
+            )
+            
+            # Processar entrada
+            resultado = processar_entrada_estoque(
+                produto=self.produto,
+                location=self.location_entrada,
+                empresa=self.empresa,
+                quantidade=Decimal('50.000'),
+                valor_unitario=Decimal('11.00'),
+                origem='COMPRA'
+            )
+            
+            estoque = resultado['estoque']
+            
+            # Verificar que é o mesmo estoque
+            self.assertEqual(estoque.id, estoque_inicial.id)
+            
+            # Verificar quantidade
+            self.assertEqual(estoque.quantidade_atual, Decimal('100.000'))
+            
+            # Verificar custo médio ponderado
+            # (50 * 10.00 + 50 * 11.00) / 100 = 10.50
+            self.assertEqual(estoque.valor_custo_medio, Decimal('10.50'))
+    
+    def test_processar_entrada_estoque_location_sem_entrada(self):
+        """Testa erro ao processar entrada em location que não permite entrada"""
+        with schema_context(self.tenant.schema_name):
+            with self.assertRaises(EstoqueServiceError) as context:
+                processar_entrada_estoque(
+                    produto=self.produto,
+                    location=self.location_sem_entrada,
+                    empresa=self.empresa,
+                    quantidade=Decimal('100.000'),
+                    valor_unitario=Decimal('10.50')
+                )
+            
+            self.assertIn('não permite entrada', str(context.exception))
+    
+    def test_processar_entrada_estoque_quantidade_invalida(self):
+        """Testa erro ao processar entrada com quantidade inválida"""
+        with schema_context(self.tenant.schema_name):
+            with self.assertRaises(EstoqueServiceError):
+                processar_entrada_estoque(
+                    produto=self.produto,
+                    location=self.location_entrada,
+                    empresa=self.empresa,
+                    quantidade=Decimal('0.000'),
+                    valor_unitario=Decimal('10.50')
+                )
+    
+    def test_processar_saida_estoque_sucesso(self):
+        """Testa processar saída de estoque com sucesso"""
+        with schema_context(self.tenant.schema_name):
+            # Criar estoque inicial
+            estoque_inicial = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_saida,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('100.000'),
+                quantidade_reservada=Decimal('10.000'),
+                valor_custo_medio=Decimal('10.50')
+            )
+            
+            # Processar saída
+            resultado = processar_saida_estoque(
+                produto=self.produto,
+                location=self.location_saida,
+                empresa=self.empresa,
+                quantidade=Decimal('30.000'),
+                valor_unitario=Decimal('10.50'),
+                origem='VENDA',
+                documento_referencia='PV001'
+            )
+            
+            estoque = resultado['estoque']
+            movimentacao = resultado['movimentacao']
+            
+            # Verificar estoque
+            self.assertEqual(estoque.quantidade_atual, Decimal('70.000'))
+            self.assertEqual(estoque.quantidade_disponivel, Decimal('60.000'))  # 70 - 10 reservada
+            
+            # Verificar movimentação
+            self.assertEqual(movimentacao.tipo, 'SAIDA')
+            self.assertEqual(movimentacao.origem, 'VENDA')
+            self.assertEqual(movimentacao.quantidade, Decimal('30.000'))
+            self.assertEqual(movimentacao.quantidade_anterior, Decimal('100.000'))
+            self.assertEqual(movimentacao.quantidade_posterior, Decimal('70.000'))
+    
+    def test_processar_saida_estoque_insuficiente(self):
+        """Testa erro ao processar saída com estoque insuficiente"""
+        with schema_context(self.tenant.schema_name):
+            # Criar estoque com quantidade menor
+            Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_saida,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('50.000'),
+                quantidade_reservada=Decimal('30.000'),  # Deixa apenas 20 disponível
+                valor_custo_medio=Decimal('10.50')
+            )
+            
+            with self.assertRaises(EstoqueServiceError) as context:
+                processar_saida_estoque(
+                    produto=self.produto,
+                    location=self.location_saida,
+                    empresa=self.empresa,
+                    quantidade=Decimal('30.000'),
+                    valor_unitario=Decimal('10.50')
+                )
+            
+            self.assertIn('Estoque insuficiente', str(context.exception))
+    
+    def test_processar_saida_estoque_nao_existe(self):
+        """Testa erro ao processar saída de estoque que não existe"""
+        with schema_context(self.tenant.schema_name):
+            with self.assertRaises(EstoqueServiceError) as context:
+                processar_saida_estoque(
+                    produto=self.produto,
+                    location=self.location_saida,
+                    empresa=self.empresa,
+                    quantidade=Decimal('30.000'),
+                    valor_unitario=Decimal('10.50')
+                )
+            
+            self.assertIn('Estoque não encontrado', str(context.exception))
+    
+    def test_processar_saida_estoque_alerta_minimo(self):
+        """Testa alerta de estoque mínimo ao processar saída"""
+        with schema_context(self.tenant.schema_name):
+            # Criar estoque com mínimo configurado
+            Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_saida,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('100.000'),
+                quantidade_reservada=Decimal('0.000'),
+                valor_custo_medio=Decimal('10.50'),
+                estoque_minimo=Decimal('80.000')
+            )
+            
+            # Processar saída que deixa abaixo do mínimo
+            resultado = processar_saida_estoque(
+                produto=self.produto,
+                location=self.location_saida,
+                empresa=self.empresa,
+                quantidade=Decimal('30.000'),
+                valor_unitario=Decimal('10.50'),
+                verificar_estoque_minimo=True
+            )
+            
+            # Verificar que alerta foi gerado
+            self.assertIsNotNone(resultado['alerta_estoque_minimo'])
+            alerta = resultado['alerta_estoque_minimo']
+            self.assertEqual(alerta['quantidade_atual'], Decimal('70.000'))
+            self.assertEqual(alerta['estoque_minimo'], Decimal('80.000'))
+    
+    def test_calcular_custo_medio_ponderado_estoque_zerado(self):
+        """Testa cálculo de custo médio quando estoque está zerado"""
+        with schema_context(self.tenant.schema_name):
+            estoque = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_entrada,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('0.000'),
+                valor_custo_medio=Decimal('0.00')
+            )
+            
+            novo_custo = calcular_custo_medio_ponderado(
+                estoque,
+                Decimal('100.000'),
+                Decimal('10.50')
+            )
+            
+            # Quando estoque está zerado, custo médio é o custo da entrada
+            self.assertEqual(novo_custo, Decimal('10.50'))
+    
+    def test_calcular_custo_medio_ponderado_com_estoque(self):
+        """Testa cálculo de custo médio ponderado com estoque existente"""
+        with schema_context(self.tenant.schema_name):
+            estoque = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_entrada,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('50.000'),
+                valor_custo_medio=Decimal('10.00')
+            )
+            
+            novo_custo = calcular_custo_medio_ponderado(
+                estoque,
+                Decimal('50.000'),
+                Decimal('11.00')
+            )
+            
+            # (50 * 10.00 + 50 * 11.00) / 100 = 10.50
+            self.assertEqual(novo_custo, Decimal('10.50'))
+    
+    def test_validar_location_permite_entrada(self):
+        """Testa validação de location permite entrada"""
+        with schema_context(self.tenant.schema_name):
+            # Location que permite entrada
+            validar_location_permite_entrada(self.location_entrada)  # Não deve lançar erro
+            
+            # Location que não permite entrada
+            with self.assertRaises(EstoqueServiceError):
+                validar_location_permite_entrada(self.location_sem_entrada)
+    
+    def test_validar_estoque_disponivel(self):
+        """Testa validação de estoque disponível"""
+        with schema_context(self.tenant.schema_name):
+            estoque = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location_saida,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('100.000'),
+                quantidade_reservada=Decimal('20.000')
+            )
+            
+            # Quantidade disponível = 100 - 20 = 80
+            # Testar com quantidade menor que disponível
+            validar_estoque_disponivel(estoque, Decimal('50.000'))  # Não deve lançar erro
+            
+            # Testar com quantidade maior que disponível
+            with self.assertRaises(EstoqueServiceError):
+                validar_estoque_disponivel(estoque, Decimal('90.000'))
+    
+    def test_validar_filial_pertence_empresa(self):
+        """Testa validação de filial pertence à empresa"""
+        with schema_context(self.tenant.schema_name):
+            # Filial que pertence à empresa
+            validar_filial_pertence_empresa(self.filial, self.empresa)  # Não deve lançar erro
+            
+            # Filial None (válido)
+            validar_filial_pertence_empresa(None, self.empresa)  # Não deve lançar erro
+            
+            # Criar outra empresa e tentar validar filial de outra empresa
+            outra_empresa = Empresa.objects.create(
+                tenant=self.tenant,
+                nome='Outra Empresa',
+                razao_social='Outra Empresa LTDA',
+                cnpj='98765432000100',
+                cidade='São Paulo',
+                estado='SP',
+                is_active=True
+            )
+            
+            with self.assertRaises(EstoqueServiceError):
+                validar_filial_pertence_empresa(self.filial, outra_empresa)
