@@ -537,6 +537,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'subscriptions.tasks.suspend_expired_tenants',
         'schedule': 3600.0,  # A cada 1 hora
     },
+    # Estoque: Expirar soft reservations (a cada 5 minutos)
+    'expirar-soft-reservations': {
+        'task': 'estoque.tasks.expirar_soft_reservations',
+        'schedule': 300.0,  # 5 minutos
+    },
 }
 
 # ============================================

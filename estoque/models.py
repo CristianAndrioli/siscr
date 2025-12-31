@@ -579,3 +579,434 @@ class MovimentacaoEstoque(SiscrModelBase):
         self.save()
         
         return movimentacao_reversa
+
+
+class ReservaEstoque(SiscrModelBase):
+    """
+    Reserva de estoque (Soft ou Hard Reservation)
+    
+    SOFT: Reserva temporária que não bloqueia estoque físico
+    HARD: Reserva confirmada que bloqueia estoque físico (atualiza quantidade_reservada)
+    
+    Inspirado no conceito de Salesforce Omnichannel Inventory
+    """
+    TIPO_CHOICES = [
+        ('SOFT', 'Soft Reservation'),
+        ('HARD', 'Hard Reservation'),
+    ]
+    
+    ORIGEM_CHOICES = [
+        ('VENDA', 'Venda'),
+        ('ECOMMERCE', 'E-commerce'),
+        ('PEDIDO', 'Pedido'),
+        ('COTACAO', 'Cotação'),
+        ('OUTRO', 'Outro'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('ATIVA', 'Ativa'),
+        ('CONFIRMADA', 'Confirmada'),
+        ('CANCELADA', 'Cancelada'),
+        ('EXPIRADA', 'Expirada'),
+    ]
+    
+    estoque = models.ForeignKey(
+        Estoque,
+        on_delete=models.PROTECT,
+        related_name='reservas',
+        verbose_name='Estoque',
+        help_text='Estoque específico onde a reserva foi feita'
+    )
+    
+    tipo = models.CharField(
+        max_length=10,
+        choices=TIPO_CHOICES,
+        default='SOFT',
+        verbose_name='Tipo de Reserva',
+        help_text='SOFT: não bloqueia estoque. HARD: bloqueia estoque físico.'
+    )
+    
+    origem = models.CharField(
+        max_length=20,
+        choices=ORIGEM_CHOICES,
+        verbose_name='Origem',
+        help_text='Origem da reserva (venda, e-commerce, etc.)'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='ATIVA',
+        verbose_name='Status'
+    )
+    
+    quantidade = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal('0.001'))],
+        verbose_name='Quantidade Reservada'
+    )
+    
+    data_expiracao = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Expiração',
+        help_text='Data/hora em que a reserva expira (para SOFT reservations)'
+    )
+    
+    documento_referencia = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name='Documento de Referência',
+        help_text='Ex: ID do Pedido de Venda, ID do Carrinho'
+    )
+    
+    observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
+    
+    class Meta:
+        verbose_name = 'Reserva de Estoque'
+        verbose_name_plural = 'Reservas de Estoque'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['estoque', 'status']),
+            models.Index(fields=['tipo', 'status']),
+            models.Index(fields=['data_expiracao', 'status']),
+            models.Index(fields=['origem', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"Reserva {self.get_tipo_display()} - {self.estoque.produto} ({self.quantidade})"
+    
+    def clean(self):
+        """Validações do modelo"""
+        # SOFT reservations devem ter data de expiração
+        if self.tipo == 'SOFT' and not self.data_expiracao:
+            raise ValidationError({
+                'data_expiracao': 'Reservas SOFT devem ter data de expiração definida.'
+            })
+        
+        # Validar quantidade não excede estoque disponível (se HARD)
+        if self.tipo == 'HARD' and self.status == 'ATIVA':
+            estoque_disponivel = self.estoque.quantidade_disponivel
+            outras_reservas_hard = ReservaEstoque.objects.filter(
+                estoque=self.estoque,
+                tipo='HARD',
+                status='ATIVA'
+            ).exclude(id=self.id).aggregate(
+                total=models.Sum('quantidade')
+            )['total'] or Decimal('0.000')
+            
+            disponivel_para_reserva = estoque_disponivel - outras_reservas_hard
+            if self.quantidade > disponivel_para_reserva:
+                raise ValidationError({
+                    'quantidade': f'Quantidade excede estoque disponível para reserva. '
+                                f'Disponível: {disponivel_para_reserva}'
+                })
+    
+    def save(self, *args, **kwargs):
+        """Override save para executar clean e atualizar estoque"""
+        self.full_clean()
+        
+        # Se é HARD e está sendo criada/ativada, atualizar quantidade_reservada
+        if self.tipo == 'HARD' and self.status == 'ATIVA':
+            # Se é uma nova reserva ou está sendo reativada
+            if not self.pk or (self.pk and self.status == 'ATIVA'):
+                # Verificar se já existe estoque reservado (para evitar duplicação)
+                # Isso será gerenciado pelo método confirmar()
+                pass
+        
+        super().save(*args, **kwargs)
+    
+    def confirmar(self):
+        """
+        Confirma uma reserva SOFT, convertendo para HARD e baixando estoque
+        """
+        if self.status != 'ATIVA':
+            raise ValueError(f"Reserva não está ativa. Status atual: {self.status}")
+        
+        if self.tipo == 'SOFT':
+            # Converter SOFT para HARD
+            self.tipo = 'HARD'
+            self.data_expiracao = None  # HARD não expira
+        
+        # Atualizar estoque
+        self.estoque.quantidade_reservada += self.quantidade
+        self.estoque.save()
+        
+        # Atualizar status
+        self.status = 'CONFIRMADA'
+        self.save()
+        
+        return self
+    
+    def cancelar(self, motivo=None):
+        """
+        Cancela uma reserva e libera estoque se necessário
+        """
+        if self.status in ['CANCELADA', 'EXPIRADA']:
+            raise ValueError(f"Reserva já está {self.status.lower()}")
+        
+        # Se é HARD e está confirmada, liberar estoque
+        if self.tipo == 'HARD' and self.status == 'CONFIRMADA':
+            self.estoque.quantidade_reservada = max(
+                Decimal('0.000'),
+                self.estoque.quantidade_reservada - self.quantidade
+            )
+            self.estoque.save()
+        
+        self.status = 'CANCELADA'
+        if motivo:
+            self.observacoes = f"{self.observacoes or ''}\nCancelado: {motivo}".strip()
+        self.save()
+        
+        return self
+    
+    def expirar(self):
+        """
+        Expira uma reserva SOFT (chamado por tarefa Celery)
+        """
+        if self.tipo != 'SOFT':
+            raise ValueError("Apenas reservas SOFT podem expirar")
+        
+        if self.status != 'ATIVA':
+            raise ValueError(f"Reserva não está ativa. Status atual: {self.status}")
+        
+        self.status = 'EXPIRADA'
+        self.save()
+        
+        return self
+    
+    @property
+    def esta_expirada(self):
+        """Verifica se a reserva está expirada"""
+        if self.tipo == 'SOFT' and self.data_expiracao:
+            from django.utils import timezone
+            return timezone.now() > self.data_expiracao
+        return False
+
+
+class PrevisaoMovimentacao(SiscrModelBase):
+    """
+    Previsão de movimentação de estoque (para planejamento)
+    
+    Permite rastrear movimentações futuras esperadas e atualizar
+    automaticamente as quantidades previstas no estoque.
+    """
+    TIPO_CHOICES = [
+        ('ENTRADA', 'Entrada'),
+        ('SAIDA', 'Saída'),
+        ('TRANSFERENCIA', 'Transferência'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('PENDENTE', 'Pendente'),
+        ('CONFIRMADA', 'Confirmada'),
+        ('CANCELADA', 'Cancelada'),
+        ('REALIZADA', 'Realizada'),
+    ]
+    
+    ORIGEM_CHOICES = [
+        ('COMPRA', 'Compra'),
+        ('VENDA', 'Venda'),
+        ('TRANSFERENCIA', 'Transferência entre Locations'),
+        ('PRODUCAO', 'Produção'),
+        ('OUTRO', 'Outro'),
+    ]
+    
+    estoque = models.ForeignKey(
+        Estoque,
+        on_delete=models.CASCADE,
+        related_name='previsoes',
+        verbose_name='Estoque',
+        help_text='Estoque que será afetado pela movimentação'
+    )
+    
+    tipo = models.CharField(
+        max_length=20,
+        choices=TIPO_CHOICES,
+        verbose_name='Tipo de Movimentação'
+    )
+    
+    origem = models.CharField(
+        max_length=20,
+        choices=ORIGEM_CHOICES,
+        verbose_name='Origem'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDENTE',
+        verbose_name='Status'
+    )
+    
+    quantidade = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal('0.001'))],
+        verbose_name='Quantidade'
+    )
+    
+    data_prevista = models.DateTimeField(
+        verbose_name='Data Prevista',
+        help_text='Data/hora prevista para a movimentação'
+    )
+    
+    valor_unitario_previsto = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name='Valor Unitário Previsto'
+    )
+    
+    documento_referencia = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name='Documento de Referência',
+        help_text='Ex: ID do Pedido de Compra, ID do Pedido de Venda'
+    )
+    
+    # Para transferências
+    location_origem = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name='previsoes_origem',
+        null=True,
+        blank=True,
+        verbose_name='Location de Origem'
+    )
+    
+    location_destino = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name='previsoes_destino',
+        null=True,
+        blank=True,
+        verbose_name='Location de Destino'
+    )
+    
+    observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
+    
+    # Rastreamento de realização
+    movimentacao_realizada = models.ForeignKey(
+        MovimentacaoEstoque,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='previsao_origem',
+        verbose_name='Movimentação Realizada',
+        help_text='Movimentação que realizou esta previsão'
+    )
+    
+    class Meta:
+        verbose_name = 'Previsão de Movimentação'
+        verbose_name_plural = 'Previsões de Movimentação'
+        ordering = ['data_prevista']
+        indexes = [
+            models.Index(fields=['estoque', 'status']),
+            models.Index(fields=['tipo', 'status']),
+            models.Index(fields=['data_prevista', 'status']),
+            models.Index(fields=['origem', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"Previsão {self.get_tipo_display()} - {self.estoque.produto} ({self.quantidade}) - {self.data_prevista.strftime('%d/%m/%Y')}"
+    
+    def save(self, *args, **kwargs):
+        """Override save para atualizar estoque.quantidade_prevista_*"""
+        is_new = self.pk is None
+        old_status = None
+        
+        if not is_new:
+            try:
+                old_instance = PrevisaoMovimentacao.objects.get(pk=self.pk)
+                old_status = old_instance.status
+            except PrevisaoMovimentacao.DoesNotExist:
+                pass
+        
+        super().save(*args, **kwargs)
+        
+        # Atualizar quantidades previstas no estoque
+        self._atualizar_quantidades_previstas(old_status)
+    
+    def _atualizar_quantidades_previstas(self, old_status=None):
+        """
+        Atualiza quantidade_prevista_entrada ou quantidade_prevista_saida no estoque
+        """
+        # Se status mudou de PENDENTE/CONFIRMADA para CANCELADA/REALIZADA, remover da previsão
+        # Se status mudou para PENDENTE/CONFIRMADA, adicionar à previsão
+        
+        estoque = self.estoque
+        
+        # Calcular impacto baseado no status anterior e atual
+        impacto_anterior = Decimal('0.000')
+        if old_status in ['PENDENTE', 'CONFIRMADA']:
+            if self.tipo == 'ENTRADA':
+                impacto_anterior = -self.quantidade  # Remover da previsão anterior
+            elif self.tipo == 'SAIDA':
+                impacto_anterior = self.quantidade  # Remover da previsão anterior
+        
+        impacto_atual = Decimal('0.000')
+        if self.status in ['PENDENTE', 'CONFIRMADA']:
+            if self.tipo == 'ENTRADA':
+                impacto_atual = self.quantidade  # Adicionar à previsão
+            elif self.tipo == 'SAIDA':
+                impacto_atual = -self.quantidade  # Adicionar à previsão
+        
+        impacto_total = impacto_anterior + impacto_atual
+        
+        # Atualizar estoque
+        if self.tipo == 'ENTRADA':
+            estoque.quantidade_prevista_entrada = max(
+                Decimal('0.000'),
+                estoque.quantidade_prevista_entrada + impacto_total
+            )
+        elif self.tipo == 'SAIDA':
+            estoque.quantidade_prevista_saida = max(
+                Decimal('0.000'),
+                estoque.quantidade_prevista_saida + impacto_total
+            )
+        
+        estoque.save()
+    
+    def confirmar(self):
+        """
+        Confirma uma previsão (muda status para CONFIRMADA)
+        """
+        if self.status != 'PENDENTE':
+            raise ValueError(f"Previsão não está pendente. Status atual: {self.status}")
+        
+        self.status = 'CONFIRMADA'
+        self.save()
+        
+        return self
+    
+    def realizar(self, movimentacao=None):
+        """
+        Marca previsão como realizada e cria/vincula movimentação
+        """
+        if self.status not in ['PENDENTE', 'CONFIRMADA']:
+            raise ValueError(f"Previsão não pode ser realizada. Status atual: {self.status}")
+        
+        self.status = 'REALIZADA'
+        if movimentacao:
+            self.movimentacao_realizada = movimentacao
+        self.save()
+        
+        return self
+    
+    def cancelar(self, motivo=None):
+        """
+        Cancela uma previsão
+        """
+        if self.status in ['CANCELADA', 'REALIZADA']:
+            raise ValueError(f"Previsão não pode ser cancelada. Status atual: {self.status}")
+        
+        self.status = 'CANCELADA'
+        if motivo:
+            self.observacoes = f"{self.observacoes or ''}\nCancelado: {motivo}".strip()
+        self.save()
+        
+        return self

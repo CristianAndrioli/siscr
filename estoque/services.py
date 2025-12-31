@@ -5,9 +5,11 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from decimal import Decimal
 from typing import Optional, Dict, Any
-from .models import Location, Estoque, MovimentacaoEstoque
+from .models import Location, Estoque, MovimentacaoEstoque, ReservaEstoque, PrevisaoMovimentacao
 from cadastros.models import Produto
 from tenants.models import Empresa, Filial
+from django.utils import timezone
+from datetime import timedelta
 
 
 class EstoqueServiceError(Exception):
@@ -379,5 +381,164 @@ def processar_saida_estoque(
         'estoque': estoque,
         'movimentacao': movimentacao,
         'alerta_estoque_minimo': alerta_estoque_minimo,
+    }
+
+
+@transaction.atomic
+def criar_reserva(
+    produto: Produto,
+    location: Location,
+    empresa: Empresa,
+    quantidade: Decimal,
+    tipo: str = 'SOFT',
+    origem: str = 'VENDA',
+    documento_referencia: Optional[str] = None,
+    minutos_expiracao: Optional[int] = 30,
+    observacoes: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Cria uma reserva de estoque (SOFT ou HARD)
+    
+    SOFT: Reserva temporária que não bloqueia estoque físico
+    HARD: Reserva confirmada que bloqueia estoque físico
+    
+    Args:
+        produto: Produto a ser reservado
+        location: Location onde o estoque será reservado
+        empresa: Empresa proprietária
+        quantidade: Quantidade a reservar
+        tipo: Tipo de reserva ('SOFT' ou 'HARD')
+        origem: Origem da reserva (VENDA, ECOMMERCE, etc.)
+        documento_referencia: Documento de referência
+        minutos_expiracao: Minutos até expiração (apenas para SOFT)
+        observacoes: Observações adicionais
+        
+    Returns:
+        Dict com reserva criada
+        
+    Raises:
+        EstoqueServiceError: Se houver erro de validação ou estoque insuficiente
+    """
+    # Validações
+    if quantidade <= 0:
+        raise EstoqueServiceError("Quantidade deve ser maior que zero.")
+    
+    if tipo not in ['SOFT', 'HARD']:
+        raise EstoqueServiceError("Tipo de reserva deve ser 'SOFT' ou 'HARD'.")
+    
+    # Validar que location pertence à empresa
+    if location.empresa != empresa:
+        raise EstoqueServiceError(
+            f"A location '{location.nome}' não pertence à empresa '{empresa.nome}'."
+        )
+    
+    # Buscar estoque
+    try:
+        estoque = Estoque.objects.get(
+            produto=produto,
+            location=location,
+            empresa=empresa
+        )
+    except Estoque.DoesNotExist:
+        raise EstoqueServiceError(
+            f"Estoque não encontrado para produto '{produto.nome}' na location '{location.nome}'."
+        )
+    
+    # Para HARD, validar estoque disponível
+    if tipo == 'HARD':
+        validar_estoque_disponivel(estoque, quantidade)
+    
+    # Calcular data de expiração para SOFT
+    data_expiracao = None
+    if tipo == 'SOFT':
+        if not minutos_expiracao:
+            minutos_expiracao = 30  # Default: 30 minutos
+        data_expiracao = timezone.now() + timedelta(minutes=minutos_expiracao)
+    
+    # Criar reserva
+    reserva = ReservaEstoque.objects.create(
+        estoque=estoque,
+        tipo=tipo,
+        origem=origem,
+        status='ATIVA',
+        quantidade=quantidade,
+        data_expiracao=data_expiracao,
+        documento_referencia=documento_referencia,
+        observacoes=observacoes
+    )
+    
+    # Se é HARD, atualizar quantidade_reservada
+    if tipo == 'HARD':
+        estoque.quantidade_reservada += quantidade
+        estoque.save()
+    
+    return {
+        'reserva': reserva,
+        'estoque': estoque,
+    }
+
+
+@transaction.atomic
+def confirmar_reserva(reserva: ReservaEstoque) -> Dict[str, Any]:
+    """
+    Confirma uma reserva SOFT, convertendo para HARD e bloqueando estoque
+    
+    Args:
+        reserva: Reserva a ser confirmada
+        
+    Returns:
+        Dict com reserva confirmada e estoque atualizado
+        
+    Raises:
+        EstoqueServiceError: Se houver erro de validação ou estoque insuficiente
+    """
+    if reserva.status != 'ATIVA':
+        raise EstoqueServiceError(
+            f"Reserva não está ativa. Status atual: {reserva.status}"
+        )
+    
+    estoque = reserva.estoque
+    
+    # Se é SOFT, validar estoque disponível antes de converter
+    if reserva.tipo == 'SOFT':
+        validar_estoque_disponivel(estoque, reserva.quantidade)
+    
+    # Confirmar reserva (converte SOFT para HARD se necessário)
+    reserva.confirmar()
+    
+    return {
+        'reserva': reserva,
+        'estoque': estoque,
+    }
+
+
+@transaction.atomic
+def cancelar_reserva(reserva: ReservaEstoque, motivo: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Cancela uma reserva e libera estoque se necessário
+    
+    Args:
+        reserva: Reserva a ser cancelada
+        motivo: Motivo do cancelamento
+        
+    Returns:
+        Dict com reserva cancelada e estoque atualizado
+        
+    Raises:
+        EstoqueServiceError: Se houver erro de validação
+    """
+    if reserva.status in ['CANCELADA', 'EXPIRADA']:
+        raise EstoqueServiceError(
+            f"Reserva já está {reserva.status.lower()}"
+        )
+    
+    estoque = reserva.estoque
+    
+    # Cancelar reserva (libera estoque se HARD)
+    reserva.cancelar(motivo=motivo)
+    
+    return {
+        'reserva': reserva,
+        'estoque': estoque,
     }
 

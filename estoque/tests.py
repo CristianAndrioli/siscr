@@ -8,7 +8,7 @@ from django_tenants.utils import schema_context
 from decimal import Decimal
 from tenants.models import Tenant, Domain, Empresa, Filial
 from cadastros.models import Produto
-from estoque.models import Location, Estoque, MovimentacaoEstoque
+from estoque.models import Location, Estoque, MovimentacaoEstoque, ReservaEstoque, PrevisaoMovimentacao
 from estoque.services import (
     processar_entrada_estoque,
     processar_saida_estoque,
@@ -17,8 +17,13 @@ from estoque.services import (
     validar_location_permite_saida,
     validar_estoque_disponivel,
     validar_filial_pertence_empresa,
+    criar_reserva,
+    confirmar_reserva,
+    cancelar_reserva,
     EstoqueServiceError
 )
+from django.utils import timezone
+from datetime import timedelta
 from subscriptions.models import Plan
 
 User = get_user_model()
@@ -1089,3 +1094,435 @@ class EstoqueServicesTests(TestCase):
             
             with self.assertRaises(EstoqueServiceError):
                 validar_filial_pertence_empresa(self.filial, outra_empresa)
+
+
+@override_settings(
+    CACHES={
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+)
+class ReservaEstoqueTests(TestCase):
+    """Testes para reservas de estoque"""
+    
+    def setUp(self):
+        """Configuração inicial para cada teste"""
+        with schema_context('public'):
+            self.tenant = Tenant.objects.create(
+                schema_name='test_reservas',
+                name='Tenant de Teste Reservas',
+                is_active=True
+            )
+            Domain.objects.create(
+                domain='test-reservas.localhost',
+                tenant=self.tenant,
+                is_primary=True
+            )
+            
+            self.plan = Plan.objects.create(
+                name='Plano Teste',
+                slug='teste',
+                price_monthly=99.00,
+                max_users=10,
+                max_empresas=5,
+                max_filiais=10,
+                is_active=True
+            )
+        
+        with schema_context(self.tenant.schema_name):
+            self.empresa = Empresa.objects.create(
+                tenant=self.tenant,
+                nome='Empresa Teste',
+                razao_social='Empresa Teste LTDA',
+                cnpj='12345678000190',
+                cidade='São Paulo',
+                estado='SP',
+                is_active=True
+            )
+            
+            self.location = Location.objects.create(
+                empresa=self.empresa,
+                nome='Loja Teste',
+                codigo='LOC001',
+                tipo='LOJA',
+                logradouro='Rua Teste',
+                numero='123',
+                bairro='Centro',
+                cidade='São Paulo',
+                estado='SP',
+                cep='01234-567',
+                is_active=True
+            )
+            
+            self.produto = Produto.objects.create(
+                nome='Produto Teste',
+                codigo='PROD001',
+                tipo='PRODUTO',
+                unidade_medida='UN',
+                valor_custo=Decimal('10.00'),
+                valor_venda=Decimal('15.00'),
+                is_active=True
+            )
+            
+            self.estoque = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('100.000'),
+                quantidade_reservada=Decimal('0.000'),
+                valor_custo_medio=Decimal('10.50')
+            )
+    
+    def test_criar_reserva_soft(self):
+        """Testa criação de reserva SOFT"""
+        with schema_context(self.tenant.schema_name):
+            resultado = criar_reserva(
+                produto=self.produto,
+                location=self.location,
+                empresa=self.empresa,
+                quantidade=Decimal('20.000'),
+                tipo='SOFT',
+                origem='VENDA',
+                minutos_expiracao=30
+            )
+            
+            reserva = resultado['reserva']
+            
+            self.assertEqual(reserva.tipo, 'SOFT')
+            self.assertEqual(reserva.status, 'ATIVA')
+            self.assertEqual(reserva.quantidade, Decimal('20.000'))
+            self.assertIsNotNone(reserva.data_expiracao)
+            
+            # SOFT não deve atualizar quantidade_reservada
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_reservada, Decimal('0.000'))
+    
+    def test_criar_reserva_hard(self):
+        """Testa criação de reserva HARD"""
+        with schema_context(self.tenant.schema_name):
+            resultado = criar_reserva(
+                produto=self.produto,
+                location=self.location,
+                empresa=self.empresa,
+                quantidade=Decimal('20.000'),
+                tipo='HARD',
+                origem='VENDA'
+            )
+            
+            reserva = resultado['reserva']
+            estoque = resultado['estoque']
+            
+            self.assertEqual(reserva.tipo, 'HARD')
+            self.assertEqual(reserva.status, 'ATIVA')
+            self.assertIsNone(reserva.data_expiracao)
+            
+            # HARD deve atualizar quantidade_reservada
+            estoque.refresh_from_db()
+            self.assertEqual(estoque.quantidade_reservada, Decimal('20.000'))
+            self.assertEqual(estoque.quantidade_disponivel, Decimal('80.000'))
+    
+    def test_criar_reserva_hard_estoque_insuficiente(self):
+        """Testa erro ao criar reserva HARD com estoque insuficiente"""
+        with schema_context(self.tenant.schema_name):
+            with self.assertRaises(EstoqueServiceError) as context:
+                criar_reserva(
+                    produto=self.produto,
+                    location=self.location,
+                    empresa=self.empresa,
+                    quantidade=Decimal('150.000'),  # Mais que disponível
+                    tipo='HARD',
+                    origem='VENDA'
+                )
+            
+            self.assertIn('Estoque insuficiente', str(context.exception))
+    
+    def test_confirmar_reserva_soft(self):
+        """Testa confirmação de reserva SOFT (converte para HARD)"""
+        with schema_context(self.tenant.schema_name):
+            # Criar reserva SOFT
+            resultado = criar_reserva(
+                produto=self.produto,
+                location=self.location,
+                empresa=self.empresa,
+                quantidade=Decimal('20.000'),
+                tipo='SOFT',
+                origem='VENDA'
+            )
+            
+            reserva = resultado['reserva']
+            
+            # Confirmar reserva
+            resultado_confirmacao = confirmar_reserva(reserva)
+            reserva.refresh_from_db()
+            
+            # Deve converter para HARD
+            self.assertEqual(reserva.tipo, 'HARD')
+            self.assertEqual(reserva.status, 'CONFIRMADA')
+            self.assertIsNone(reserva.data_expiracao)
+            
+            # Deve atualizar quantidade_reservada
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_reservada, Decimal('20.000'))
+    
+    def test_cancelar_reserva_hard(self):
+        """Testa cancelamento de reserva HARD (libera estoque)"""
+        with schema_context(self.tenant.schema_name):
+            # Criar reserva HARD
+            resultado = criar_reserva(
+                produto=self.produto,
+                location=self.location,
+                empresa=self.empresa,
+                quantidade=Decimal('20.000'),
+                tipo='HARD',
+                origem='VENDA'
+            )
+            
+            reserva = resultado['reserva']
+            
+            # Cancelar reserva
+            cancelar_reserva(reserva, motivo='Cliente desistiu')
+            reserva.refresh_from_db()
+            
+            self.assertEqual(reserva.status, 'CANCELADA')
+            
+            # Deve liberar estoque
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_reservada, Decimal('0.000'))
+    
+    def test_reserva_expirar(self):
+        """Testa expiração de reserva SOFT"""
+        with schema_context(self.tenant.schema_name):
+            reserva = ReservaEstoque.objects.create(
+                estoque=self.estoque,
+                tipo='SOFT',
+                origem='VENDA',
+                status='ATIVA',
+                quantidade=Decimal('20.000'),
+                data_expiracao=timezone.now() - timedelta(minutes=1)  # Já expirada
+            )
+            
+            reserva.expirar()
+            reserva.refresh_from_db()
+            
+            self.assertEqual(reserva.status, 'EXPIRADA')
+    
+    def test_reserva_esta_expirada(self):
+        """Testa propriedade esta_expirada"""
+        with schema_context(self.tenant.schema_name):
+            # Reserva expirada
+            reserva_expirada = ReservaEstoque.objects.create(
+                estoque=self.estoque,
+                tipo='SOFT',
+                origem='VENDA',
+                status='ATIVA',
+                quantidade=Decimal('20.000'),
+                data_expiracao=timezone.now() - timedelta(minutes=1)
+            )
+            self.assertTrue(reserva_expirada.esta_expirada)
+            
+            # Reserva não expirada
+            reserva_ativa = ReservaEstoque.objects.create(
+                estoque=self.estoque,
+                tipo='SOFT',
+                origem='VENDA',
+                status='ATIVA',
+                quantidade=Decimal('20.000'),
+                data_expiracao=timezone.now() + timedelta(minutes=30)
+            )
+            self.assertFalse(reserva_ativa.esta_expirada)
+
+
+@override_settings(
+    CACHES={
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+)
+class PrevisaoMovimentacaoTests(TestCase):
+    """Testes para previsões de movimentação"""
+    
+    def setUp(self):
+        """Configuração inicial para cada teste"""
+        with schema_context('public'):
+            self.tenant = Tenant.objects.create(
+                schema_name='test_previsoes',
+                name='Tenant de Teste Previsões',
+                is_active=True
+            )
+            Domain.objects.create(
+                domain='test-previsoes.localhost',
+                tenant=self.tenant,
+                is_primary=True
+            )
+            
+            self.plan = Plan.objects.create(
+                name='Plano Teste',
+                slug='teste',
+                price_monthly=99.00,
+                max_users=10,
+                max_empresas=5,
+                max_filiais=10,
+                is_active=True
+            )
+        
+        with schema_context(self.tenant.schema_name):
+            self.empresa = Empresa.objects.create(
+                tenant=self.tenant,
+                nome='Empresa Teste',
+                razao_social='Empresa Teste LTDA',
+                cnpj='12345678000190',
+                cidade='São Paulo',
+                estado='SP',
+                is_active=True
+            )
+            
+            self.location = Location.objects.create(
+                empresa=self.empresa,
+                nome='Loja Teste',
+                codigo='LOC001',
+                tipo='LOJA',
+                logradouro='Rua Teste',
+                numero='123',
+                bairro='Centro',
+                cidade='São Paulo',
+                estado='SP',
+                cep='01234-567',
+                is_active=True
+            )
+            
+            self.produto = Produto.objects.create(
+                nome='Produto Teste',
+                codigo='PROD001',
+                tipo='PRODUTO',
+                unidade_medida='UN',
+                valor_custo=Decimal('10.00'),
+                valor_venda=Decimal('15.00'),
+                is_active=True
+            )
+            
+            self.estoque = Estoque.objects.create(
+                produto=self.produto,
+                location=self.location,
+                empresa=self.empresa,
+                quantidade_atual=Decimal('100.000'),
+                quantidade_reservada=Decimal('0.000'),
+                valor_custo_medio=Decimal('10.50')
+            )
+    
+    def test_criar_previsao_entrada(self):
+        """Testa criação de previsão de entrada"""
+        with schema_context(self.tenant.schema_name):
+            data_prevista = timezone.now() + timedelta(days=7)
+            
+            previsao = PrevisaoMovimentacao.objects.create(
+                estoque=self.estoque,
+                tipo='ENTRADA',
+                origem='COMPRA',
+                status='PENDENTE',
+                quantidade=Decimal('50.000'),
+                data_prevista=data_prevista,
+                valor_unitario_previsto=Decimal('11.00')
+            )
+            
+            self.assertEqual(previsao.tipo, 'ENTRADA')
+            self.assertEqual(previsao.status, 'PENDENTE')
+            
+            # Deve atualizar quantidade_prevista_entrada
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_prevista_entrada, Decimal('50.000'))
+    
+    def test_criar_previsao_saida(self):
+        """Testa criação de previsão de saída"""
+        with schema_context(self.tenant.schema_name):
+            data_prevista = timezone.now() + timedelta(days=3)
+            
+            previsao = PrevisaoMovimentacao.objects.create(
+                estoque=self.estoque,
+                tipo='SAIDA',
+                origem='VENDA',
+                status='PENDENTE',
+                quantidade=Decimal('30.000'),
+                data_prevista=data_prevista
+            )
+            
+            # Deve atualizar quantidade_prevista_saida
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_prevista_saida, Decimal('30.000'))
+    
+    def test_previsao_confirmar(self):
+        """Testa confirmação de previsão"""
+        with schema_context(self.tenant.schema_name):
+            previsao = PrevisaoMovimentacao.objects.create(
+                estoque=self.estoque,
+                tipo='ENTRADA',
+                origem='COMPRA',
+                status='PENDENTE',
+                quantidade=Decimal('50.000'),
+                data_prevista=timezone.now() + timedelta(days=7)
+            )
+            
+            previsao.confirmar()
+            previsao.refresh_from_db()
+            
+            self.assertEqual(previsao.status, 'CONFIRMADA')
+    
+    def test_previsao_cancelar(self):
+        """Testa cancelamento de previsão"""
+        with schema_context(self.tenant.schema_name):
+            previsao = PrevisaoMovimentacao.objects.create(
+                estoque=self.estoque,
+                tipo='ENTRADA',
+                origem='COMPRA',
+                status='PENDENTE',
+                quantidade=Decimal('50.000'),
+                data_prevista=timezone.now() + timedelta(days=7)
+            )
+            
+            # Verificar que quantidade_prevista foi atualizada
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_prevista_entrada, Decimal('50.000'))
+            
+            # Cancelar previsão
+            previsao.cancelar(motivo='Compra cancelada')
+            previsao.refresh_from_db()
+            
+            self.assertEqual(previsao.status, 'CANCELADA')
+            
+            # Deve remover da previsão
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_prevista_entrada, Decimal('0.000'))
+    
+    def test_previsao_realizar(self):
+        """Testa realização de previsão"""
+        with schema_context(self.tenant.schema_name):
+            previsao = PrevisaoMovimentacao.objects.create(
+                estoque=self.estoque,
+                tipo='ENTRADA',
+                origem='COMPRA',
+                status='CONFIRMADA',
+                quantidade=Decimal('50.000'),
+                data_prevista=timezone.now() + timedelta(days=7)
+            )
+            
+            # Criar movimentação
+            movimentacao = MovimentacaoEstoque.objects.create(
+                estoque=self.estoque,
+                tipo='ENTRADA',
+                origem='COMPRA',
+                status='CONFIRMADA',
+                quantidade=Decimal('50.000'),
+                valor_unitario=Decimal('11.00')
+            )
+            
+            # Realizar previsão
+            previsao.realizar(movimentacao=movimentacao)
+            previsao.refresh_from_db()
+            
+            self.assertEqual(previsao.status, 'REALIZADA')
+            self.assertEqual(previsao.movimentacao_realizada, movimentacao)
+            
+            # Deve remover da previsão
+            self.estoque.refresh_from_db()
+            self.assertEqual(self.estoque.quantidade_prevista_entrada, Decimal('0.000'))
