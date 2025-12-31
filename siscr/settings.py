@@ -542,6 +542,31 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'estoque.tasks.expirar_soft_reservations',
         'schedule': 300.0,  # 5 minutos
     },
+    # Estoque: Reconciliar estoque disponível (a cada 30 minutos)
+    'reconciliar-estoque-disponivel': {
+        'task': 'estoque.tasks.reconciliar_estoque_disponivel',
+        'schedule': 1800.0,  # 30 minutos
+    },
+    # Estoque: Atualizar custo médio (a cada 1 hora)
+    'atualizar-custo-medio': {
+        'task': 'estoque.tasks.atualizar_custo_medio_produtos',
+        'schedule': 3600.0,  # 1 hora
+    },
+    # Estoque: Atualizar estoque consolidado de grupos (a cada 15 minutos)
+    'atualizar-estoque-consolidado': {
+        'task': 'estoque.tasks.atualizar_estoque_consolidado_grupos',
+        'schedule': 900.0,  # 15 minutos
+    },
+    # Estoque: Verificar estoque mínimo (diariamente)
+    'verificar-estoque-minimo': {
+        'task': 'estoque.tasks.verificar_estoque_minimo',
+        'schedule': 86400.0,  # 24 horas
+    },
+    # Estoque: Calcular indicadores (semanalmente)
+    'calcular-indicadores-estoque': {
+        'task': 'estoque.tasks.calcular_indicadores_estoque',
+        'schedule': 604800.0,  # 7 dias
+    },
 }
 
 # ============================================
