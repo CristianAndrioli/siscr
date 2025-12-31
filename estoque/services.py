@@ -542,3 +542,167 @@ def cancelar_reserva(reserva: ReservaEstoque, motivo: Optional[str] = None) -> D
         'estoque': estoque,
     }
 
+
+@transaction.atomic
+def processar_transferencia(
+    produto: Produto,
+    location_origem: Location,
+    location_destino: Location,
+    empresa: Empresa,
+    quantidade: Decimal,
+    valor_unitario: Optional[Decimal] = None,
+    documento_referencia: Optional[str] = None,
+    observacoes: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Processa transferência de estoque entre locations
+    
+    Processo:
+    1. Valida locations origem e destino
+    2. Valida estoque disponível na origem
+    3. Cria 2 movimentações:
+       - Saída na origem (tipo=SAIDA, origem=TRANSFERENCIA)
+       - Entrada no destino (tipo=ENTRADA, origem=TRANSFERENCIA)
+    4. Atualiza estoques
+    5. Rastreia transferência
+    
+    Args:
+        produto: Produto a ser transferido
+        location_origem: Location de origem
+        location_destino: Location de destino
+        empresa: Empresa proprietária
+        quantidade: Quantidade a transferir
+        valor_unitario: Valor unitário (se None, usa custo médio do estoque origem)
+        documento_referencia: Documento de referência (ex: TRF-001)
+        observacoes: Observações adicionais
+        
+    Returns:
+        Dict com movimentações criadas e estoques atualizados
+        
+    Raises:
+        EstoqueServiceError: Se houver erro de validação ou estoque insuficiente
+    """
+    # Validações básicas
+    if quantidade <= 0:
+        raise EstoqueServiceError("Quantidade deve ser maior que zero.")
+    
+    if location_origem == location_destino:
+        raise EstoqueServiceError("Location de origem e destino não podem ser a mesma.")
+    
+    # Validar que ambas locations pertencem à mesma empresa
+    if location_origem.empresa != empresa:
+        raise EstoqueServiceError(
+            f"A location de origem '{location_origem.nome}' não pertence à empresa '{empresa.nome}'."
+        )
+    
+    if location_destino.empresa != empresa:
+        raise EstoqueServiceError(
+            f"A location de destino '{location_destino.nome}' não pertence à empresa '{empresa.nome}'."
+        )
+    
+    # Validar permissões
+    if not location_origem.permite_saida:
+        raise EstoqueServiceError(
+            f"A location de origem '{location_origem.nome}' não permite saída de estoque."
+        )
+    
+    if not location_destino.permite_entrada:
+        raise EstoqueServiceError(
+            f"A location de destino '{location_destino.nome}' não permite entrada de estoque."
+        )
+    
+    # Buscar estoque na origem
+    try:
+        estoque_origem = Estoque.objects.get(
+            produto=produto,
+            location=location_origem,
+            empresa=empresa
+        )
+    except Estoque.DoesNotExist:
+        raise EstoqueServiceError(
+            f"Estoque não encontrado para produto '{produto.nome}' na location de origem '{location_origem.nome}'."
+        )
+    
+    # Validar estoque disponível na origem
+    validar_estoque_disponivel(estoque_origem, quantidade)
+    
+    # Buscar ou criar estoque no destino
+    estoque_destino, created = Estoque.objects.get_or_create(
+        produto=produto,
+        location=location_destino,
+        defaults={
+            'empresa': empresa,
+            'quantidade_atual': Decimal('0.000'),
+            'quantidade_reservada': Decimal('0.000'),
+            'valor_custo_medio': estoque_origem.valor_custo_medio,  # Usa mesmo custo médio
+        }
+    )
+    
+    # Se estoque já existia mas empresa estava diferente, atualizar
+    if not created and estoque_destino.empresa != empresa:
+        estoque_destino.empresa = empresa
+        estoque_destino.save()
+    
+    # Determinar valor unitário (usa custo médio da origem se não fornecido)
+    if valor_unitario is None:
+        valor_unitario = estoque_origem.valor_custo_medio
+    
+    # Salvar quantidades anteriores para auditoria
+    quantidade_anterior_origem = estoque_origem.quantidade_atual
+    quantidade_anterior_destino = estoque_destino.quantidade_atual
+    
+    # Atualizar estoques
+    estoque_origem.quantidade_atual -= quantidade
+    estoque_origem.save()
+    
+    # Calcular novo custo médio no destino (se já tinha estoque)
+    if estoque_destino.quantidade_atual > 0:
+        novo_custo_medio_destino = calcular_custo_medio_ponderado(
+            estoque_destino,
+            quantidade,
+            valor_unitario
+        )
+        estoque_destino.valor_custo_medio = novo_custo_medio_destino
+    
+    estoque_destino.quantidade_atual += quantidade
+    estoque_destino.save()
+    
+    # Criar movimentação de saída na origem
+    movimentacao_saida = MovimentacaoEstoque.objects.create(
+        estoque=estoque_origem,
+        tipo='SAIDA',
+        origem='TRANSFERENCIA_ENTRE_LOCATIONS',
+        status='CONFIRMADA',
+        quantidade=quantidade,
+        quantidade_anterior=quantidade_anterior_origem,
+        quantidade_posterior=estoque_origem.quantidade_atual,
+        valor_unitario=valor_unitario,
+        location_origem=location_origem,
+        location_destino=location_destino,
+        documento_referencia=documento_referencia,
+        observacoes=observacoes
+    )
+    
+    # Criar movimentação de entrada no destino
+    movimentacao_entrada = MovimentacaoEstoque.objects.create(
+        estoque=estoque_destino,
+        tipo='ENTRADA',
+        origem='TRANSFERENCIA_ENTRE_LOCATIONS',
+        status='CONFIRMADA',
+        quantidade=quantidade,
+        quantidade_anterior=quantidade_anterior_destino,
+        quantidade_posterior=estoque_destino.quantidade_atual,
+        valor_unitario=valor_unitario,
+        location_origem=location_origem,
+        location_destino=location_destino,
+        documento_referencia=documento_referencia,
+        observacoes=observacoes
+    )
+    
+    return {
+        'movimentacao_saida': movimentacao_saida,
+        'movimentacao_entrada': movimentacao_entrada,
+        'estoque_origem': estoque_origem,
+        'estoque_destino': estoque_destino,
+    }
+

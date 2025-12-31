@@ -1010,3 +1010,204 @@ class PrevisaoMovimentacao(SiscrModelBase):
         self.save()
         
         return self
+
+
+class GrupoFilial(SiscrModelBase):
+    """
+    Grupo de Filiais (Location Groups)
+    
+    Permite agrupar múltiplas filiais para:
+    - Estoque consolidado
+    - Fulfillment cruzado (atender pedido de uma filial com estoque de outra)
+    - Regras de alocação inteligente
+    """
+    REGRA_ALOCACAO_CHOICES = [
+        ('PROXIMIDADE', 'Proximidade'),
+        ('ESTOQUE_DISPONIVEL', 'Maior Estoque Disponível'),
+        ('CUSTO_MENOR', 'Menor Custo'),
+        ('ROTACAO', 'Maior Rotação'),
+        ('MANUAL', 'Manual'),
+    ]
+    
+    empresa = models.ForeignKey(
+        'tenants.Empresa',
+        on_delete=models.CASCADE,
+        related_name='grupos_filiais',
+        verbose_name='Empresa'
+    )
+    
+    nome = models.CharField(
+        max_length=255,
+        verbose_name='Nome do Grupo',
+        help_text='Ex: Região Sul, Região Norte, Centro de Distribuição'
+    )
+    
+    codigo = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name='Código',
+        help_text='Código único para identificar o grupo'
+    )
+    
+    filiais = models.ManyToManyField(
+        'tenants.Filial',
+        related_name='grupos',
+        verbose_name='Filiais',
+        help_text='Filiais que pertencem a este grupo'
+    )
+    
+    regra_alocacao = models.CharField(
+        max_length=30,
+        choices=REGRA_ALOCACAO_CHOICES,
+        default='ESTOQUE_DISPONIVEL',
+        verbose_name='Regra de Alocação',
+        help_text='Regra usada para determinar melhor filial para atendimento'
+    )
+    
+    permite_fulfillment_cruzado = models.BooleanField(
+        default=True,
+        verbose_name='Permite Fulfillment Cruzado',
+        help_text='Se permite atender pedido de uma filial com estoque de outra'
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name='Ativo'
+    )
+    
+    class Meta:
+        verbose_name = 'Grupo de Filiais'
+        verbose_name_plural = 'Grupos de Filiais'
+        ordering = ['empresa', 'nome']
+        indexes = [
+            models.Index(fields=['empresa', 'is_active']),
+            models.Index(fields=['codigo']),
+        ]
+    
+    def __str__(self):
+        return f"{self.nome} ({self.empresa.nome})"
+    
+    def get_estoque_consolidado(self, produto):
+        """
+        Retorna estoque consolidado do produto em todas as filiais do grupo
+        
+        Args:
+            produto: Produto a consultar
+            
+        Returns:
+            Dict com totais consolidados
+        """
+        from django.db.models import Sum
+        
+        # Buscar todas as locations das filiais do grupo
+        locations = Location.objects.filter(
+            empresa=self.empresa,
+            filial__in=self.filiais.all(),
+            is_active=True
+        )
+        
+        # Buscar estoques
+        estoques = Estoque.objects.filter(
+            produto=produto,
+            location__in=locations,
+            empresa=self.empresa
+        )
+        
+        # Consolidar
+        consolidado = estoques.aggregate(
+            total_atual=Sum('quantidade_atual'),
+            total_reservada=Sum('quantidade_reservada'),
+            total_disponivel=Sum('quantidade_disponivel'),
+            total_prevista_entrada=Sum('quantidade_prevista_entrada'),
+            total_prevista_saida=Sum('quantidade_prevista_saida'),
+        )
+        
+        # Calcular valor total consolidado
+        valor_total = sum(
+            estoque.valor_total for estoque in estoques
+        )
+        
+        return {
+            'quantidade_atual': consolidado['total_atual'] or Decimal('0.000'),
+            'quantidade_reservada': consolidado['total_reservada'] or Decimal('0.000'),
+            'quantidade_disponivel': consolidado['total_disponivel'] or Decimal('0.000'),
+            'quantidade_prevista_entrada': consolidado['total_prevista_entrada'] or Decimal('0.000'),
+            'quantidade_prevista_saida': consolidado['total_prevista_saida'] or Decimal('0.000'),
+            'valor_total': Decimal(str(valor_total)),
+            'locations': locations.count(),
+        }
+    
+    def determinar_melhor_filial(self, produto, quantidade, filial_origem=None):
+        """
+        Determina a melhor filial para atender um pedido baseado na regra de alocação
+        
+        Args:
+            produto: Produto necessário
+            quantidade: Quantidade necessária
+            filial_origem: Filial de origem do pedido (opcional)
+            
+        Returns:
+            Filial recomendada ou None se não houver estoque suficiente
+        """
+        if not self.permite_fulfillment_cruzado and filial_origem:
+            # Se não permite fulfillment cruzado, retornar filial de origem
+            if filial_origem in self.filiais.all():
+                return filial_origem
+            return None
+        
+        # Buscar locations das filiais do grupo
+        locations = Location.objects.filter(
+            empresa=self.empresa,
+            filial__in=self.filiais.all(),
+            is_active=True,
+            permite_saida=True
+        )
+        
+        # Buscar estoques disponíveis
+        estoques = Estoque.objects.filter(
+            produto=produto,
+            location__in=locations,
+            empresa=self.empresa
+        ).select_related('location', 'location__filial')
+        
+        # Filtrar apenas estoques com quantidade suficiente
+        estoques_suficientes = [
+            e for e in estoques
+            if e.quantidade_disponivel >= quantidade
+        ]
+        
+        if not estoques_suficientes:
+            return None
+        
+        # Aplicar regra de alocação
+        if self.regra_alocacao == 'ESTOQUE_DISPONIVEL':
+            # Filial com maior estoque disponível
+            melhor_estoque = max(estoques_suficientes, key=lambda e: e.quantidade_disponivel)
+            return melhor_estoque.location.filial
+        
+        elif self.regra_alocacao == 'CUSTO_MENOR':
+            # Filial com menor custo médio
+            melhor_estoque = min(estoques_suficientes, key=lambda e: e.valor_custo_medio)
+            return melhor_estoque.location.filial
+        
+        elif self.regra_alocacao == 'PROXIMIDADE':
+            # Se há filial de origem, priorizar ela
+            if filial_origem and filial_origem in self.filiais.all():
+                estoque_origem = next(
+                    (e for e in estoques_suficientes if e.location.filial == filial_origem),
+                    None
+                )
+                if estoque_origem:
+                    return filial_origem
+            
+            # Caso contrário, retornar primeira disponível
+            return estoques_suficientes[0].location.filial
+        
+        elif self.regra_alocacao == 'MANUAL':
+            # Retornar primeira disponível (deve ser escolhida manualmente)
+            return estoques_suficientes[0].location.filial
+        
+        else:
+            # Default: maior estoque disponível
+            melhor_estoque = max(estoques_suficientes, key=lambda e: e.quantidade_disponivel)
+            return melhor_estoque.location.filial

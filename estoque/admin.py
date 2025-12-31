@@ -2,7 +2,7 @@
 Admin para o módulo de Estoque
 """
 from django.contrib import admin
-from .models import Location, Estoque, MovimentacaoEstoque, ReservaEstoque, PrevisaoMovimentacao
+from .models import Location, Estoque, MovimentacaoEstoque, ReservaEstoque, PrevisaoMovimentacao, GrupoFilial
 
 
 @admin.register(Location)
@@ -266,3 +266,29 @@ class PrevisaoMovimentacaoAdmin(admin.ModelAdmin):
                 self.message_user(request, f'Erro ao cancelar previsão {previsao.id}: {str(e)}', level='ERROR')
         self.message_user(request, f'{count} previsão(ões) cancelada(s) com sucesso.')
     cancelar_previsoes.short_description = 'Cancelar previsões selecionadas'
+
+
+@admin.register(GrupoFilial)
+class GrupoFilialAdmin(admin.ModelAdmin):
+    list_display = ['nome', 'codigo', 'empresa', 'regra_alocacao', 'permite_fulfillment_cruzado', 
+                   'is_active', 'created_at']
+    list_filter = ['empresa', 'regra_alocacao', 'permite_fulfillment_cruzado', 'is_active']
+    search_fields = ['nome', 'codigo', 'empresa__nome']
+    readonly_fields = ['created_at', 'updated_at', 'created_by', 'updated_by']
+    filter_horizontal = ['filiais']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('empresa', 'nome', 'codigo')
+        }),
+        ('Filiais', {
+            'fields': ('filiais',)
+        }),
+        ('Configurações', {
+            'fields': ('regra_alocacao', 'permite_fulfillment_cruzado', 'is_active')
+        }),
+        ('Auditoria', {
+            'fields': ('created_at', 'updated_at', 'created_by', 'updated_by', 'owner'),
+            'classes': ('collapse',)
+        }),
+    )
