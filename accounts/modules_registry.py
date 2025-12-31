@@ -140,6 +140,20 @@ def register_default_modules():
         description='Relatórios e análises do sistema',
         actions=['view', 'export', 'manage'],
     )
+    
+    ModuleRegistry.register_module(
+        code='estoque',
+        name='Estoque',
+        description='Gerenciamento de estoque, locations e movimentações',
+        actions=['view', 'add', 'change', 'delete', 'transfer', 'adjust', 'export'],
+        submodules={
+            'locations': 'Locations',
+            'estoque': 'Estoque',
+            'movimentacoes': 'Movimentações',
+            'reservas': 'Reservas',
+            'transferencias': 'Transferências',
+        }
+    )
 
 
 # Registrar módulos padrão ao importar

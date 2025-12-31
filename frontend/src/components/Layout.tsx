@@ -24,6 +24,7 @@ function Layout({ children }: LayoutProps) {
     cadastros: false,
     financeiro: false,
     faturamento: false,
+    estoque: false,
     configuracoes: false,
   });
   const [userInfo, setUserInfo] = useState<UserInfo>({});
@@ -443,6 +444,77 @@ function Layout({ children }: LayoutProps) {
                       className="block p-2 rounded-lg hover:bg-gray-700 transition duration-150 text-sm"
                     >
                       Cotação de Câmbio
+                    </Link>
+                  </li>
+                </ul>
+              )}
+            </li>
+            )}
+
+            {/* Estoque - Menu com submenu */}
+            {hasModuleAccess('estoque') && (
+            <li>
+              <button
+                onClick={() => toggleMenu('estoque')}
+                className="flex items-center p-2 rounded-lg hover:bg-gray-700 transition duration-150 justify-between w-full"
+              >
+                <span className="flex items-center">
+                  <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  Estoque
+                </span>
+                <svg
+                  className={`w-4 h-4 transform transition-transform duration-300 ${
+                    menuOpen.estoque ? 'rotate-180' : ''
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {menuOpen.estoque && (
+                <ul className="pl-6 mt-2 space-y-1">
+                  <li>
+                    <Link
+                      to="/estoque/locations"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/estoque/locations') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Locations
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/estoque/estoque-atual"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/estoque/estoque-atual') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Estoque Atual
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/estoque/movimentacoes"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/estoque/movimentacoes') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Movimentações
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/estoque/transferencias"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/estoque/transferencias') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Transferências
                     </Link>
                   </li>
                 </ul>

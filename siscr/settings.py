@@ -76,6 +76,7 @@ TENANT_APPS = [
     'django.contrib.contenttypes',
     'core',  # App core (views gerais, dashboard, etc.)
     'cadastros',  # App de cadastros (Pessoa, Produto, Servico)
+    'estoque',  # App de estoque (Location, Estoque, Movimentações)
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
