@@ -37,6 +37,7 @@ from .serializers import (
     CriarReservaSerializer,
     EstoqueConsolidadoSerializer,
 )
+from django.http import HttpResponse
 
 
 class LocationViewSet(viewsets.ModelViewSet):
@@ -497,4 +498,70 @@ class GrupoFilialViewSet(viewsets.ModelViewSet):
             queryset = queryset.none()
         
         return queryset.select_related('empresa').prefetch_related('filiais').order_by('empresa', 'nome')
+
+
+class RelatorioViewSet(viewsets.ViewSet):
+    """ViewSet para Relatórios de Estoque"""
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['get'])
+    def estoque_por_location(self, request):
+        """Relatório de estoque por location"""
+        # TODO: Implementar lógica de relatório
+        return Response([])
+    
+    @action(detail=False, methods=['get'])
+    def estoque_consolidado(self, request):
+        """Relatório de estoque consolidado"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'location': None,
+            'produtos': [],
+            'total_produtos': 0,
+            'valor_total_geral': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def movimentacoes(self, request):
+        """Relatório de movimentações"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'movimentacoes': [],
+            'total_entradas': '0.00',
+            'total_saidas': '0.00',
+            'saldo': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def reservas(self, request):
+        """Relatório de reservas"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'reservas': [],
+            'total_reservas': 0,
+            'total_quantidade_reservada': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def indicadores(self, request):
+        """Indicadores de estoque"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'rotatividade': '0.00',
+            'giro_estoque': '0.00',
+            'dias_estoque': 0,
+            'produtos_parados': 0,
+            'produtos_estoque_minimo': 0,
+            'valor_total_estoque': '0.00',
+            'custo_medio_geral': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def exportar(self, request):
+        """Exportar relatório"""
+        formato = request.query_params.get('formato', 'xlsx')
+        # TODO: Implementar exportação
+        return Response({
+            'message': f'Exportação em {formato} ainda não implementada'
+        }, status=status.HTTP_501_NOT_IMPLEMENTED)
 

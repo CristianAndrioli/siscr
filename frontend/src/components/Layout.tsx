@@ -517,6 +517,26 @@ function Layout({ children }: LayoutProps) {
                       Transferências
                     </Link>
                   </li>
+                  <li>
+                    <Link
+                      to="/estoque/configuracoes"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/estoque/configuracoes') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Configurações
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      to="/estoque/relatorio"
+                      className={`block p-2 rounded-lg transition duration-150 text-sm ${
+                        isActive('/estoque/relatorio') ? 'bg-gray-700' : 'hover:bg-gray-700'
+                      }`}
+                    >
+                      Relatório
+                    </Link>
+                  </li>
                 </ul>
               )}
             </li>

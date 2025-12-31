@@ -60,6 +60,13 @@ import RolesForm from './pages/configuracoes/RolesForm';
 import FiliaisList from './pages/configuracoes/FiliaisList';
 import FiliaisForm from './pages/configuracoes/FiliaisForm';
 import EmailSettingsPage from './pages/configuracoes/EmailSettings';
+import LocationsList from './pages/estoque/LocationsList';
+import LocationsDetail from './pages/estoque/LocationsDetail';
+import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
+import MovimentacoesList from './pages/estoque/MovimentacoesList';
+import Transferencias from './pages/estoque/Transferencias';
+import ConfiguracoesEstoque from './pages/estoque/Configuracoes';
+import RelatorioEstoque from './pages/estoque/Relatorio';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -717,6 +724,91 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <ContasPagarDetail />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rotas de Estoque */}
+        <Route
+          path="/estoque/locations"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <LocationsList />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/locations/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <LocationsDetail />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/estoque-atual"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <EstoqueAtualList />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/movimentacoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <MovimentacoesList />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/transferencias"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="transfer">
+                  <Transferencias />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/configuracoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="change">
+                  <ConfiguracoesEstoque />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/relatorio"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <RelatorioEstoque />
+                </ProtectedRouteWithPermission>
               </Layout>
             </ProtectedRoute>
           }

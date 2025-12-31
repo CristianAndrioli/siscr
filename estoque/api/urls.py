@@ -10,6 +10,7 @@ from .viewsets import (
     ReservaEstoqueViewSet,
     PrevisaoMovimentacaoViewSet,
     GrupoFilialViewSet,
+    RelatorioViewSet,
 )
 
 app_name = 'estoque_api'
@@ -22,6 +23,7 @@ router.register(r'movimentacoes', MovimentacaoEstoqueViewSet, basename='moviment
 router.register(r'reservas', ReservaEstoqueViewSet, basename='reserva')
 router.register(r'previsoes', PrevisaoMovimentacaoViewSet, basename='previsao')
 router.register(r'grupos-filiais', GrupoFilialViewSet, basename='grupo-filial')
+router.register(r'relatorios', RelatorioViewSet, basename='relatorio')
 
 urlpatterns = [
     path('', include(router.urls)),

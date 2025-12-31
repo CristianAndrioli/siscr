@@ -149,10 +149,22 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
+REM Passo 6.5: Criar locations de estoque
+REM ========================================
+echo.
+echo [6.5/9] Criando locations de estoque para os tenants...
+docker-compose exec web python manage.py seed_locations
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Seed de locations pode ter falhado
+) else (
+    echo ✅ Locations criadas com sucesso!
+)
+
+REM ========================================
 REM Passo 7: Verificar Node.js e instalar dependencias do frontend
 REM ========================================
 echo.
-echo [7/9] Verificando Node.js e dependencias do frontend...
+echo [7/10] Verificando Node.js e dependencias do frontend...
 node --version >nul 2>&1
 if errorlevel 1 goto :nodejs_not_found
 echo OK: Node.js encontrado!
@@ -196,7 +208,7 @@ REM ========================================
 REM Passo 8: Iniciar servidor de desenvolvimento do frontend
 REM ========================================
 echo.
-echo [8/9] Iniciando servidor de desenvolvimento do frontend...
+echo [8/10] Iniciando servidor de desenvolvimento do frontend...
 node --version >nul 2>&1
 if errorlevel 1 goto :skip_frontend_start
 if not exist "frontend" goto :skip_frontend_start
