@@ -442,6 +442,46 @@ else:  # development
     pass  # Mantém valores padrão definidos acima
 
 # ============================================
+# VALIDAÇÃO DE CONFIGURAÇÃO PARA PRODUÇÃO
+# ============================================
+if ENVIRONMENT == 'production':
+    # Validar SECRET_KEY em produção
+    if not SECRET_KEY or SECRET_KEY == 'django-insecure-sua-chave-secreta-aqui' or 'insecure' in SECRET_KEY.lower():
+        raise ValueError(
+            'SECRET_KEY deve ser configurada e segura em produção. '
+            'Gere uma nova chave com: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
+        )
+    
+    # Validar DEBUG em produção
+    if DEBUG:
+        raise ValueError('DEBUG deve ser False em produção por questões de segurança.')
+    
+    # Validar ALLOWED_HOSTS em produção
+    if not ALLOWED_HOSTS or len(ALLOWED_HOSTS) == 0 or (len(ALLOWED_HOSTS) == 1 and ALLOWED_HOSTS[0] == ''):
+        raise ValueError(
+            'ALLOWED_HOSTS deve ser configurado em produção. '
+            'Configure com os domínios reais do seu site.'
+        )
+    
+    # Validar banco de dados não usar credenciais padrão
+    if DB_PASSWORD == 'postgres' or DB_USER == 'postgres':
+        import warnings
+        warnings.warn(
+            'Usando credenciais padrão do PostgreSQL em produção. '
+            'Isso é inseguro. Configure credenciais fortes.',
+            UserWarning
+        )
+    
+    # Validar Stripe em produção
+    if not STRIPE_SECRET_KEY or not STRIPE_PUBLISHABLE_KEY:
+        import warnings
+        warnings.warn(
+            'Chaves do Stripe não configuradas em produção. '
+            'Configure STRIPE_SECRET_KEY e STRIPE_PUBLISHABLE_KEY.',
+            UserWarning
+        )
+
+# ============================================
 # STRIPE CONFIGURATION
 # ============================================
 # Modo do Stripe: simulated (dev), test (homolog/preprod), live (production)

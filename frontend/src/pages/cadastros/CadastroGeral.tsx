@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { pessoasService } from '../../services/cadastros/pessoas';
 import { Input, Select, Textarea, Button, Alert } from '../../components/common';
@@ -6,13 +6,41 @@ import { useForm } from '../../hooks/useForm';
 import { formatCPFCNPJ, formatCEP, formatPhone } from '../../utils/formatters';
 import { formatApiError } from '../../utils/helpers';
 import { ESTADOS, TIPO_CADASTRO, TIPO_PESSOA } from '../../utils/constants';
+import type { Pessoa } from '../../types';
+
+interface FormData extends Partial<Pessoa> {
+  codigo_cadastro: string | number;
+  tipo: 'cliente' | 'fornecedor' | 'funcionario';
+  tipo_classificacao: 'PF' | 'PJ';
+  cpf_cnpj: string;
+  nome_completo: string;
+  razao_social: string;
+  nome_fantasia: string;
+  contribuinte: boolean;
+  inscricao_estadual: string;
+  cep: string;
+  logradouro: string;
+  numero: string;
+  letra: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  nome_contato: string;
+  telefone_fixo: string;
+  telefone_celular: string;
+  email: string;
+  cargo: string;
+  comissoes: string;
+  observacoes: string;
+}
 
 function CadastroGeral() {
   const navigate = useNavigate();
-  const { codigo } = useParams();
+  const { codigo } = useParams<{ codigo?: string }>();
   const editando = !!codigo;
 
-  const initialValues = {
+  const initialValues: FormData = {
     codigo_cadastro: '',
     tipo: 'cliente',
     tipo_classificacao: 'PF',
@@ -39,14 +67,16 @@ function CadastroGeral() {
     observacoes: '',
   };
 
-  const { formData, handleChange, setFormData, resetForm } = useForm(initialValues);
+  const { formData, handleChange, setFormData, resetForm } = useForm<FormData>(initialValues);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const carregarProximoCodigo = useCallback(async () => {
     try {
-      const response = await pessoasService.proximoCodigo();
-      setFormData((prev) => ({ ...prev, codigo_cadastro: response.proximo_codigo || 'NOVO' }));
+      const response = await pessoasService.proximoCodigo?.();
+      if (response) {
+        setFormData((prev) => ({ ...prev, codigo_cadastro: response.proximo_codigo || 'NOVO' }));
+      }
     } catch (error) {
       console.error('Erro ao carregar próximo código:', error);
       setError('Erro ao carregar próximo código');
@@ -63,7 +93,7 @@ function CadastroGeral() {
       setFormData({
         ...dados,
         tipo_classificacao: dados.tipo === 'PF' ? 'PF' : 'PJ',
-      });
+      } as FormData);
     } catch (error) {
       console.error('Erro ao carregar dados do cadastro:', error);
       setError('Erro ao carregar dados do cadastro');
@@ -81,7 +111,7 @@ function CadastroGeral() {
   }, [editando, carregarDados, carregarProximoCodigo]);
 
   // Formatação automática de campos
-  const handleFormattedChange = (e) => {
+  const handleFormattedChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     let formattedValue = value || '';
 
@@ -99,22 +129,22 @@ function CadastroGeral() {
     // Garante que o valor seja uma string
     formattedValue = String(formattedValue || '');
 
-    handleChange({ target: { ...e.target, value: formattedValue } });
+    handleChange({ target: { ...e.target, value: formattedValue } } as ChangeEvent<HTMLInputElement>);
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      if (editando) {
+      if (editando && codigo) {
         await pessoasService.update(codigo, formData);
       } else {
         await pessoasService.create(formData);
       }
       navigate('/cadastros/geral/lista');
-    } catch (err) {
+    } catch (err: unknown) {
       setError(formatApiError(err));
     } finally {
       setLoading(false);
@@ -158,7 +188,7 @@ function CadastroGeral() {
             <Input
               label="Código"
               name="codigo_cadastro"
-              value={formData.codigo_cadastro}
+              value={String(formData.codigo_cadastro)}
               readOnly
             />
             <p className="text-xs text-gray-500 mt-1">Gerado automaticamente.</p>
@@ -418,3 +448,4 @@ function CadastroGeral() {
 }
 
 export default CadastroGeral;
+
