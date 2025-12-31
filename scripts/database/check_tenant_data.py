@@ -1,8 +1,15 @@
 #!/usr/bin/env python
 """
 Script para verificar se os dados do tenant já existem
-Uso: python check_tenant_data.py <schema_name>
-Retorna 0 se existem, 1 se não existem
+
+Uso:
+    python scripts/database/check_tenant_data.py [schema_name]
+
+Argumentos:
+    schema_name: Nome do schema do tenant (padrão: 'teste_tenant')
+
+Retorna:
+    0 se dados existem, 1 se não existem
 """
 import os
 import sys

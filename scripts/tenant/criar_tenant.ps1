@@ -1,5 +1,5 @@
 # Script para criar um novo tenant manualmente
-# Uso: .\scripts\criar_tenant.ps1
+# Uso: .\scripts\tenant\criar_tenant.ps1
 
 $baseUrl = "http://localhost:8000"
 

@@ -1,10 +1,16 @@
 #!/usr/bin/env python
 """
 Script para corrigir o usuário teste_user e torná-lo staff
+
+Uso:
+    python scripts/utils/fix_test_user.py
 """
 import os
+import sys
 import django
 
+# Configurar Django
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings')
 django.setup()
 

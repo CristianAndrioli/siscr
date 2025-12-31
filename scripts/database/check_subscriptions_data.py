@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 """
 Script para verificar se os dados de subscriptions já existem
-Retorna 0 se existem, 1 se não existem
+
+Uso:
+    python scripts/database/check_subscriptions_data.py
+
+Retorna:
+    0 se dados existem, 1 se não existem
 """
 import os
 import sys

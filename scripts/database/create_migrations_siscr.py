@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 """
 Script para criar migrações dos campos do SiscrModelBase
-com valores padrão para registros existentes
+
+Uso:
+    python scripts/database/create_migrations_siscr.py
+
+Nota: Este script é uma referência. É recomendado criar migrações manualmente:
+    docker-compose exec web python manage.py makemigrations --name add_siscr_fields
 """
 import os
 import sys

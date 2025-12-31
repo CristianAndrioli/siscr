@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 """
 Script para criar tenant de teste
+
+Uso:
+    python scripts/database/create_test_tenant.py
+
+Cria:
+    - Tenant 'Teste Tenant' com schema 'teste_tenant'
+    - Domínio 'teste-tenant.localhost'
+    - Usuário 'teste_user' no schema público e no tenant
+    - Empresa de teste no tenant
 """
 import os
 import django
