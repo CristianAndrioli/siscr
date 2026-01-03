@@ -49,24 +49,32 @@ class LocationViewSet(viewsets.ModelViewSet):
     filterset_fields = ['tipo', 'is_active', 'empresa', 'filial']
     
     def get_queryset(self):
-        """Filtra locations por empresa/filial atual do usuário"""
+        """
+        Filtra locations por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê locations da empresa/filial configurada.
+        Isso garante isolamento total entre empresas dentro do mesmo tenant.
+        """
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
         
-        # Admin do tenant vê todas as locations
-        if is_tenant_admin(self.request.user):
-            return queryset
-        
-        # Filtrar por empresa/filial
-        if filial:
+        # SEMPRE filtrar por empresa/filial do usuário (mesmo para admin)
+        # Isso garante que usuário da empresa A não veja locations da empresa B
+        if not empresa:
+            # Se usuário não tem empresa configurada, não pode ver nenhuma location
+            queryset = queryset.none()
+        elif filial:
+            # Se tem filial, mostrar:
+            # 1. Locations específicas dessa filial
+            # 2. Locations da empresa sem filial (compartilhadas)
             queryset = queryset.filter(
                 Q(empresa=empresa, filial=filial) |
                 Q(empresa=empresa, filial__isnull=True)
             )
-        elif empresa:
-            queryset = queryset.filter(empresa=empresa)
         else:
-            queryset = queryset.none()
+            # Se tem apenas empresa, mostrar todas as locations da empresa
+            # (de todas as filiais + sem filial)
+            queryset = queryset.filter(empresa=empresa)
         
         return queryset.order_by('empresa', 'nome')
 
@@ -80,24 +88,25 @@ class EstoqueViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['empresa', 'location', 'produto']
     
     def get_queryset(self):
-        """Filtra estoques por empresa/filial atual do usuário"""
+        """
+        Filtra estoques por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê estoques da empresa/filial configurada.
+        Isso garante isolamento total entre empresas dentro do mesmo tenant.
+        """
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
         
-        # Admin do tenant vê todos os estoques
-        if is_tenant_admin(self.request.user):
-            return queryset.select_related('produto', 'location', 'empresa')
-        
-        # Filtrar por empresa/filial
-        if filial:
+        # SEMPRE filtrar por empresa/filial do usuário (mesmo para admin)
+        if not empresa:
+            queryset = queryset.none()
+        elif filial:
             queryset = queryset.filter(
                 Q(empresa=empresa, location__filial=filial) |
                 Q(empresa=empresa, location__filial__isnull=True)
             )
-        elif empresa:
-            queryset = queryset.filter(empresa=empresa)
         else:
-            queryset = queryset.none()
+            queryset = queryset.filter(empresa=empresa)
         
         return queryset.select_related('produto', 'location', 'empresa').order_by('produto__nome')
     
@@ -333,19 +342,19 @@ class MovimentacaoEstoqueViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ['tipo', 'origem', 'status', 'estoque', 'estoque__location']
     
     def get_queryset(self):
-        """Filtra movimentações por empresa/filial atual do usuário"""
+        """
+        Filtra movimentações por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê movimentações da empresa/filial configurada.
+        """
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
         
-        # Admin do tenant vê todas as movimentações
-        if is_tenant_admin(self.request.user):
-            return queryset.select_related('estoque', 'estoque__produto', 'estoque__location')
-        
-        # Filtrar por empresa
-        if empresa:
-            queryset = queryset.filter(estoque__empresa=empresa)
-        else:
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
             queryset = queryset.none()
+        else:
+            queryset = queryset.filter(estoque__empresa=empresa)
         
         return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('-data_movimentacao')
 
@@ -359,19 +368,19 @@ class ReservaEstoqueViewSet(viewsets.ModelViewSet):
     filterset_fields = ['tipo', 'origem', 'status', 'estoque']
     
     def get_queryset(self):
-        """Filtra reservas por empresa/filial atual do usuário"""
+        """
+        Filtra reservas por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê reservas da empresa/filial configurada.
+        """
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
         
-        # Admin do tenant vê todas as reservas
-        if is_tenant_admin(self.request.user):
-            return queryset.select_related('estoque', 'estoque__produto', 'estoque__location')
-        
-        # Filtrar por empresa
-        if empresa:
-            queryset = queryset.filter(estoque__empresa=empresa)
-        else:
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
             queryset = queryset.none()
+        else:
+            queryset = queryset.filter(estoque__empresa=empresa)
         
         return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('-created_at')
     
@@ -457,19 +466,19 @@ class PrevisaoMovimentacaoViewSet(viewsets.ModelViewSet):
     filterset_fields = ['tipo', 'origem', 'status', 'estoque']
     
     def get_queryset(self):
-        """Filtra previsões por empresa/filial atual do usuário"""
+        """
+        Filtra previsões por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê previsões da empresa/filial configurada.
+        """
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
         
-        # Admin do tenant vê todas as previsões
-        if is_tenant_admin(self.request.user):
-            return queryset.select_related('estoque', 'estoque__produto', 'estoque__location')
-        
-        # Filtrar por empresa
-        if empresa:
-            queryset = queryset.filter(estoque__empresa=empresa)
-        else:
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
             queryset = queryset.none()
+        else:
+            queryset = queryset.filter(estoque__empresa=empresa)
         
         return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('data_prevista')
 
@@ -483,19 +492,19 @@ class GrupoFilialViewSet(viewsets.ModelViewSet):
     filterset_fields = ['empresa', 'regra_alocacao', 'is_active']
     
     def get_queryset(self):
-        """Filtra grupos por empresa atual do usuário"""
+        """
+        Filtra grupos por empresa atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê grupos da empresa configurada.
+        """
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
         
-        # Admin do tenant vê todos os grupos
-        if is_tenant_admin(self.request.user):
-            return queryset.select_related('empresa').prefetch_related('filiais')
-        
-        # Filtrar por empresa
-        if empresa:
-            queryset = queryset.filter(empresa=empresa)
-        else:
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
             queryset = queryset.none()
+        else:
+            queryset = queryset.filter(empresa=empresa)
         
         return queryset.select_related('empresa').prefetch_related('filiais').order_by('empresa', 'nome')
 
