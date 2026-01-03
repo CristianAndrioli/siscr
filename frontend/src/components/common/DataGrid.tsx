@@ -18,6 +18,7 @@ interface DataGridProps<T = unknown> {
   emptyMessage?: string;
   gridId?: string;
   showActions?: boolean;
+  getRowClassName?: (record: T) => string;
 }
 
 /**
@@ -38,6 +39,7 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
   emptyMessage = 'Nenhum registro encontrado',
   gridId = 'default',
   showActions = true,
+  getRowClassName,
 }: DataGridProps<T>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -337,12 +339,15 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
             ) : (
               sortedData.map((row, index) => {
                 const rowId = (row as { id?: string | number }).id || index;
+                const rowClassName = getRowClassName ? getRowClassName(row) : '';
                 return (
                   <tr
                     key={rowId}
                     onClick={() => onRowClick && onRowClick(row)}
-                    className={`hover:bg-indigo-50 transition-colors ${
+                    className={`transition-colors ${
                       onRowClick ? 'cursor-pointer' : ''
+                    } ${
+                      rowClassName || 'hover:bg-indigo-50'
                     }`}
                   >
                     {visibleColumnsData.map((column) => (

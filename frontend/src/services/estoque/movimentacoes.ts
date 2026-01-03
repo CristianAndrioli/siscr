@@ -9,11 +9,19 @@ export interface MovimentacaoEstoque {
   estoque: number;
   produto_nome: string;
   location_nome: string;
-  tipo: 'ENTRADA' | 'SAIDA' | 'TRANSFERENCIA_ORIGEM' | 'TRANSFERENCIA_DESTINO' | 'AJUSTE';
+  location_origem_nome?: string | null;
+  location_destino_nome?: string | null;
+  tipo: 'ENTRADA' | 'SAIDA' | 'TRANSFERENCIA' | 'AJUSTE' | 'RESERVA' | 'CANCELAMENTO_RESERVA';
+  origem: string;
+  status: string;
   quantidade: string;
-  custo_unitario: string | null;
-  custo_total: string | null;
-  observacao: string | null;
+  quantidade_anterior?: string;
+  quantidade_posterior?: string;
+  valor_unitario: string | null;
+  valor_total: string | null;
+  data_movimentacao?: string;
+  documento_referencia?: string | null;
+  observacoes?: string | null;
   movimentacao_origem: number | null;
   movimentacao_destino: number | null;
   movimentacao_relacionada: number | null;
@@ -24,6 +32,7 @@ export interface MovimentacaoEstoque {
 
 export interface MovimentacaoEstoqueFilters extends ListParams {
   tipo?: MovimentacaoEstoque['tipo'];
+  origem?: string; // Para filtrar por origem (ex: 'TRANSFERENCIA')
   produto?: number;
   location?: number;
   data_inicio?: string;

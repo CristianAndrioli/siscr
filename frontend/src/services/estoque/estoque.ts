@@ -61,11 +61,11 @@ export interface ProcessarSaidaData {
 }
 
 export interface ProcessarTransferenciaData {
-  produto: number;
-  location_origem: number;
-  location_destino: number;
+  produto_id: number; // codigo_produto
+  location_origem_id: number;
+  location_destino_id: number;
   quantidade: string;
-  observacao?: string;
+  observacoes?: string; // backend espera 'observacoes', não 'observacao'
 }
 
 class EstoqueService {
@@ -96,8 +96,18 @@ class EstoqueService {
     return response.data;
   }
 
-  async processarTransferencia(data: ProcessarTransferenciaData): Promise<{ origem: Estoque; destino: Estoque }> {
-    const response = await api.post<{ origem: Estoque; destino: Estoque }>(`${this.baseUrl}transferencia/`, data);
+  async processarTransferencia(data: ProcessarTransferenciaData): Promise<{ 
+    movimentacao_saida: any; 
+    movimentacao_entrada: any; 
+    estoque_origem: Estoque; 
+    estoque_destino: Estoque 
+  }> {
+    const response = await api.post<{ 
+      movimentacao_saida: any; 
+      movimentacao_entrada: any; 
+      estoque_origem: Estoque; 
+      estoque_destino: Estoque 
+    }>(`${this.baseUrl}transferencia/`, data);
     return response.data;
   }
 

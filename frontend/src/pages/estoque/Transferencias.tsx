@@ -1,199 +1,213 @@
 import { useState, useEffect } from 'react';
-import { Button, Input, Select, Alert } from '../../components/common';
-import { estoqueService, locationsService, type Location } from '../../services/estoque';
-import { useForm } from '../../hooks/useForm';
-
-interface TransferenciaForm {
-  produto: string;
-  location_origem: string;
-  location_destino: string;
-  quantidade: string;
-  observacao: string;
-}
+import { useNavigate } from 'react-router-dom';
+import { DataGrid } from '../../components/common';
+import { transferenciasService, type Transferencia } from '../../services/estoque/transferencias';
+import { useGridColumns } from '../../hooks/useGridColumns';
+import AdicionarTransferenciaModal from '../../components/estoque/AdicionarTransferenciaModal';
+import Button from '../../components/common/Button';
 
 /**
- * Página para processar Transferências de Estoque
+ * Página de listagem de Transferências de Estoque
  */
 export function Transferencias() {
+  const navigate = useNavigate();
+  const [modalAberto, setModalAberto] = useState(false);
+  const [data, setData] = useState<Transferencia[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 20,
+    total: 0,
+  });
 
-  const initialValues: TransferenciaForm = {
-    produto: '',
-    location_origem: '',
-    location_destino: '',
-    quantidade: '',
-    observacao: '',
-  };
-
-  const { formData, handleChange, setFormData } = useForm(initialValues);
-
-  // Carregar locations ao montar
-  useEffect(() => {
-    loadLocations();
-  }, []);
-
-  const loadLocations = async () => {
+  const loadData = async (page = 1, search = '') => {
     try {
-      setLoadingLocations(true);
-      const response = await locationsService.list();
-      const locationsData = 'results' in response ? response.results : response;
-      setLocations(Array.isArray(locationsData) ? locationsData : []);
-    } catch (err: any) {
-      console.error('Erro ao carregar locations:', err);
-      setError('Erro ao carregar locations');
-    } finally {
-      setLoadingLocations(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      await estoqueService.processarTransferencia({
-        produto: Number(formData.produto),
-        location_origem: Number(formData.location_origem),
-        location_destino: Number(formData.location_destino),
-        quantidade: formData.quantidade,
-        observacao: formData.observacao || undefined,
+      setLoading(true);
+      setError('');
+      
+      const response = await transferenciasService.list({
+        page,
+        pageSize: pagination.pageSize,
+        search,
       });
-
-      setSuccess('Transferência processada com sucesso!');
-      setFormData(initialValues);
+      
+      if (Array.isArray(response)) {
+        setData(response);
+        setPagination(prev => ({ ...prev, page, total: response.length }));
+      } else if ('results' in response && Array.isArray(response.results)) {
+        setData(response.results || []);
+        setPagination({
+          page,
+          pageSize: pagination.pageSize,
+          total: response.count || response.results?.length || 0,
+        });
+      } else {
+        setData([]);
+        setPagination(prev => ({ ...prev, page, total: 0 }));
+      }
     } catch (err: any) {
-      console.error('Erro ao processar transferência:', err);
-      setError(err.response?.data?.detail || err.response?.data?.message || 'Erro ao processar transferência');
+      setError(err.response?.data?.message || 'Erro ao carregar transferências');
+      setData([]);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    loadData(pagination.page, searchTerm);
+  }, [pagination.page]);
+
+  const handleSearch = (term: string) => {
+    setSearchTerm(term);
+    loadData(1, term);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
+  const handleViewRecord = (record: Transferencia) => {
+    // Navegar para detalhes da transferência
+    navigate(`/estoque/transferencias/${record.id}`);
+  };
+
+  const columns = useGridColumns(data, {
+    autoConfig: {
+      hiddenFields: ['id', 'produto_id', 'location_origem_id', 'location_destino_id', 'movimentacao_saida_id', 'movimentacao_entrada_id'],
+      fieldOverrides: {
+        produto_nome: {
+          label: 'Produto',
+          width: 200,
+        },
+        produto_codigo: {
+          label: 'Código',
+          width: 100,
+        },
+        location_origem_nome: {
+          label: 'Origem',
+          width: 180,
+          render: (value, record) => {
+            const codigo = (record as Transferencia).location_origem_codigo;
+            return codigo ? `${value} (${codigo})` : value || '-';
+          },
+        },
+        location_destino_nome: {
+          label: 'Destino',
+          width: 180,
+          render: (value, record) => {
+            const codigo = (record as Transferencia).location_destino_codigo;
+            return codigo ? `${value} (${codigo})` : value || '-';
+          },
+        },
+        quantidade: {
+          label: 'Quantidade',
+          width: 120,
+          render: (value) => {
+            if (value === null || value === undefined) return '0';
+            return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+          },
+        },
+        valor_unitario: {
+          label: 'Valor Unitário',
+          width: 130,
+          render: (value) => {
+            if (value === null || value === undefined) return '-';
+            return new Intl.NumberFormat('pt-BR', {
+              style: 'currency',
+              currency: 'BRL',
+            }).format(Number(value));
+          },
+        },
+        valor_total: {
+          label: 'Valor Total',
+          width: 130,
+          render: (value) => {
+            if (value === null || value === undefined) return '-';
+            return new Intl.NumberFormat('pt-BR', {
+              style: 'currency',
+              currency: 'BRL',
+            }).format(Number(value));
+          },
+        },
+        documento_referencia: {
+          label: 'Documento',
+          width: 150,
+          render: (value) => value || '-',
+        },
+        data_movimentacao: {
+          label: 'Data',
+          width: 150,
+          render: (value) => {
+            if (!value) return '-';
+            return new Date(value).toLocaleString('pt-BR');
+          },
+        },
+        created_at: {
+          label: 'Criado em',
+          width: 150,
+          render: (value) => {
+            if (!value) return '-';
+            return new Date(value).toLocaleString('pt-BR');
+          },
+        },
+      },
+    },
+  });
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Transferências de Estoque</h1>
-        <p className="mt-2 text-sm text-gray-500">
-          Transfira produtos entre locations
-        </p>
+    <div className="space-y-6 w-full max-w-full overflow-hidden">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Transferências de Estoque</h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Histórico de transferências de produtos entre locations
+          </p>
+        </div>
+        <Button onClick={() => setModalAberto(true)}>
+          + Adicionar Transferência
+        </Button>
       </div>
 
       {error && (
-        <Alert
-          type="error"
-          message={error}
-          onClose={() => setError('')}
-          dismissible
-        />
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
       )}
 
-      {success && (
-        <Alert
-          type="success"
-          message={success}
-          onClose={() => setSuccess('')}
-          dismissible
-        />
-      )}
+      <DataGrid<Transferencia>
+        data={data}
+        columns={columns}
+        onRowClick={handleViewRecord}
+        onSearch={handleSearch}
+        loading={loading}
+        pagination={{
+          ...pagination,
+          onPageChange: handlePageChange,
+        }}
+        searchPlaceholder="Pesquisar por produto, location origem, location destino..."
+        emptyMessage="Nenhuma transferência registrada."
+        gridId="transferencias"
+        showActions={false}
+        getRowClassName={(record) => {
+          const isCancelada = record.status === 'CANCELADA';
+          const isConfirmada = record.status === 'CONFIRMADA';
+          if (isCancelada) return 'bg-red-50 hover:bg-red-100';
+          if (isConfirmada) return 'bg-green-50 hover:bg-green-100';
+          return '';
+        }}
+      />
 
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Input
-                label="ID do Produto *"
-                name="produto"
-                type="number"
-                value={formData.produto}
-                onChange={handleChange}
-                required
-                placeholder="Digite o ID do produto"
-              />
-            </div>
-
-            <div>
-              <Select
-                label="Location de Origem *"
-                name="location_origem"
-                value={formData.location_origem}
-                onChange={handleChange}
-                required
-                options={[
-                  { value: '', label: 'Selecione...' },
-                  ...locations.map(loc => ({
-                    value: loc.id.toString(),
-                    label: `${loc.nome} (${loc.codigo})`,
-                  })),
-                ]}
-                disabled={loadingLocations}
-              />
-            </div>
-
-            <div>
-              <Select
-                label="Location de Destino *"
-                name="location_destino"
-                value={formData.location_destino}
-                onChange={handleChange}
-                required
-                options={[
-                  { value: '', label: 'Selecione...' },
-                  ...locations
-                    .filter(loc => loc.id.toString() !== formData.location_origem)
-                    .map(loc => ({
-                      value: loc.id.toString(),
-                      label: `${loc.nome} (${loc.codigo})`,
-                    })),
-                ]}
-                disabled={loadingLocations}
-              />
-            </div>
-
-            <div>
-              <Input
-                label="Quantidade *"
-                name="quantidade"
-                type="number"
-                step="0.001"
-                min="0.001"
-                value={formData.quantidade}
-                onChange={handleChange}
-                required
-                placeholder="0.000"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <Input
-                label="Observação"
-                name="observacao"
-                value={formData.observacao}
-                onChange={handleChange}
-                placeholder="Observações sobre a transferência"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-4 pt-4 border-t">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={loading || loadingLocations}
-            >
-              {loading ? 'Processando...' : 'Processar Transferência'}
-            </Button>
-          </div>
-        </form>
-      </div>
+      <AdicionarTransferenciaModal
+        isOpen={modalAberto}
+        onClose={() => setModalAberto(false)}
+        onSuccess={() => {
+          loadData(pagination.page, '');
+        }}
+      />
     </div>
   );
 }
 
 export default Transferencias;
-

@@ -127,8 +127,8 @@ class TransferenciaEstoqueTests(TestCase):
             # Verificar movimentações
             self.assertEqual(mov_saida.tipo, 'SAIDA')
             self.assertEqual(mov_entrada.tipo, 'ENTRADA')
-            self.assertEqual(mov_saida.origem, 'TRANSFERENCIA_ENTRE_LOCATIONS')
-            self.assertEqual(mov_entrada.origem, 'TRANSFERENCIA_ENTRE_LOCATIONS')
+            self.assertEqual(mov_saida.origem, 'TRANSFERENCIA')
+            self.assertEqual(mov_entrada.origem, 'TRANSFERENCIA')
             
             # Verificar estoques
             self.assertEqual(estoque_origem.quantidade_atual, Decimal('70.000'))

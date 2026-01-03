@@ -671,7 +671,7 @@ def processar_transferencia(
     movimentacao_saida = MovimentacaoEstoque.objects.create(
         estoque=estoque_origem,
         tipo='SAIDA',
-        origem='TRANSFERENCIA_ENTRE_LOCATIONS',
+        origem='TRANSFERENCIA',
         status='CONFIRMADA',
         quantidade=quantidade,
         quantidade_anterior=quantidade_anterior_origem,
@@ -687,7 +687,7 @@ def processar_transferencia(
     movimentacao_entrada = MovimentacaoEstoque.objects.create(
         estoque=estoque_destino,
         tipo='ENTRADA',
-        origem='TRANSFERENCIA_ENTRE_LOCATIONS',
+        origem='TRANSFERENCIA',
         status='CONFIRMADA',
         quantidade=quantidade,
         quantidade_anterior=quantidade_anterior_destino,
@@ -698,6 +698,123 @@ def processar_transferencia(
         documento_referencia=documento_referencia,
         observacoes=observacoes
     )
+    
+    return {
+        'movimentacao_saida': movimentacao_saida,
+        'movimentacao_entrada': movimentacao_entrada,
+        'estoque_origem': estoque_origem,
+        'estoque_destino': estoque_destino,
+    }
+
+
+@transaction.atomic
+def cancelar_transferencia(
+    movimentacao_saida_id: int,
+    motivo: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Cancela uma transferência revertendo as movimentações de estoque.
+    
+    Processo:
+    1. Busca as duas movimentações (saída e entrada)
+    2. Valida que ambas estão confirmadas
+    3. Reverte as quantidades nos estoques
+    4. Marca ambas as movimentações como CANCELADA
+    5. Não cria novas movimentações (apenas marca como cancelada)
+    
+    Args:
+        movimentacao_saida_id: ID da movimentação de saída (identificador da transferência)
+        motivo: Motivo do cancelamento
+        
+    Returns:
+        Dict com movimentações canceladas e estoques atualizados
+        
+    Raises:
+        EstoqueServiceError: Se houver erro de validação
+    """
+    try:
+        movimentacao_saida = MovimentacaoEstoque.objects.select_related(
+            'estoque', 'estoque__produto', 'location_origem', 'location_destino'
+        ).get(id=movimentacao_saida_id)
+    except MovimentacaoEstoque.DoesNotExist:
+        raise EstoqueServiceError("Movimentação de saída não encontrada.")
+    
+    # Validar que é uma transferência
+    if movimentacao_saida.origem != 'TRANSFERENCIA' or movimentacao_saida.tipo != 'SAIDA':
+        raise EstoqueServiceError("Esta movimentação não é uma transferência válida.")
+    
+    # Validar que não está cancelada
+    if movimentacao_saida.status in ['CANCELADA', 'REVERTIDA']:
+        raise EstoqueServiceError("Esta transferência já foi cancelada.")
+    
+    # Buscar movimentação de entrada correspondente
+    # Usar campos essenciais que identificam a transferência
+    # A entrada tem location_origem e location_destino invertidos em relação à saída
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    # Buscar movimentação de entrada criada no mesmo período (até 5 minutos de diferença)
+    # para permitir pequenas diferenças de timestamp
+    tempo_tolerancia = timedelta(minutes=5)
+    data_inicio = movimentacao_saida.created_at - tempo_tolerancia
+    data_fim = movimentacao_saida.created_at + tempo_tolerancia
+    
+    movimentacao_entrada = MovimentacaoEstoque.objects.filter(
+        origem='TRANSFERENCIA',
+        tipo='ENTRADA',
+        location_origem=movimentacao_saida.location_origem,  # Mesma origem
+        location_destino=movimentacao_saida.location_destino,  # Mesmo destino
+        estoque__produto=movimentacao_saida.estoque.produto,  # Mesmo produto
+        quantidade=movimentacao_saida.quantidade,  # Mesma quantidade
+        created_at__gte=data_inicio,
+        created_at__lte=data_fim
+    ).select_related('estoque').first()
+    
+    # Se não encontrou, tentar busca mais flexível (sem documento_referencia e data_movimentacao)
+    if not movimentacao_entrada:
+        movimentacao_entrada = MovimentacaoEstoque.objects.filter(
+            origem='TRANSFERENCIA',
+            tipo='ENTRADA',
+            location_origem=movimentacao_saida.location_origem,
+            location_destino=movimentacao_saida.location_destino,
+            estoque__produto=movimentacao_saida.estoque.produto,
+            quantidade=movimentacao_saida.quantidade,
+            created_at__gte=data_inicio,
+            created_at__lte=data_fim
+        ).select_related('estoque').first()
+    
+    if not movimentacao_entrada:
+        raise EstoqueServiceError(
+            f"Movimentação de entrada correspondente não encontrada. "
+            f"Saída ID: {movimentacao_saida.id}, Produto: {movimentacao_saida.estoque.produto.nome}, "
+            f"Origem: {movimentacao_saida.location_origem.nome}, Destino: {movimentacao_saida.location_destino.nome}"
+        )
+    
+    if movimentacao_entrada.status in ['CANCELADA', 'REVERTIDA']:
+        raise EstoqueServiceError("A movimentação de entrada já foi cancelada.")
+    
+    # Reverter estoque na origem (adicionar quantidade de volta)
+    estoque_origem = movimentacao_saida.estoque
+    estoque_origem.quantidade_atual += movimentacao_saida.quantidade
+    estoque_origem.save()
+    
+    # Reverter estoque no destino (remover quantidade)
+    estoque_destino = movimentacao_entrada.estoque
+    estoque_destino.quantidade_atual -= movimentacao_entrada.quantidade
+    
+    # Recalcular custo médio no destino se necessário
+    # (se havia estoque antes da transferência, manter o custo médio anterior)
+    # Por simplicidade, não alteramos o custo médio ao cancelar
+    estoque_destino.save()
+    
+    # Marcar ambas as movimentações como canceladas
+    movimentacao_saida.status = 'CANCELADA'
+    movimentacao_saida.motivo_cancelamento = motivo or 'Transferência cancelada'
+    movimentacao_saida.save()
+    
+    movimentacao_entrada.status = 'CANCELADA'
+    movimentacao_entrada.motivo_cancelamento = motivo or 'Transferência cancelada'
+    movimentacao_entrada.save()
     
     return {
         'movimentacao_saida': movimentacao_saida,

@@ -581,7 +581,7 @@ class MovimentacaoEstoqueModelTests(TestCase):
             movimentacao = MovimentacaoEstoque.objects.create(
                 estoque=self.estoque,
                 tipo='TRANSFERENCIA',
-                origem='TRANSFERENCIA_ENTRE_LOCATIONS',
+                origem='TRANSFERENCIA',
                 status='CONFIRMADA',
                 quantidade=Decimal('20.000'),
                 quantidade_anterior=Decimal('100.000'),

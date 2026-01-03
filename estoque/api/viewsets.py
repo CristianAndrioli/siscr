@@ -16,6 +16,7 @@ from estoque.services import (
     processar_entrada_estoque,
     processar_saida_estoque,
     processar_transferencia,
+    cancelar_transferencia,
     criar_reserva,
     confirmar_reserva,
     cancelar_reserva,
@@ -301,7 +302,8 @@ class EstoqueViewSet(viewsets.ReadOnlyModelViewSet):
                           status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            produto = Produto.objects.get(id=serializer.validated_data['produto_id'])
+            # Produto usa codigo_produto como chave primária, não id
+            produto = Produto.objects.get(codigo_produto=int(serializer.validated_data['produto_id']))
             location_origem = Location.objects.get(id=serializer.validated_data['location_origem_id'])
             location_destino = Location.objects.get(id=serializer.validated_data['location_destino_id'])
             
@@ -444,6 +446,167 @@ class MovimentacaoEstoqueViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(estoque__empresa=empresa)
         
         return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('-data_movimentacao')
+    
+    @action(detail=False, methods=['get'])
+    def transferencias(self, request):
+        """
+        Retorna transferências agrupadas (uma linha por transferência, não duas movimentações separadas).
+        Agrupa movimentações de SAIDA e ENTRADA com origem='TRANSFERENCIA' que têm o mesmo documento_referencia
+        e location_origem/location_destino.
+        """
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Buscar movimentações de transferência (apenas SAIDA, pois ENTRADA é o par)
+        transferencias_saida = MovimentacaoEstoque.objects.filter(
+            estoque__empresa=empresa,
+            origem='TRANSFERENCIA',
+            tipo='SAIDA',
+            location_origem__isnull=False,
+            location_destino__isnull=False
+        ).select_related(
+            'estoque__produto',
+            'location_origem',
+            'location_destino'
+        ).order_by('-data_movimentacao', '-created_at')
+        
+        # Agrupar e formatar transferências
+        transferencias_formatadas = []
+        for mov_saida in transferencias_saida:
+            # Buscar a movimentação de entrada correspondente
+            mov_entrada = MovimentacaoEstoque.objects.filter(
+                origem='TRANSFERENCIA',
+                tipo='ENTRADA',
+                location_origem=mov_saida.location_origem,
+                location_destino=mov_saida.location_destino,
+                estoque__produto=mov_saida.estoque.produto,
+                documento_referencia=mov_saida.documento_referencia,
+                data_movimentacao=mov_saida.data_movimentacao,
+                created_at=mov_saida.created_at
+            ).select_related('estoque__produto', 'location_origem', 'location_destino').first()
+            
+            transferencias_formatadas.append({
+                'id': mov_saida.id,  # Usar ID da saída como identificador principal
+                'produto_id': mov_saida.estoque.produto.codigo_produto,
+                'produto_nome': mov_saida.estoque.produto.nome,
+                'produto_codigo': str(mov_saida.estoque.produto.codigo_produto),
+                'location_origem_id': mov_saida.location_origem.id,
+                'location_origem_nome': mov_saida.location_origem.nome,
+                'location_origem_codigo': mov_saida.location_origem.codigo,
+                'location_destino_id': mov_saida.location_destino.id,
+                'location_destino_nome': mov_saida.location_destino.nome,
+                'location_destino_codigo': mov_saida.location_destino.codigo,
+                'quantidade': str(mov_saida.quantidade),
+                'valor_unitario': str(mov_saida.valor_unitario),
+                'valor_total': str(mov_saida.valor_unitario * mov_saida.quantidade),
+                'documento_referencia': mov_saida.documento_referencia,
+                'observacoes': mov_saida.observacoes,
+                'data_movimentacao': mov_saida.data_movimentacao.isoformat() if mov_saida.data_movimentacao else None,
+                'created_at': mov_saida.created_at.isoformat() if mov_saida.created_at else None,
+                'movimentacao_saida_id': mov_saida.id,
+                'movimentacao_entrada_id': mov_entrada.id if mov_entrada else None,
+                'status': mov_saida.status,
+                'motivo_cancelamento': mov_saida.motivo_cancelamento,
+            })
+        
+        # Paginação manual
+        from rest_framework.pagination import PageNumberPagination
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get('page_size', 20))
+        page = paginator.paginate_queryset(transferencias_formatadas, request)
+        
+        if page is not None:
+            return paginator.get_paginated_response(page)
+        
+        return Response(transferencias_formatadas)
+    
+    @action(detail=False, methods=['get'], url_path='transferencias/(?P<transferencia_id>[^/.]+)')
+    def get_transferencia(self, request, transferencia_id=None):
+        """
+        Busca uma transferência específica pelo ID da movimentação de saída.
+        """
+        try:
+            movimentacao_saida = MovimentacaoEstoque.objects.select_related(
+                'estoque', 'estoque__produto', 'location_origem', 'location_destino'
+            ).get(id=transferencia_id, origem='TRANSFERENCIA', tipo='SAIDA')
+        except MovimentacaoEstoque.DoesNotExist:
+            return Response({'error': 'Transferência não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        
+        # Buscar movimentação de entrada correspondente
+        movimentacao_entrada = MovimentacaoEstoque.objects.filter(
+            origem='TRANSFERENCIA',
+            tipo='ENTRADA',
+            location_origem=movimentacao_saida.location_origem,
+            location_destino=movimentacao_saida.location_destino,
+            estoque__produto=movimentacao_saida.estoque.produto,
+            documento_referencia=movimentacao_saida.documento_referencia,
+            data_movimentacao=movimentacao_saida.data_movimentacao,
+            created_at=movimentacao_saida.created_at
+        ).select_related('estoque').first()
+        
+        transferencia_formatada = {
+            'id': movimentacao_saida.id,
+            'produto_id': movimentacao_saida.estoque.produto.codigo_produto,
+            'produto_nome': movimentacao_saida.estoque.produto.nome,
+            'produto_codigo': str(movimentacao_saida.estoque.produto.codigo_produto),
+            'location_origem_id': movimentacao_saida.location_origem.id,
+            'location_origem_nome': movimentacao_saida.location_origem.nome,
+            'location_origem_codigo': movimentacao_saida.location_origem.codigo,
+            'location_destino_id': movimentacao_saida.location_destino.id,
+            'location_destino_nome': movimentacao_saida.location_destino.nome,
+            'location_destino_codigo': movimentacao_saida.location_destino.codigo,
+            'quantidade': str(movimentacao_saida.quantidade),
+            'valor_unitario': str(movimentacao_saida.valor_unitario),
+            'valor_total': str(movimentacao_saida.valor_unitario * movimentacao_saida.quantidade),
+            'documento_referencia': movimentacao_saida.documento_referencia,
+            'observacoes': movimentacao_saida.observacoes,
+            'data_movimentacao': movimentacao_saida.data_movimentacao.isoformat() if movimentacao_saida.data_movimentacao else None,
+            'created_at': movimentacao_saida.created_at.isoformat() if movimentacao_saida.created_at else None,
+            'movimentacao_saida_id': movimentacao_saida.id,
+            'movimentacao_entrada_id': movimentacao_entrada.id if movimentacao_entrada else None,
+            'status': movimentacao_saida.status,
+            'motivo_cancelamento': movimentacao_saida.motivo_cancelamento,
+        }
+        
+        return Response(transferencia_formatada)
+    
+    @action(detail=True, methods=['post'], url_path='cancelar-transferencia')
+    def cancelar_transferencia(self, request, pk=None):
+        """
+        Cancela uma transferência revertendo as movimentações de estoque.
+        Usa o ID da movimentação de saída (que é o ID retornado na lista de transferências).
+        """
+        try:
+            movimentacao_saida = MovimentacaoEstoque.objects.get(id=pk)
+        except MovimentacaoEstoque.DoesNotExist:
+            return Response({'error': 'Transferência não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        
+        motivo = request.data.get('motivo')
+        
+        try:
+            resultado = cancelar_transferencia(
+                movimentacao_saida_id=movimentacao_saida.id,
+                motivo=motivo
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Transferência cancelada com sucesso',
+                'movimentacao_saida': MovimentacaoEstoqueSerializer(resultado['movimentacao_saida']).data,
+                'movimentacao_entrada': MovimentacaoEstoqueSerializer(resultado['movimentacao_entrada']).data,
+                'estoque_origem': EstoqueSerializer(resultado['estoque_origem']).data,
+                'estoque_destino': EstoqueSerializer(resultado['estoque_destino']).data,
+            })
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'Erro ao cancelar transferência: {str(e)}'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ReservaEstoqueViewSet(viewsets.ModelViewSet):

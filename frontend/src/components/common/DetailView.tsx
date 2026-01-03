@@ -20,6 +20,7 @@ interface DetailViewProps {
   showActions?: boolean;
   loading?: boolean;
   error?: string;
+  children?: ReactNode;
 }
 
 /**
@@ -39,6 +40,7 @@ export default function DetailView({
   showActions = true,
   loading = false,
   error,
+  children,
 }: DetailViewProps) {
   // Gerar tabs automaticamente se fields e data forem fornecidos
   const generatedTabs = useMemo(() => {
@@ -103,6 +105,7 @@ export default function DetailView({
           </div>
           {showActions && (
             <div className="flex gap-2">
+              {children}
               {onEdit && (
                 <Button variant="primary" onClick={onEdit}>
                   Editar
