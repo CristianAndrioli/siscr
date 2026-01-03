@@ -197,3 +197,33 @@ class EstoqueConsolidadoSerializer(serializers.Serializer):
     empresa_id = serializers.IntegerField(required=False)
     grupo_filial_id = serializers.IntegerField(required=False)
 
+
+class ProcessarMultiplasEntradasSerializer(serializers.Serializer):
+    """Serializer para processar múltiplas entradas de estoque (modo desenvolvimento)"""
+    entradas = serializers.ListField(
+        child=serializers.DictField(
+            child=serializers.CharField()
+        ),
+        min_length=1
+    )
+    
+    def validate_entradas(self, value):
+        """Valida cada entrada"""
+        errors = []
+        for idx, entrada in enumerate(value):
+            if 'location_id' not in entrada or not entrada['location_id']:
+                errors.append(f"Linha {idx + 1}: location_id é obrigatório")
+            if 'produto_id' not in entrada or not entrada['produto_id']:
+                errors.append(f"Linha {idx + 1}: produto_id é obrigatório")
+            if 'quantidade' not in entrada or not entrada['quantidade']:
+                errors.append(f"Linha {idx + 1}: quantidade é obrigatória")
+            try:
+                quantidade = float(entrada.get('quantidade', 0))
+                if quantidade <= 0:
+                    errors.append(f"Linha {idx + 1}: quantidade deve ser maior que zero")
+            except (ValueError, TypeError):
+                errors.append(f"Linha {idx + 1}: quantidade inválida")
+        
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value

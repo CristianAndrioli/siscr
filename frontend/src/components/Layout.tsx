@@ -706,8 +706,10 @@ function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8">
-        {children}
+      <main className="flex-1 p-8 overflow-x-hidden min-w-0">
+        <div className="w-full max-w-full">
+          {children}
+        </div>
       </main>
     </div>
   );

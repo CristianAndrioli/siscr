@@ -226,7 +226,7 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 w-full max-w-full overflow-hidden">
       {/* Header com pesquisa e ações */}
       <div className="p-4 border-b border-gray-200 flex items-center justify-between gap-4">
         <div className="flex-1 max-w-md">
@@ -277,9 +277,9 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
         </div>
       </div>
 
-      {/* Tabela */}
-      <div className="overflow-x-auto" ref={tableRef}>
-        <table className="min-w-full divide-y divide-gray-200" style={{ tableLayout: 'fixed', width: '100%' }}>
+      {/* Tabela com scroll horizontal */}
+      <div className="overflow-x-auto w-full" ref={tableRef} style={{ maxWidth: '100%', overflowX: 'auto' }}>
+        <table className="divide-y divide-gray-200" style={{ width: 'max-content', minWidth: '100%' }}>
           <thead className="bg-gray-50">
             <tr>
               {visibleColumnsData.map((column) => (

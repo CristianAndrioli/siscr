@@ -24,7 +24,8 @@ export interface Location {
   endereco_completo: string;
   permite_entrada: boolean;
   permite_saida: boolean;
-  ativo: boolean;
+  ativo?: boolean; // Pode ser 'ativo' ou 'is_active' dependendo do serializer
+  is_active?: boolean; // Campo do modelo Django
   created_at: string;
   updated_at: string;
 }

@@ -1,14 +1,21 @@
+import { useState } from 'react';
 import { useCrud } from '../../hooks/useCrud';
 import { DataGrid } from '../../components/common';
 import { estoqueService, type Estoque } from '../../services/estoque';
 import { useNavigate } from 'react-router-dom';
 import { useGridColumns } from '../../hooks/useGridColumns';
+import AdicionarEstoqueModal from '../../components/estoque/AdicionarEstoqueModal';
+import Button from '../../components/common/Button';
 
 /**
  * Página de listagem de Estoque Atual
  */
 export function EstoqueAtualList() {
   const navigate = useNavigate();
+  const [modalAberto, setModalAberto] = useState(false);
+  
+  // Verificar se está em modo desenvolvimento
+  const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
   
   const {
     data,
@@ -18,6 +25,7 @@ export function EstoqueAtualList() {
     handleViewRecord,
     handleSearch,
     handlePageChange,
+    loadData,
   } = useCrud<Estoque>({
     service: estoqueService,
     basePath: '/estoque/estoque-atual',
@@ -100,7 +108,7 @@ export function EstoqueAtualList() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-full overflow-hidden">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Estoque Atual</h1>
@@ -108,6 +116,11 @@ export function EstoqueAtualList() {
             Visualize o estoque atual de produtos por location
           </p>
         </div>
+        {isDevelopment && (
+          <Button onClick={() => setModalAberto(true)}>
+            + Adicionar Estoque
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -130,6 +143,14 @@ export function EstoqueAtualList() {
         emptyMessage="Nenhum estoque cadastrado."
         gridId="estoque-atual"
         showActions={false}
+      />
+
+      <AdicionarEstoqueModal
+        isOpen={modalAberto}
+        onClose={() => setModalAberto(false)}
+        onSuccess={() => {
+          loadData(pagination.page, '');
+        }}
       />
     </div>
   );

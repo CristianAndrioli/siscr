@@ -36,6 +36,7 @@ from .serializers import (
     ProcessarTransferenciaSerializer,
     CriarReservaSerializer,
     EstoqueConsolidadoSerializer,
+    ProcessarMultiplasEntradasSerializer,
 )
 from django.http import HttpResponse
 
@@ -331,6 +332,92 @@ class EstoqueViewSet(viewsets.ReadOnlyModelViewSet):
         except EstoqueServiceError as e:
             return Response({'error': str(e)}, 
                           status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def entrada_multipla(self, request):
+        """
+        Processa múltiplas entradas de estoque (modo desenvolvimento).
+        Apenas disponível quando ENVIRONMENT=development.
+        """
+        from django.conf import settings
+        
+        # Verificar se está em modo desenvolvimento
+        if getattr(settings, 'ENVIRONMENT', 'production') != 'development':
+            return Response(
+                {'error': 'Este recurso está disponível apenas em modo de desenvolvimento'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = ProcessarMultiplasEntradasSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        resultados = []
+        erros = []
+        
+        for idx, entrada_data in enumerate(serializer.validated_data['entradas']):
+            try:
+                # Produto usa codigo_produto como chave primária, não id
+                produto = Produto.objects.get(codigo_produto=int(entrada_data['produto_id']))
+                location = Location.objects.get(id=int(entrada_data['location_id']))
+                
+                # Validar que location pertence à empresa
+                if location.empresa != empresa:
+                    erros.append(f"Linha {idx + 1}: Location não pertence à empresa do usuário")
+                    continue
+                
+                # Validar que location permite entrada
+                if not location.permite_entrada:
+                    erros.append(f"Linha {idx + 1}: Location '{location.nome}' não permite entrada")
+                    continue
+                
+                quantidade = Decimal(str(entrada_data['quantidade']))
+                valor_unitario = Decimal(str(entrada_data.get('valor_unitario', '0.00')))
+                
+                resultado = processar_entrada_estoque(
+                    produto=produto,
+                    location=location,
+                    empresa=empresa,
+                    quantidade=quantidade,
+                    valor_unitario=valor_unitario,
+                    origem=entrada_data.get('origem', 'COMPRA'),
+                    documento_referencia=entrada_data.get('documento_referencia'),
+                    observacoes=entrada_data.get('observacoes'),
+                )
+                
+                resultados.append({
+                    'linha': idx + 1,
+                    'produto': produto.nome,
+                    'location': location.nome,
+                    'quantidade': str(quantidade),
+                    'estoque_id': resultado['estoque'].id,
+                })
+                
+            except Produto.DoesNotExist:
+                erros.append(f"Linha {idx + 1}: Produto não encontrado")
+            except Location.DoesNotExist:
+                erros.append(f"Linha {idx + 1}: Location não encontrada")
+            except EstoqueServiceError as e:
+                erros.append(f"Linha {idx + 1}: {str(e)}")
+            except Exception as e:
+                erros.append(f"Linha {idx + 1}: Erro inesperado - {str(e)}")
+        
+        if erros:
+            return Response({
+                'error': 'Alguns itens falharam',
+                'erros': erros,
+                'resultados': resultados,
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'success': True,
+            'processados': len(resultados),
+            'resultados': resultados,
+        }, status=status.HTTP_201_CREATED)
 
 
 class MovimentacaoEstoqueViewSet(viewsets.ReadOnlyModelViewSet):

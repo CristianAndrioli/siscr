@@ -105,6 +105,24 @@ class EstoqueService {
     const response = await api.patch<Estoque>(`${this.baseUrl}${id}/`, data);
     return response.data;
   }
+
+  async processarMultiplasEntradas(data: {
+    entradas: Array<{
+      location_id: string;
+      produto_id: string;
+      quantidade: string;
+      valor_unitario?: string;
+      origem?: string;
+      documento_referencia?: string;
+      observacoes?: string;
+    }>;
+  }): Promise<{ success: boolean; processados: number; resultados: any[] }> {
+    const response = await api.post<{ success: boolean; processados: number; resultados: any[] }>(
+      `${this.baseUrl}entrada_multipla/`,
+      data
+    );
+    return response.data;
+  }
 }
 
 export const estoqueService = new EstoqueService();
