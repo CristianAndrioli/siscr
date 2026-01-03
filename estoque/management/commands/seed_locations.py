@@ -52,17 +52,29 @@ class Command(BaseCommand):
                 for empresa in empresas:
                     filiais = Filial.objects.filter(empresa=empresa, is_active=True)
                     
-                    # Se a empresa tem filiais, criar locations para cada filial
+                    # Sempre criar 3 locations por empresa
+                    self.stdout.write(f"\n  📍 Empresa: {empresa.nome}")
+                    
                     if filiais.exists():
-                        self.stdout.write(f"\n  📍 Empresa: {empresa.nome} ({len(filiais)} filiais)")
+                        # Se a empresa tem filiais, distribuir as 3 locations entre as filiais
+                        self.stdout.write(f"    ({len(filiais)} filiais) - Distribuindo 3 locations")
                         
-                        for filial in filiais:
-                            locations_criadas = self.criar_locations_para_filial(empresa, filial, tenant.schema_name)
-                            total_locations += len(locations_criadas)
-                            self.stdout.write(f"    ✅ {len(locations_criadas)} locations criadas para {filial.nome}")
+                        # Distribuir as 3 locations entre as filiais
+                        locations_por_filial = [0] * len(filiais)
+                        for i in range(3):
+                            locations_por_filial[i % len(filiais)] += 1
+                        
+                        for idx, filial in enumerate(filiais):
+                            num_locs = locations_por_filial[idx]
+                            if num_locs > 0:
+                                locations_criadas = self.criar_locations_para_filial(
+                                    empresa, filial, tenant.schema_name, num_locs
+                                )
+                                total_locations += len(locations_criadas)
+                                self.stdout.write(f"    ✅ {len(locations_criadas)} location(s) criada(s) para {filial.nome}")
                     else:
-                        # Se a empresa NÃO tem filiais, criar locations diretamente na empresa
-                        self.stdout.write(f"\n  📍 Empresa: {empresa.nome} (sem filiais)")
+                        # Se a empresa NÃO tem filiais, criar 3 locations diretamente na empresa
+                        self.stdout.write(f"    (sem filiais) - Criando 3 locations")
                         locations_criadas = self.criar_locations_para_empresa(empresa, tenant.schema_name)
                         total_locations += len(locations_criadas)
                         self.stdout.write(f"    ✅ {len(locations_criadas)} locations criadas para empresa (sem filial)")
@@ -71,13 +83,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"✅ Total de {total_locations} locations criadas!"))
         self.stdout.write(f"{'='*60}")
 
-    def criar_locations_para_filial(self, empresa, filial, schema_name):
+    def criar_locations_para_filial(self, empresa, filial, schema_name, num_locations=1):
         """Cria locations para uma filial específica"""
         cidade, estado = random.choice(CIDADES)
         locations = []
-        
-        # Criar 1-2 locations por filial
-        num_locations = random.randint(1, 2)
         
         for i in range(num_locations):
             tipo = random.choice(TIPOS_LOCATION)[0]
@@ -114,8 +123,8 @@ class Command(BaseCommand):
         cidade, estado = random.choice(CIDADES)
         locations = []
         
-        # Criar 2-3 locations para empresa sem filiais
-        num_locations = random.randint(2, 3)
+        # Sempre criar exatamente 3 locations para empresa sem filiais
+        num_locations = 3
         
         for i in range(num_locations):
             tipo = random.choice(TIPOS_LOCATION)[0]
