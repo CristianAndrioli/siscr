@@ -17,6 +17,7 @@ from reports.api.serializers import (
 from reports.engine import ReportEngine
 from cadastros.utils import get_current_empresa_filial
 from django.db import connection
+from django.db.models import Q
 from django_tenants.utils import schema_context
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,9 @@ class ReportTemplateViewSet(viewsets.ModelViewSet):
         # Filtrar por tenant/empresa
         if empresa:
             queryset = queryset.filter(
-                models.Q(empresa=empresa) |
-                models.Q(empresa__isnull=True, tenant=tenant) |
-                models.Q(empresa__isnull=True, tenant__isnull=True)
+                Q(empresa=empresa) |
+                Q(empresa__isnull=True, tenant=tenant) |
+                Q(empresa__isnull=True, tenant__isnull=True)
             )
         elif tenant:
             queryset = queryset.filter(

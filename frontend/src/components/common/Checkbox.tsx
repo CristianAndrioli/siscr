@@ -8,6 +8,7 @@ interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onC
   required?: boolean;
   className?: string;
   error?: string;
+  helpText?: string;
 }
 
 /**
@@ -21,6 +22,7 @@ export default function Checkbox({
   required = false,
   className = '',
   error = '',
+  helpText,
   ...props
 }: CheckboxProps) {
   return (
@@ -48,6 +50,9 @@ export default function Checkbox({
       </div>
       {error && (
         <p className="mt-1 text-sm text-red-600">{error}</p>
+      )}
+      {helpText && !error && (
+        <p className="mt-1 text-sm text-gray-500">{helpText}</p>
       )}
     </div>
   );

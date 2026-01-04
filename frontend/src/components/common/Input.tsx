@@ -11,6 +11,7 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'onChan
   readOnly?: boolean;
   className?: string;
   error?: string;
+  helpText?: string;
 }
 
 /**
@@ -27,6 +28,7 @@ export default function Input({
   readOnly = false,
   className = '',
   error = '',
+  helpText,
   ...props
 }: InputProps) {
   return (
@@ -56,6 +58,9 @@ export default function Input({
       />
       {error && (
         <p className="mt-1 text-sm text-red-600">{error}</p>
+      )}
+      {helpText && !error && (
+        <p className="mt-1 text-sm text-gray-500">{helpText}</p>
       )}
     </div>
   );
