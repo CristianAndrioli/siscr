@@ -210,12 +210,11 @@ class ReportEngine:
             modulo: Módulo do sistema
             custom_template_id: ID de template customizado
         """
-        # Verificar se WeasyPrint está disponível (lazy import)
-        if not _check_weasyprint():
+        # Verificar se WeasyPrint está disponível
+        if not WEASYPRINT_AVAILABLE:
             raise RuntimeError(
-                f"WeasyPrint não está disponível. "
-                f"Erro: {_WEASYPRINT_ERROR}. "
-                f"Instale as dependências do sistema: libcairo2-dev, libpango1.0-dev, libgdk-pixbuf-xlib-2.0-dev, libffi-dev"
+                "WeasyPrint não está disponível. "
+                "Instale as dependências do sistema: libcairo2-dev, libpango1.0-dev, libgdk-pixbuf-xlib-2.0-dev, libffi-dev"
             )
         
         # Importar WeasyPrint apenas quando necessário

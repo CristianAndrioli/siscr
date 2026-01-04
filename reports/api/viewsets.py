@@ -261,25 +261,125 @@ class ReportGeneratorViewSet(viewsets.ViewSet):
     def _get_estoque_data(self, tipo, filtros, tenant, empresa):
         """Busca dados de relatórios de estoque"""
         from django_tenants.utils import schema_context
+        from django.db.models import Sum, Q, F
+        from decimal import Decimal
         from estoque.models import Estoque, Location
+        from cadastros.models import Produto
         
+        def buscar_dados():
+            """Função auxiliar para buscar dados dentro do schema context"""
+            if tipo == 'estoque-por-location':
+                # Buscar estoques agrupados por location
+                queryset = Estoque.objects.select_related(
+                    'produto', 'location', 'empresa'
+                ).filter(
+                    empresa=empresa,
+                    quantidade_atual__gt=0  # Apenas estoques com quantidade > 0
+                )
+                
+                # Aplicar filtros
+                location_id = filtros.get('location_id')
+                if location_id:
+                    queryset = queryset.filter(location_id=location_id)
+                
+                produto_id = filtros.get('produto_id')
+                if produto_id:
+                    # Produto usa codigo_produto como PK
+                    queryset = queryset.filter(produto__codigo_produto=produto_id)
+                
+                # Agrupar por location e produto
+                dados = []
+                total_geral = Decimal('0.00')
+                
+                # Primeiro, calcular totais por location
+                location_totals = {}
+                estoques_list = list(queryset.order_by('location__nome', 'produto__nome'))
+                
+                for estoque in estoques_list:
+                    valor_total = estoque.quantidade_atual * estoque.valor_custo_medio
+                    location_id = estoque.location.id
+                    if location_id not in location_totals:
+                        location_totals[location_id] = Decimal('0.00')
+                    location_totals[location_id] += valor_total
+                    total_geral += valor_total
+                
+                # Agora criar lista de dados com location_total
+                for estoque in estoques_list:
+                    valor_total = estoque.quantidade_atual * estoque.valor_custo_medio
+                    location_id = estoque.location.id
+                    
+                    dados.append({
+                        'location_id': location_id,
+                        'location_nome': estoque.location.nome,
+                        'location_codigo': estoque.location.codigo or '',
+                        'produto_id': estoque.produto.codigo_produto,  # Produto usa codigo_produto como PK
+                        'produto_codigo': estoque.produto.codigo_produto,
+                        'produto_nome': estoque.produto.nome,
+                        'produto_unidade_medida': estoque.produto.unidade_medida or '',
+                        'quantidade': str(estoque.quantidade_atual),  # Campo esperado pelo template
+                        'quantidade_atual': str(estoque.quantidade_atual),
+                        'quantidade_reservada': str(estoque.quantidade_reservada),
+                        'quantidade_disponivel': str(estoque.quantidade_disponivel),
+                        'valor_unitario': str(estoque.valor_custo_medio),  # Campo esperado pelo template
+                        'valor_custo_medio': str(estoque.valor_custo_medio),
+                        'valor_total': str(valor_total),
+                        'localizacao_interna': estoque.localizacao_interna or '',
+                        'location_total': str(location_totals[location_id]),  # Total da location
+                    })
+                
+                return {
+                    'dados': dados,
+                    'total_geral': str(total_geral),
+                    'total_itens': len(dados),
+                    'empresa_nome': empresa.nome if empresa else '',
+                }
+            
+            elif tipo == 'estoque-consolidado':
+                # Estoque consolidado por produto (todas as locations)
+                queryset = Estoque.objects.filter(
+                    empresa=empresa,
+                    quantidade_atual__gt=0
+                ).values('produto').annotate(
+                    total_quantidade=Sum('quantidade_atual'),
+                    total_reservada=Sum('quantidade_reservada'),
+                    total_disponivel=Sum('quantidade_disponivel'),
+                    total_valor=Sum(F('quantidade_atual') * F('valor_custo_medio'))
+                )
+                
+                dados = []
+                total_geral = Decimal('0.00')
+                
+                for item in queryset:
+                    # Produto usa codigo_produto como PK
+                    produto = Produto.objects.get(codigo_produto=item['produto'])
+                    total_geral += item['total_valor'] or Decimal('0.00')
+                    
+                    dados.append({
+                        'produto_id': produto.codigo_produto,
+                        'produto_codigo': produto.codigo_produto,
+                        'produto_nome': produto.nome,
+                        'produto_unidade_medida': produto.unidade_medida or '',
+                        'total_quantidade': str(item['total_quantidade'] or Decimal('0.000')),
+                        'total_reservada': str(item['total_reservada'] or Decimal('0.000')),
+                        'total_disponivel': str(item['total_disponivel'] or Decimal('0.000')),
+                        'total_valor': str(item['total_valor'] or Decimal('0.00')),
+                    })
+                
+                return {
+                    'dados': dados,
+                    'total_geral': str(total_geral),
+                    'total_itens': len(dados),
+                    'empresa_nome': empresa.nome if empresa else '',
+                }
+            
+            return {}
+        
+        # Executar dentro do schema context se necessário
         if tenant:
             with schema_context(tenant.schema_name):
-                if tipo == 'estoque-por-location':
-                    # Implementar lógica de busca de dados
-                    # Por enquanto, retornar estrutura vazia
-                    return {
-                        'dados': [],
-                        'total_geral': '0.00'
-                    }
+                return buscar_dados()
         else:
-            if tipo == 'estoque-por-location':
-                return {
-                    'dados': [],
-                    'total_geral': '0.00'
-                }
-        
-        return {}
+            return buscar_dados()
     
     def _get_dados_exemplo(self, tipo, modulo):
         """Retorna dados de exemplo para preview"""
