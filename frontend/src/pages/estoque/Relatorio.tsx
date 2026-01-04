@@ -1,315 +1,391 @@
 import { useState, useEffect } from 'react';
-import { Button, Select, Input, Alert, LoadingSpinner } from '../../components/common';
-import { relatoriosService, locationsService, type Location } from '../../services/estoque';
-import { empresasService } from '../../services/tenants/empresas';
-import { filiaisService } from '../../services/tenants/filiais';
+import { Button, Select, Input, Modal, Alert, LoadingSpinner, Checkbox } from '../../components/common';
+import { generatorService, type GerarRelatorioRequest } from '../../services/reports/generator';
+import { templatesService, type ReportTemplate } from '../../services/reports/templates';
+import { locationsService, type Location } from '../../services/estoque';
+import { formatApiError } from '../../utils/helpers';
+import { ReportPreview } from '../../components/reports/ReportPreview';
 
-interface RelatorioParams {
-  tipo: 'estoque-por-location' | 'estoque-consolidado' | 'movimentacoes' | 'reservas' | 'indicadores';
-  location?: string;
-  empresa?: string;
-  filial?: string;
-  data_inicio?: string;
-  data_fim?: string;
-}
-
-interface Empresa {
-  id: number;
+interface RelatorioTipo {
+  tipo: string;
   nome: string;
-}
-
-interface Filial {
-  id: number;
-  nome: string;
-  empresa: number;
+  descricao?: string;
 }
 
 /**
- * Página de Relatórios de Estoque
+ * Página de geração de relatórios de Estoque
+ * Filtra automaticamente apenas templates do módulo "estoque"
  */
-export function RelatorioEstoque() {
+export default function RelatorioEstoque() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string>('');
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [empresas, setEmpresas] = useState<Empresa[]>([]);
-  const [filiais, setFiliais] = useState<Filial[]>([]);
-  const [relatorioData, setRelatorioData] = useState<any>(null);
 
-  const [filters, setFilters] = useState<RelatorioParams>({
-    tipo: 'estoque-por-location',
-    location: '',
-    empresa: '',
-    filial: '',
-    data_inicio: '',
-    data_fim: '',
+  const [formData, setFormData] = useState<Partial<GerarRelatorioRequest>>({
+    tipo: '',
+    modulo: 'estoque', // Fixo para estoque
+    formato: 'pdf',
+    template_id: null,
+    filtros: {},
+    enviar_email: false,
+    email_destinatario: null,
   });
 
+  // Tipos de relatórios disponíveis para estoque
+  const tiposRelatorios: RelatorioTipo[] = [
+    {
+      tipo: 'estoque-por-location',
+      nome: 'Estoque por Location',
+      descricao: 'Relatório detalhado de estoque agrupado por location',
+    },
+    {
+      tipo: 'estoque-consolidado',
+      nome: 'Estoque Consolidado',
+      descricao: 'Relatório consolidado de estoque por produto',
+    },
+  ];
+
+  // Carregar locations e templates
   useEffect(() => {
-    loadInitialData();
+    loadLocations();
   }, []);
 
-  const loadInitialData = async () => {
+  useEffect(() => {
+    if (formData.tipo) {
+      loadTemplates();
+    }
+  }, [formData.tipo]);
+
+  const loadLocations = async () => {
     try {
-      const [locationsRes, empresasRes] = await Promise.all([
-        locationsService.list(),
-        empresasService.list(),
-      ]);
-
-      const locationsData = 'results' in locationsRes ? locationsRes.results : locationsRes;
-      const empresasData = 'results' in empresasRes ? empresasRes.results : empresasRes;
-
+      const response = await locationsService.list();
+      const locationsData = 'results' in response ? response.results : response;
       setLocations(Array.isArray(locationsData) ? locationsData : []);
-      setEmpresas(Array.isArray(empresasData) ? empresasData : []);
-    } catch (err: any) {
-      console.error('Erro ao carregar dados:', err);
-      setError('Erro ao carregar dados iniciais');
+    } catch (err) {
+      console.error('Erro ao carregar locations:', err);
     }
   };
 
-  const loadFiliais = async (empresaId: number) => {
+  const loadTemplates = async () => {
+    if (!formData.tipo) {
+      setTemplates([]);
+      return;
+    }
+
     try {
-      const response = await filiaisService.list({ empresa: empresaId });
-      const filiaisData = 'results' in response ? response.results : response;
-      setFiliais(Array.isArray(filiaisData) ? filiaisData : []);
-    } catch (err: any) {
-      console.error('Erro ao carregar filiais:', err);
+      setLoadingTemplates(true);
+      const response = await templatesService.list({
+        modulo: 'estoque', // Sempre filtrar por estoque
+        tipo: formData.tipo,
+      });
+      const templatesList = Array.isArray(response) ? response : response.results || [];
+      setTemplates(templatesList);
+    } catch (err) {
+      console.error('Erro ao carregar templates:', err);
+      setTemplates([]);
+    } finally {
+      setLoadingTemplates(false);
     }
   };
 
-  const handleFilterChange = (name: string, value: string) => {
-    setFilters(prev => ({ ...prev, [name]: value }));
-    if (name === 'empresa' && value) {
-      loadFiliais(Number(value));
-    }
+  const handleChange = (name: string, value: any) => {
+    setFormData(prev => {
+      const newData = { ...prev, [name]: value };
+      
+      // Se mudou tipo, recarregar templates
+      if (name === 'tipo' && newData.tipo) {
+        setTimeout(() => loadTemplates(), 100);
+      }
+      
+      return newData;
+    });
   };
 
-  const handleGerarRelatorio = async () => {
+  const handleFiltroChange = (key: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      filtros: {
+        ...prev.filtros,
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleGerar = async (preview: boolean = false) => {
+    if (!formData.tipo) {
+      setError('Selecione um tipo de relatório');
+      return;
+    }
+
     setLoading(true);
     setError('');
-    setRelatorioData(null);
+    setSuccess('');
 
     try {
-      const params: any = {};
-      if (filters.location) params.location = Number(filters.location);
-      if (filters.empresa) params.empresa = Number(filters.empresa);
-      if (filters.filial) params.filial = Number(filters.filial);
-      if (filters.data_inicio) params.data_inicio = filters.data_inicio;
-      if (filters.data_fim) params.data_fim = filters.data_fim;
+      const requestData: GerarRelatorioRequest = {
+        tipo: formData.tipo!,
+        modulo: 'estoque', // Sempre estoque
+        formato: preview ? 'html' : (formData.formato || 'pdf'),
+        template_id: formData.template_id || null,
+        filtros: formData.filtros || {},
+        enviar_email: formData.enviar_email || false,
+        email_destinatario: formData.email_destinatario || null,
+      };
 
-      let data;
-      switch (filters.tipo) {
-        case 'estoque-por-location':
-          data = await relatoriosService.estoquePorLocation(params);
-          break;
-        case 'estoque-consolidado':
-          data = await relatoriosService.estoqueConsolidado(params);
-          break;
-        case 'movimentacoes':
-          data = await relatoriosService.movimentacoes(params);
-          break;
-        case 'reservas':
-          data = await relatoriosService.reservas(params);
-          break;
-        case 'indicadores':
-          data = await relatoriosService.indicadores(params);
-          break;
+      if (preview) {
+        // Preview HTML
+        const response = await generatorService.gerar(requestData);
+        if (typeof response === 'object' && 'html' in response) {
+          setPreviewHtml(response.html);
+          setShowPreview(true);
+        }
+      } else {
+        // Gerar e baixar
+        const response = await generatorService.gerar(requestData);
+        if (response instanceof Blob) {
+          // Download do PDF
+          const url = window.URL.createObjectURL(response);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `relatorio_${formData.tipo}_${new Date().getTime()}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          setSuccess('Relatório gerado e baixado com sucesso!');
+        }
       }
-
-      setRelatorioData(data);
     } catch (err: any) {
       console.error('Erro ao gerar relatório:', err);
-      setError(err.response?.data?.detail || err.response?.data?.message || 'Erro ao gerar relatório');
+      setError(formatApiError(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExportar = async (formato: 'xlsx' | 'pdf' | 'csv') => {
-    try {
-      const params: any = { formato };
-      if (filters.location) params.location = Number(filters.location);
-      if (filters.empresa) params.empresa = Number(filters.empresa);
-      if (filters.filial) params.filial = Number(filters.filial);
-      if (filters.data_inicio) params.data_inicio = filters.data_inicio;
-      if (filters.data_fim) params.data_fim = filters.data_fim;
-
-      const blob = await relatoriosService.exportar(params);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `relatorio-estoque.${formato}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err: any) {
-      console.error('Erro ao exportar relatório:', err);
-      setError('Erro ao exportar relatório');
-    }
-  };
+  const tipoSelecionado = tiposRelatorios.find(
+    t => t.tipo === formData.tipo
+  );
+  
+  // Verificar se há um tipo válido selecionado
+  const tipoValido = formData.tipo && formData.tipo.trim() !== '' && tipoSelecionado;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Relatórios de Estoque</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Gere relatórios detalhados sobre estoque, movimentações, reservas e indicadores
+          Gere relatórios personalizados do módulo de estoque
         </p>
       </div>
 
       {error && (
-        <Alert
-          type="error"
-          message={error}
-          onClose={() => setError('')}
-          dismissible
-        />
+        <Alert type="error" message={error} dismissible onClose={() => setError('')} />
+      )}
+
+      {success && (
+        <Alert type="success" message={success} dismissible onClose={() => setSuccess('')} />
       )}
 
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">Filtros do Relatório</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="md:col-span-2">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Gerar Relatório</h2>
+
+        <div className="space-y-4">
+          {/* Seleção de Tipo */}
+          <div>
             <Select
               label="Tipo de Relatório *"
               name="tipo"
-              value={filters.tipo}
-              onChange={(e) => handleFilterChange('tipo', e.target.value)}
+              value={formData.tipo || ''}
+              onChange={(e) => handleChange('tipo', e.target.value)}
+              required
               options={[
-                { value: 'estoque-por-location', label: 'Estoque por Location' },
-                { value: 'estoque-consolidado', label: 'Estoque Consolidado' },
-                { value: 'movimentacoes', label: 'Movimentações' },
-                { value: 'reservas', label: 'Reservas' },
-                { value: 'indicadores', label: 'Indicadores' },
-              ]}
-            />
-          </div>
-
-          <div>
-            <Select
-              label="Empresa"
-              name="empresa"
-              value={filters.empresa}
-              onChange={(e) => handleFilterChange('empresa', e.target.value)}
-              options={[
-                { value: '', label: 'Todas' },
-                ...empresas.map(emp => ({
-                  value: emp.id.toString(),
-                  label: emp.nome,
+                { value: '', label: 'Selecione um tipo...' },
+                ...tiposRelatorios.map(t => ({
+                  value: t.tipo,
+                  label: t.nome,
                 })),
               ]}
             />
           </div>
 
-          <div>
-            <Select
-              label="Filial"
-              name="filial"
-              value={filters.filial}
-              onChange={(e) => handleFilterChange('filial', e.target.value)}
-              disabled={!filters.empresa}
-              options={[
-                { value: '', label: 'Todas' },
-                ...filiais
-                  .filter(f => !filters.empresa || f.empresa === Number(filters.empresa))
-                  .map(fil => ({
-                    value: fil.id.toString(),
-                    label: fil.nome,
+          {tipoSelecionado && tipoSelecionado.descricao && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-800">{tipoSelecionado.descricao}</p>
+            </div>
+          )}
+
+          {/* Template Customizado */}
+          {formData.tipo && (
+            <div>
+              <Select
+                label="Template (Opcional)"
+                name="template_id"
+                value={formData.template_id?.toString() || ''}
+                onChange={(e) => handleChange('template_id', e.target.value ? parseInt(e.target.value) : null)}
+                options={[
+                  { value: '', label: 'Usar template padrão' },
+                  ...templates.map(t => ({
+                    value: t.id.toString(),
+                    label: `${t.nome}${t.is_default ? ' (Padrão)' : ''}`,
                   })),
-              ]}
-            />
-          </div>
+                ]}
+                disabled={loadingTemplates}
+              />
+              {loadingTemplates && (
+                <p className="text-sm text-gray-500 mt-1">Carregando templates...</p>
+              )}
+            </div>
+          )}
 
+          {/* Filtros */}
+          {formData.tipo === 'estoque-por-location' && (
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Filtros</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Select
+                  label="Location (Opcional)"
+                  name="location_id"
+                  value={formData.filtros?.location_id?.toString() || ''}
+                  onChange={(e) => handleFiltroChange('location_id', e.target.value ? parseInt(e.target.value) : null)}
+                  options={[
+                    { value: '', label: 'Todas as locations' },
+                    ...locations.map(loc => ({
+                      value: loc.id.toString(),
+                      label: `${loc.nome}${loc.codigo ? ` (${loc.codigo})` : ''}`,
+                    })),
+                  ]}
+                />
+
+                <Input
+                  label="Código do Produto (Opcional)"
+                  name="produto_id"
+                  type="text"
+                  value={formData.filtros?.produto_id || ''}
+                  onChange={(e) => handleFiltroChange('produto_id', e.target.value || null)}
+                  placeholder="Ex: PROD001"
+                />
+              </div>
+            </div>
+          )}
+
+          {formData.tipo === 'estoque-consolidado' && (
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Filtros</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Código do Produto (Opcional)"
+                  name="produto_id"
+                  type="text"
+                  value={formData.filtros?.produto_id || ''}
+                  onChange={(e) => handleFiltroChange('produto_id', e.target.value || null)}
+                  placeholder="Ex: PROD001"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Formato */}
           <div>
             <Select
-              label="Location"
-              name="location"
-              value={filters.location}
-              onChange={(e) => handleFilterChange('location', e.target.value)}
+              label="Formato *"
+              name="formato"
+              value={formData.formato || 'pdf'}
+              onChange={(e) => handleChange('formato', e.target.value)}
+              required
               options={[
-                { value: '', label: 'Todas' },
-                ...locations.map(loc => ({
-                  value: loc.id.toString(),
-                  label: `${loc.nome} (${loc.codigo})`,
-                })),
+                { value: 'pdf', label: 'PDF' },
+                { value: 'html', label: 'HTML' },
               ]}
             />
           </div>
 
-          <div>
-            <Input
-              label="Data Início"
-              name="data_inicio"
-              type="date"
-              value={filters.data_inicio}
-              onChange={(e) => handleFilterChange('data_inicio', e.target.value)}
-            />
+          {/* Email (Opcional) */}
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Envio por Email (Opcional)</h3>
+            <div className="space-y-4">
+              <Checkbox
+                label="Enviar por Email"
+                name="enviar_email"
+                checked={formData.enviar_email || false}
+                onChange={(e) => handleChange('enviar_email', e.target.checked)}
+              />
+
+              {formData.enviar_email && (
+                <Input
+                  label="Email Destinatário"
+                  name="email_destinatario"
+                  type="email"
+                  value={formData.email_destinatario || ''}
+                  onChange={(e) => handleChange('email_destinatario', e.target.value)}
+                  placeholder="exemplo@empresa.com"
+                />
+              )}
+            </div>
           </div>
 
-          <div>
-            <Input
-              label="Data Fim"
-              name="data_fim"
-              type="date"
-              value={filters.data_fim}
-              onChange={(e) => handleFilterChange('data_fim', e.target.value)}
-            />
-          </div>
-        </div>
+          {/* Botões de Ação */}
+          <div className="flex gap-2 pt-4 border-t">
+            <Button
+              variant="primary"
+              onClick={() => handleGerar(false)}
+              disabled={loading || !tipoValido}
+            >
+              {loading ? 'Gerando...' : 'Gerar e Baixar'}
+            </Button>
 
-        <div className="flex justify-end space-x-4 mt-6 pt-4 border-t">
-          <Button
-            onClick={handleGerarRelatorio}
-            variant="primary"
-            disabled={loading}
-          >
-            {loading ? 'Gerando...' : 'Gerar Relatório'}
-          </Button>
+            <Button
+              variant="secondary"
+              onClick={() => handleGerar(true)}
+              disabled={loading || !tipoValido}
+            >
+              Preview HTML
+            </Button>
+          </div>
+          
         </div>
       </div>
 
-      {loading && (
-        <div className="flex justify-center py-8">
-          <LoadingSpinner />
-        </div>
-      )}
-
-      {relatorioData && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">Resultado do Relatório</h2>
-            <div className="flex space-x-2">
-              <Button
-                onClick={() => handleExportar('xlsx')}
-                variant="secondary"
-                size="sm"
-              >
-                Exportar XLSX
+      {/* Modal de Preview */}
+      {showPreview && (
+        <Modal
+          isOpen={showPreview}
+          onClose={() => setShowPreview(false)}
+          title="Preview do Relatório"
+          size="xl"
+          footer={
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowPreview(false)}>
+                Fechar
               </Button>
               <Button
-                onClick={() => handleExportar('pdf')}
-                variant="secondary"
-                size="sm"
+                variant="primary"
+                onClick={() => {
+                  setShowPreview(false);
+                  handleGerar(false);
+                }}
               >
-                Exportar PDF
-              </Button>
-              <Button
-                onClick={() => handleExportar('csv')}
-                variant="secondary"
-                size="sm"
-              >
-                Exportar CSV
+                Gerar PDF
               </Button>
             </div>
+          }
+        >
+          <div className="space-y-4">
+            {previewHtml ? (
+              <ReportPreview html={previewHtml} />
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                <LoadingSpinner />
+              </div>
+            )}
           </div>
-          <pre className="bg-gray-50 p-4 rounded overflow-auto max-h-96 text-sm">
-            {JSON.stringify(relatorioData, null, 2)}
-          </pre>
-        </div>
+        </Modal>
       )}
     </div>
   );
 }
-
-export default RelatorioEstoque;
-

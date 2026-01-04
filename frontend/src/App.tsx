@@ -61,7 +61,6 @@ import FiliaisList from './pages/configuracoes/FiliaisList';
 import FiliaisForm from './pages/configuracoes/FiliaisForm';
 import EmailSettingsPage from './pages/configuracoes/EmailSettings';
 import Relatorios from './pages/configuracoes/Relatorios';
-import RelatoriosList from './pages/relatorios/RelatoriosList';
 import LocationsList from './pages/estoque/LocationsList';
 import LocationsDetail from './pages/estoque/LocationsDetail';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
@@ -836,16 +835,6 @@ function App() {
                 <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
                   <RelatorioEstoque />
                 </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/relatorios"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <RelatoriosList />
               </Layout>
             </ProtectedRoute>
           }

@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGridColumns } from '../../hooks/useGridColumns';
 import AdicionarEstoqueModal from '../../components/estoque/AdicionarEstoqueModal';
 import Button from '../../components/common/Button';
+import { FileText } from 'lucide-react';
 
 /**
  * Página de listagem de Estoque Atual
@@ -116,11 +117,20 @@ export function EstoqueAtualList() {
             Visualize o estoque atual de produtos por location
           </p>
         </div>
-        {isDevelopment && (
-          <Button onClick={() => setModalAberto(true)}>
-            + Adicionar Estoque
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/estoque/relatorio')}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Relatórios
           </Button>
-        )}
+          {isDevelopment && (
+            <Button onClick={() => setModalAberto(true)}>
+              + Adicionar Estoque
+            </Button>
+          )}
+        </div>
       </div>
 
       {error && (

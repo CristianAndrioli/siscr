@@ -38,7 +38,7 @@
         <tfoot>
             <tr>
                 <td colspan="4" class="text-right text-bold">Total da Location:</td>
-                <td class="text-right text-bold">R$ {{ location_group.list|first.location_total|default:"0.00" }}</td>
+                <td class="text-right text-bold">R$ {{ location_group.list.0.location_total|default:"0.00" }}</td>
             </tr>
         </tfoot>
     </table>
