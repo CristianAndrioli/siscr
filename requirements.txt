@@ -41,3 +41,6 @@ psutil>=5.9.0  # Para métricas de sistema (CPU, memória, disco)
 # API Documentation
 drf-spectacular>=0.27.0
 
+# Reports - PDF Generation
+WeasyPrint>=60.0
+

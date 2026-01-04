@@ -60,6 +60,7 @@ import RolesForm from './pages/configuracoes/RolesForm';
 import FiliaisList from './pages/configuracoes/FiliaisList';
 import FiliaisForm from './pages/configuracoes/FiliaisForm';
 import EmailSettingsPage from './pages/configuracoes/EmailSettings';
+import Relatorios from './pages/configuracoes/Relatorios';
 import LocationsList from './pages/estoque/LocationsList';
 import LocationsDetail from './pages/estoque/LocationsDetail';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
@@ -473,16 +474,6 @@ function App() {
           }
         />
         <Route
-          path="/configuracoes"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Configuracoes />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/profile"
           element={
             <ProtectedRoute>
@@ -644,6 +635,28 @@ function App() {
             <ProtectedRoute>
               <Layout>
                 <EmailSettingsPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rota de configurações de relatórios */}
+        <Route
+          path="/configuracoes/relatorios"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Relatorios />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        {/* Rota genérica de configurações (deve vir depois das rotas específicas) */}
+        <Route
+          path="/configuracoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <Configuracoes />
               </Layout>
             </ProtectedRoute>
           }

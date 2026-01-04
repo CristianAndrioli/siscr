@@ -77,6 +77,7 @@ TENANT_APPS = [
     'core',  # App core (views gerais, dashboard, etc.)
     'cadastros',  # App de cadastros (Pessoa, Produto, Servico)
     'estoque',  # App de estoque (Location, Estoque, Movimentações)
+    'reports',  # App de relatórios (templates e configurações)
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]

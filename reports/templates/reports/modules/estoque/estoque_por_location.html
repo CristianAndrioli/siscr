@@ -1,0 +1,61 @@
+<div class="report-title">
+    <h2>Relatório de Estoque por Location</h2>
+    {% if data_inicio or data_fim %}
+    <p>
+        {% if data_inicio %}De: {{ data_inicio|date:"d/m/Y" }}{% endif %}
+        {% if data_fim %}Até: {{ data_fim|date:"d/m/Y" }}{% endif %}
+    </p>
+    {% endif %}
+</div>
+
+{% if dados %}
+{% regroup dados by location_nome as locations_grouped %}
+{% for location_group in locations_grouped %}
+<div class="location-section mb-20">
+    <h3 class="text-bold mb-10">{{ location_group.grouper }}</h3>
+    
+    <table class="report-table">
+        <thead>
+            <tr>
+                <th>Produto</th>
+                <th>Código</th>
+                <th class="text-right">Quantidade</th>
+                <th class="text-right">Valor Unitário</th>
+                <th class="text-right">Valor Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in location_group.list %}
+            <tr>
+                <td>{{ item.produto_nome }}</td>
+                <td>{{ item.produto_codigo }}</td>
+                <td class="text-right">{{ item.quantidade }}</td>
+                <td class="text-right">R$ {{ item.valor_unitario }}</td>
+                <td class="text-right">R$ {{ item.valor_total }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="4" class="text-right text-bold">Total da Location:</td>
+                <td class="text-right text-bold">R$ {{ location_group.list|first.location_total|default:"0.00" }}</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% endfor %}
+
+<div class="report-summary mt-20">
+    <table class="report-table">
+        <tfoot>
+            <tr>
+                <td colspan="4" class="text-right text-bold">TOTAL GERAL:</td>
+                <td class="text-right text-bold">R$ {{ total_geral|default:"0.00" }}</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% else %}
+<p class="text-center mb-20">Nenhum dado encontrado para os filtros selecionados.</p>
+{% endif %}
+
