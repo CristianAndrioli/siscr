@@ -3,6 +3,7 @@ import { Input, Select, Button, Checkbox, Modal, Alert, Textarea } from '../../c
 import { templatesService, type ReportTemplate, type ReportTemplateCreate } from '../../services/reports/templates';
 import { formatApiError } from '../../utils/helpers';
 import CodeEditor from '../../components/common/CodeEditor';
+import ReportPreview from '../../components/reports/ReportPreview';
 
 interface TemplatesFormProps {
   template: ReportTemplate | null;
@@ -17,6 +18,7 @@ export default function TemplatesForm({ template, onClose, onSave }: TemplatesFo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   const [formData, setFormData] = useState<Partial<ReportTemplateCreate>>({
     nome: '',
@@ -91,7 +93,7 @@ export default function TemplatesForm({ template, onClose, onSave }: TemplatesFo
       isOpen={true}
       onClose={onClose}
       title={template ? 'Editar Template' : 'Novo Template'}
-      size="xl"
+      size={showPreview ? "xl" : "xl"}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={loading}>
@@ -189,10 +191,33 @@ export default function TemplatesForm({ template, onClose, onSave }: TemplatesFo
 
         {formData.template_customizado && (
           <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
                 HTML do Template *
               </label>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowPreview(!showPreview)}
+              >
+                {showPreview ? 'Ocultar Preview' : 'Mostrar Preview'}
+              </Button>
+            </div>
+            
+            {showPreview && (
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <ReportPreview
+                  tipo={formData.tipo_relatorio || 'preview'}
+                  modulo={formData.modulo}
+                  templateId={template?.id}
+                  templateHtml={formData.template_html}
+                  templateCss={formData.template_css}
+                  onClose={() => setShowPreview(false)}
+                />
+              </div>
+            )}
+
+            <div>
               <CodeEditor
                 language="html"
                 value={formData.template_html || ''}
