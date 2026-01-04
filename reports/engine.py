@@ -184,9 +184,12 @@ class ReportEngine:
         # Preparar contexto
         context = self._prepare_context(data, template)
         
-        # Renderizar conteúdo do template
+        # Renderizar conteúdo do template específico
         django_template = Template(template_content)
         rendered_content = django_template.render(Context(context))
+        
+        # Adicionar conteúdo renderizado ao contexto para o template base
+        context['content'] = rendered_content
         
         # Aplicar template base
         base_template = get_template('reports/base.html')
