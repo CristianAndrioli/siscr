@@ -650,22 +650,22 @@ LOGGING = {
         },
         'siscr': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING' if 'test' in sys.argv else 'INFO',  # Suprimir logs durante testes
             'propagate': False,
         },
         'payments': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING' if 'test' in sys.argv else 'INFO',  # Suprimir logs durante testes
             'propagate': False,
         },
         'subscriptions': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING' if 'test' in sys.argv else 'INFO',  # Suprimir logs durante testes
             'propagate': False,
         },
         'accounts': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'WARNING' if 'test' in sys.argv else 'INFO',  # Suprimir logs durante testes
             'propagate': False,
         },
     },

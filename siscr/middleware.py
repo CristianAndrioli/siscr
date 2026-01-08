@@ -6,6 +6,15 @@ import sys
 from django.utils.deprecation import MiddlewareMixin
 from django.db import connection
 
+def _is_testing():
+    """Verifica se está rodando testes"""
+    return 'test' in sys.argv
+
+def _print_if_not_testing(msg):
+    """Print apenas se não estiver em modo de teste"""
+    if not _is_testing():
+        print(msg, flush=True)
+
 
 class TenantDomainHeaderMiddleware(MiddlewareMixin):
     """
@@ -17,11 +26,12 @@ class TenantDomainHeaderMiddleware(MiddlewareMixin):
         # Verificar se há header X-Tenant-Domain
         tenant_domain = request.headers.get('X-Tenant-Domain')
         
-        # Log para debug
+        # Log para debug (suprimir durante testes)
         import logging
         logger = logging.getLogger(__name__)
         
-        if request.path.startswith('/api/'):
+        # Não logar durante testes
+        if 'test' not in sys.argv and request.path.startswith('/api/'):
             # Usar print e flush para garantir que apareça nos logs do Docker
             msg = f'[TenantDomainHeaderMiddleware] Path: {request.path}, X-Tenant-Domain: {tenant_domain}'
             print(msg, flush=True)
@@ -57,11 +67,11 @@ class TenantDomainHeaderMiddleware(MiddlewareMixin):
                 from django_tenants.utils import schema_context
                 with schema_context('public'):
                     msg = f'[TenantDomainHeaderMiddleware] Buscando tenant com domínio: {tenant_domain}'
-                    print(msg, flush=True)
+                    _print_if_not_testing(msg)
                     domain_obj = TenantDomain.objects.select_related('tenant').get(domain=tenant_domain)
                     tenant = domain_obj.tenant
                     msg = f'[TenantDomainHeaderMiddleware] Tenant encontrado: {tenant.schema_name}'
-                    print(msg, flush=True)
+                    _print_if_not_testing(msg)
                 
                 # Armazenar o tenant no request para uso posterior
                 request.tenant = tenant
@@ -93,7 +103,7 @@ class TenantDomainHeaderMiddleware(MiddlewareMixin):
                         # Também marcar que o urlconf já foi configurado
                         request._urlconf_configured = tenant_urlconf
                         msg = f'[TenantDomainHeaderMiddleware] URLs do tenant configuradas: {tenant_urlconf}'
-                        print(msg, flush=True)
+                        _print_if_not_testing(msg)
                         
                         # Testar se a rota pode ser resolvida
                         try:
@@ -104,10 +114,11 @@ class TenantDomainHeaderMiddleware(MiddlewareMixin):
                             print(f'[TenantDomainHeaderMiddleware] ⚠️ Rota ainda não pode ser resolvida: {e}', flush=True)
                     except Exception as e:
                         msg = f'[TenantDomainHeaderMiddleware] Erro ao configurar URLs: {e}'
-                        print(msg, flush=True)
-                        import traceback
-                        traceback.print_exc()
-                        sys.stdout.flush()
+                        _print_if_not_testing(msg)
+                        if not _is_testing():
+                            import traceback
+                            traceback.print_exc()
+                            sys.stdout.flush()
                 else:
                     print('[TenantDomainHeaderMiddleware] TENANT_SCHEMA_URLCONF não encontrado no settings!', flush=True)
                 
@@ -231,11 +242,13 @@ class TenantDomainHeaderMiddleware(MiddlewareMixin):
                 import logging
                 logger = logging.getLogger(__name__)
                 error_msg = f'Tenant não encontrado pelo header X-Tenant-Domain: {tenant_domain} - {e}'
-                logger.warning(error_msg)
-                print(f'[TenantDomainHeaderMiddleware] ❌ {error_msg}', flush=True)
-                import traceback
-                traceback.print_exc()
-                sys.stdout.flush()
+                if not _is_testing():
+                    logger.warning(error_msg)
+                _print_if_not_testing(f'[TenantDomainHeaderMiddleware] ❌ {error_msg}')
+                if not _is_testing():
+                    import traceback
+                    traceback.print_exc()
+                    sys.stdout.flush()
         
         return None
 
@@ -255,8 +268,8 @@ class CustomTenantMainMiddleware(MiddlewareMixin):
         # Se o tenant já foi identificado pelo TenantDomainHeaderMiddleware, pular o TenantMainMiddleware
         if hasattr(request, 'tenant') and request.tenant is not None:
             if hasattr(request, '_tenant_identified_by_header') and request._tenant_identified_by_header:
-                print(f'[CustomTenantMainMiddleware] 🔍 Tenant já configurado pelo TenantDomainHeaderMiddleware', flush=True)
-                print(f'[CustomTenantMainMiddleware] Schema: {request.tenant.schema_name}', flush=True)
+                _print_if_not_testing(f'[CustomTenantMainMiddleware] 🔍 Tenant já configurado pelo TenantDomainHeaderMiddleware')
+                _print_if_not_testing(f'[CustomTenantMainMiddleware] Schema: {request.tenant.schema_name}')
                 
                 # Garantir que o urlconf esteja configurado
                 from django.conf import settings
@@ -265,21 +278,21 @@ class CustomTenantMainMiddleware(MiddlewareMixin):
                     from django.urls import set_urlconf
                     set_urlconf(tenant_urlconf)
                     request.urlconf = tenant_urlconf
-                    print(f'[CustomTenantMainMiddleware] ✅ URLconf configurado: {tenant_urlconf}', flush=True)
+                    _print_if_not_testing(f'[CustomTenantMainMiddleware] ✅ URLconf configurado: {tenant_urlconf}')
                     
                     # Garantir que o tenant esteja configurado na connection
                     from django.db import connection
                     connection.set_tenant(request.tenant)
-                    print(f'[CustomTenantMainMiddleware] ✅ Tenant configurado na connection: {request.tenant.schema_name}', flush=True)
+                    _print_if_not_testing(f'[CustomTenantMainMiddleware] ✅ Tenant configurado na connection: {request.tenant.schema_name}')
                     
                     # Tentar resolver a rota para verificar
                     if request.path.startswith('/api/'):
                         try:
                             from django.urls import resolve
                             match = resolve(request.path)
-                            print(f'[CustomTenantMainMiddleware] ✅ Rota pode ser resolvida: {match.url_name}', flush=True)
+                            _print_if_not_testing(f'[CustomTenantMainMiddleware] ✅ Rota pode ser resolvida: {match.url_name}')
                         except Exception as e:
-                            print(f'[CustomTenantMainMiddleware] ⚠️ Erro ao resolver rota: {e}', flush=True)
+                            _print_if_not_testing(f'[CustomTenantMainMiddleware] ⚠️ Erro ao resolver rota: {e}')
                 
                 # Pular o TenantMainMiddleware original
                 return None
@@ -314,14 +327,14 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
                 tenant_urlconf = getattr(settings, 'TENANT_SCHEMA_URLCONF', None)
                 current_urlconf = getattr(request, 'urlconf', None)
                 
-                print(f'[PreserveTenantURLsMiddleware] 🔍 process_exception - Http404 detectado!', flush=True)
-                print(f'[PreserveTenantURLsMiddleware] Path: {request.path}', flush=True)
-                print(f'[PreserveTenantURLsMiddleware] Tenant identificado: {tenant_identified}', flush=True)
-                print(f'[PreserveTenantURLsMiddleware] URLconf atual: {current_urlconf}', flush=True)
-                print(f'[PreserveTenantURLsMiddleware] URLconf esperado: {tenant_urlconf}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] 🔍 process_exception - Http404 detectado!')
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] Path: {request.path}')
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] Tenant identificado: {tenant_identified}')
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] URLconf atual: {current_urlconf}')
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] URLconf esperado: {tenant_urlconf}')
                 
                 if tenant_urlconf and current_urlconf != tenant_urlconf:
-                    print(f'[PreserveTenantURLsMiddleware] ⚠️ Tentando corrigir URLconf e resolver novamente...', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ Tentando corrigir URLconf e resolver novamente...')
                     from django.urls import set_urlconf, resolve
                     set_urlconf(tenant_urlconf)
                     request.urlconf = tenant_urlconf
@@ -329,11 +342,11 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
                     # Tentar resolver a URL novamente
                     try:
                         match = resolve(request.path)
-                        print(f'[PreserveTenantURLsMiddleware] ✅ Rota pode ser resolvida agora: {match.url_name}', flush=True)
+                        _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ✅ Rota pode ser resolvida agora: {match.url_name}')
                         # Se conseguir resolver, não retornar a exceção - deixar o Django processar normalmente
                         return None
                     except Exception as e:
-                        print(f'[PreserveTenantURLsMiddleware] ⚠️ Ainda não pode resolver: {e}', flush=True)
+                        _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ Ainda não pode resolver: {e}')
         
         return None  # Deixar o Django processar a exceção normalmente
     
@@ -343,9 +356,9 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
         Isso garante que seja executado mesmo se o TenantMainMiddleware tiver problemas
         """
         # SEMPRE logar para verificar se o middleware está sendo executado
-        print(f'[PreserveTenantURLsMiddleware] 🔍 process_view - Path: {request.path}, Method: {request.method}', flush=True)
-        print(f'[PreserveTenantURLsMiddleware] process_view - request.tenant: {getattr(request, "tenant", None)}', flush=True)
-        print(f'[PreserveTenantURLsMiddleware] process_view - request.urlconf: {getattr(request, "urlconf", None)}', flush=True)
+        _print_if_not_testing(f'[PreserveTenantURLsMiddleware] 🔍 process_view - Path: {request.path}, Method: {request.method}')
+        _print_if_not_testing(f'[PreserveTenantURLsMiddleware] process_view - request.tenant: {getattr(request, "tenant", None)}')
+        _print_if_not_testing(f'[PreserveTenantURLsMiddleware] process_view - request.urlconf: {getattr(request, "urlconf", None)}')
         
         # Verificar se há tenant no request OU se foi identificado pelo nosso middleware
         tenant_identified = (
@@ -359,7 +372,7 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
             current_urlconf = getattr(request, 'urlconf', None)
             
             if tenant_urlconf and current_urlconf != tenant_urlconf:
-                print(f'[PreserveTenantURLsMiddleware] ⚠️ URLconf incorreto em process_view! Atual: {current_urlconf}, Deveria ser: {tenant_urlconf}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ URLconf incorreto em process_view! Atual: {current_urlconf}, Deveria ser: {tenant_urlconf}')
                 from django.urls import set_urlconf
                 set_urlconf(tenant_urlconf)
                 request.urlconf = tenant_urlconf
@@ -368,22 +381,23 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
                 if hasattr(request, 'tenant') and request.tenant:
                     from django.db import connection
                     connection.set_tenant(request.tenant)
-                    print(f'[PreserveTenantURLsMiddleware] Tenant configurado na connection: {request.tenant.schema_name}', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] Tenant configurado na connection: {request.tenant.schema_name}')
                 
-                print(f'[PreserveTenantURLsMiddleware] URLs do tenant FORÇADAS em process_view: {tenant_urlconf}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] URLs do tenant FORÇADAS em process_view: {tenant_urlconf}')
                 
                 # Tentar resolver a URL novamente
                 try:
                     from django.urls import resolve
                     match = resolve(request.path)
-                    print(f'[PreserveTenantURLsMiddleware] ✅ Rota resolvida em process_view: {match.url_name} -> {match.view_name}', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ✅ Rota resolvida em process_view: {match.url_name} -> {match.view_name}')
                 except Exception as e:
-                    print(f'[PreserveTenantURLsMiddleware] ⚠️ Erro ao resolver rota em process_view: {e}', flush=True)
-                    import traceback
-                    traceback.print_exc()
-                    sys.stdout.flush()
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ Erro ao resolver rota em process_view: {e}')
+                    if not _is_testing():
+                        import traceback
+                        traceback.print_exc()
+                        sys.stdout.flush()
             else:
-                print(f'[PreserveTenantURLsMiddleware] ✅ URLconf já está correto em process_view: {tenant_urlconf}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ✅ URLconf já está correto em process_view: {tenant_urlconf}')
         
         return None  # Continuar processamento normal
     
@@ -392,20 +406,20 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
         # Logar TODAS as requisições, não apenas /api/
         # IMPORTANTE: Este log DEVE aparecer para TODAS as requisições, incluindo OPTIONS
         if request.path.startswith('/api/'):
-            print(f'[PreserveTenantURLsMiddleware] 🔍 EXECUTANDO - Path: {request.path}, Method: {request.method}', flush=True)
+            _print_if_not_testing(f'[PreserveTenantURLsMiddleware] 🔍 EXECUTANDO - Path: {request.path}, Method: {request.method}')
         
         # Se o TenantMainMiddleware retornou 404, nunca chegaremos aqui
         # Mas vamos garantir que este middleware SEMPRE execute
         
         # IMPORTANTE: Executar ANTES de qualquer verificação para garantir que sempre execute
         if request.path.startswith('/api/'):
-            print(f'[PreserveTenantURLsMiddleware] 🔍 INÍCIO - Processando request: {request.path}', flush=True)
-            print(f'[PreserveTenantURLsMiddleware] _tenant_identified_by_header: {hasattr(request, "_tenant_identified_by_header")}', flush=True)
+            _print_if_not_testing(f'[PreserveTenantURLsMiddleware] 🔍 INÍCIO - Processando request: {request.path}')
+            _print_if_not_testing(f'[PreserveTenantURLsMiddleware] _tenant_identified_by_header: {hasattr(request, "_tenant_identified_by_header")}')
             if hasattr(request, '_tenant_identified_by_header'):
-                print(f'[PreserveTenantURLsMiddleware] _tenant_identified_by_header value: {request._tenant_identified_by_header}', flush=True)
-            print(f'[PreserveTenantURLsMiddleware] request.urlconf: {getattr(request, "urlconf", None)}', flush=True)
-            print(f'[PreserveTenantURLsMiddleware] request.tenant: {getattr(request, "tenant", None)}', flush=True)
-            print(f'[PreserveTenantURLsMiddleware] _urlconf_configured: {getattr(request, "_urlconf_configured", None)}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] _tenant_identified_by_header value: {request._tenant_identified_by_header}')
+            _print_if_not_testing(f'[PreserveTenantURLsMiddleware] request.urlconf: {getattr(request, "urlconf", None)}')
+            _print_if_not_testing(f'[PreserveTenantURLsMiddleware] request.tenant: {getattr(request, "tenant", None)}')
+            _print_if_not_testing(f'[PreserveTenantURLsMiddleware] _urlconf_configured: {getattr(request, "_urlconf_configured", None)}')
         
         # IMPORTANTE: Verificar se há tenant no request OU se foi identificado pelo nosso middleware
         # O TenantMainMiddleware pode ter limpado o _tenant_identified_by_header, mas o tenant ainda deve estar no request
@@ -426,9 +440,9 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
             if tenant_urlconf:
                 # Sempre garantir que o urlconf está correto
                 if current_urlconf != tenant_urlconf:
-                    print(f'[PreserveTenantURLsMiddleware] ⚠️ URLconf incorreto! Atual: {current_urlconf}, Deveria ser: {tenant_urlconf}', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ URLconf incorreto! Atual: {current_urlconf}, Deveria ser: {tenant_urlconf}')
                 else:
-                    print(f'[PreserveTenantURLsMiddleware] ✅ URLconf já está correto: {tenant_urlconf}', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ✅ URLconf já está correto: {tenant_urlconf}')
                 
                 # FORÇAR o uso das URLs do tenant (mesmo que já esteja correto, garantir)
                 from django.urls import set_urlconf, resolve
@@ -439,24 +453,25 @@ class PreserveTenantURLsMiddleware(MiddlewareMixin):
                 if hasattr(request, 'tenant') and request.tenant:
                     from django.db import connection
                     connection.set_tenant(request.tenant)
-                    print(f'[PreserveTenantURLsMiddleware] Tenant configurado na connection: {request.tenant.schema_name}', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] Tenant configurado na connection: {request.tenant.schema_name}')
                 
-                print(f'[PreserveTenantURLsMiddleware] URLs do tenant FORÇADAS: {tenant_urlconf}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] URLs do tenant FORÇADAS: {tenant_urlconf}')
                 
                 # Tentar resolver a URL para verificar se está funcionando
                 try:
                     match = resolve(request.path)
-                    print(f'[PreserveTenantURLsMiddleware] ✅ Rota resolvida: {match.url_name} -> {match.view_name}', flush=True)
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ✅ Rota resolvida: {match.url_name} -> {match.view_name}')
                 except Exception as e:
-                    print(f'[PreserveTenantURLsMiddleware] ⚠️ Erro ao resolver rota {request.path}: {e}', flush=True)
-                    import traceback
-                    traceback.print_exc()
-                    sys.stdout.flush()
+                    _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ Erro ao resolver rota {request.path}: {e}')
+                    if not _is_testing():
+                        import traceback
+                        traceback.print_exc()
+                        sys.stdout.flush()
         else:
             if request.path.startswith('/api/'):
-                print(f'[PreserveTenantURLsMiddleware] ⚠️ Tenant não identificado', flush=True)
-                print(f'[PreserveTenantURLsMiddleware] request.tenant: {getattr(request, "tenant", None)}', flush=True)
-                print(f'[PreserveTenantURLsMiddleware] _tenant_identified_by_header: {getattr(request, "_tenant_identified_by_header", None)}', flush=True)
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] ⚠️ Tenant não identificado')
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] request.tenant: {getattr(request, "tenant", None)}')
+                _print_if_not_testing(f'[PreserveTenantURLsMiddleware] _tenant_identified_by_header: {getattr(request, "_tenant_identified_by_header", None)}')
         return None
 
 
