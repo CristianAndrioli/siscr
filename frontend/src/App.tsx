@@ -64,7 +64,9 @@ import Relatorios from './pages/configuracoes/Relatorios';
 import LocationsList from './pages/estoque/LocationsList';
 import LocationsDetail from './pages/estoque/LocationsDetail';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
+import EstoqueAtualDetail from './pages/estoque/EstoqueAtualDetail';
 import MovimentacoesList from './pages/estoque/MovimentacoesList';
+import MovimentacaoDetail from './pages/estoque/MovimentacaoDetail';
 import Transferencias from './pages/estoque/Transferencias';
 import TransferenciaDetail from './pages/estoque/TransferenciaDetail';
 import ConfiguracoesEstoque from './pages/estoque/Configuracoes';
@@ -780,12 +782,36 @@ function App() {
           }
         />
         <Route
+          path="/estoque/estoque-atual/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <EstoqueAtualDetail />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/estoque/movimentacoes"
           element={
             <ProtectedRoute>
               <Layout>
                 <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
                   <MovimentacoesList />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/movimentacoes/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <MovimentacaoDetail />
                 </ProtectedRouteWithPermission>
               </Layout>
             </ProtectedRoute>
