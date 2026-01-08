@@ -515,7 +515,10 @@ class MovimentacaoEstoque(SiscrModelBase):
         self.full_clean()
         # Calcular valor total se não foi fornecido
         if not self.valor_total and self.valor_unitario and self.quantidade:
-            self.valor_total = self.valor_unitario * self.quantidade
+            from decimal import ROUND_HALF_UP
+            self.valor_total = (self.valor_unitario * self.quantidade).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP
+            )
         super().save(*args, **kwargs)
     
     def __str__(self):
@@ -747,8 +750,9 @@ class ReservaEstoque(SiscrModelBase):
         if self.status in ['CANCELADA', 'EXPIRADA']:
             raise ValueError(f"Reserva já está {self.status.lower()}")
         
-        # Se é HARD e está confirmada, liberar estoque
-        if self.tipo == 'HARD' and self.status == 'CONFIRMADA':
+        # Se é HARD e está ativa ou confirmada, liberar estoque
+        # (reservas HARD bloqueiam estoque desde a criação)
+        if self.tipo == 'HARD' and self.status in ['ATIVA', 'CONFIRMADA']:
             self.estoque.quantidade_reservada = max(
                 Decimal('0.000'),
                 self.estoque.quantidade_reservada - self.quantidade
@@ -944,16 +948,16 @@ class PrevisaoMovimentacao(SiscrModelBase):
         impacto_anterior = Decimal('0.000')
         if old_status in ['PENDENTE', 'CONFIRMADA']:
             if self.tipo == 'ENTRADA':
-                impacto_anterior = -self.quantidade  # Remover da previsão anterior
+                impacto_anterior = -self.quantidade  # Remover da previsão anterior (negativo para subtrair)
             elif self.tipo == 'SAIDA':
-                impacto_anterior = self.quantidade  # Remover da previsão anterior
+                impacto_anterior = -self.quantidade  # Remover da previsão anterior (negativo para subtrair)
         
         impacto_atual = Decimal('0.000')
         if self.status in ['PENDENTE', 'CONFIRMADA']:
             if self.tipo == 'ENTRADA':
-                impacto_atual = self.quantidade  # Adicionar à previsão
+                impacto_atual = self.quantidade  # Adicionar à previsão de entrada
             elif self.tipo == 'SAIDA':
-                impacto_atual = -self.quantidade  # Adicionar à previsão
+                impacto_atual = self.quantidade  # Adicionar à previsão de saída (positivo porque aumenta quantidade_prevista_saida)
         
         impacto_total = impacto_anterior + impacto_atual
         

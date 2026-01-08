@@ -4,6 +4,7 @@ Middleware para coletar métricas básicas de performance
 import time
 import json
 import logging
+import sys
 from django.utils.deprecation import MiddlewareMixin
 from django.db import connection
 from django.core.cache import cache
@@ -27,6 +28,11 @@ class MetricsMiddleware(MiddlewareMixin):
         
     def process_response(self, request, response):
         """Registra métricas ao final da requisição"""
+        # Desabilitar em modo de teste para reduzir logs
+        from django.conf import settings
+        if getattr(settings, 'TESTING', False) or 'test' in sys.argv:
+            return response
+            
         if not hasattr(request, '_start_time'):
             return response
         
