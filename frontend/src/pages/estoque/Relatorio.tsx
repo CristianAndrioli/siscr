@@ -4,7 +4,6 @@ import { generatorService, type GerarRelatorioRequest } from '../../services/rep
 import { templatesService, type ReportTemplate } from '../../services/reports/templates';
 import { locationsService, type Location } from '../../services/estoque';
 import { formatApiError } from '../../utils/helpers';
-import { ReportPreview } from '../../components/reports/ReportPreview';
 
 interface RelatorioTipo {
   tipo: string;
@@ -377,7 +376,15 @@ export default function RelatorioEstoque() {
         >
           <div className="space-y-4">
             {previewHtml ? (
-              <ReportPreview html={previewHtml} />
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
+                <iframe
+                  srcDoc={previewHtml}
+                  title="Preview do Relatório"
+                  className="w-full"
+                  style={{ height: '600px', border: 'none' }}
+                  sandbox="allow-same-origin allow-scripts"
+                />
+              </div>
             ) : (
               <div className="text-center text-gray-500 py-8">
                 <LoadingSpinner />
