@@ -305,13 +305,17 @@ class EstoqueModelTests(TestCase):
             
             # Criar produto
             self.produto = Produto.objects.create(
+                codigo_produto=1,
                 nome='Produto Teste',
-                codigo='PROD001',
-                tipo='PRODUTO',
+                descricao='Produto de teste para estoque',
+                ativo=True,
                 unidade_medida='UN',
                 valor_custo=Decimal('10.00'),
                 valor_venda=Decimal('15.00'),
-                is_active=True
+                codigo_ncm='12345678',
+                origem_mercadoria='0',
+                aliquota_icms=Decimal('18.00'),
+                aliquota_ipi=Decimal('0.00')
             )
     
     def test_create_estoque(self):
@@ -505,13 +509,17 @@ class MovimentacaoEstoqueModelTests(TestCase):
             
             # Criar produto
             self.produto = Produto.objects.create(
+                codigo_produto=1,
                 nome='Produto Teste',
-                codigo='PROD001',
-                tipo='PRODUTO',
+                descricao='Produto de teste para estoque',
+                ativo=True,
                 unidade_medida='UN',
                 valor_custo=Decimal('10.00'),
                 valor_venda=Decimal('15.00'),
-                is_active=True
+                codigo_ncm='12345678',
+                origem_mercadoria='0',
+                aliquota_icms=Decimal('18.00'),
+                aliquota_ipi=Decimal('0.00')
             )
             
             # Criar estoque
@@ -802,13 +810,17 @@ class EstoqueServicesTests(TestCase):
             
             # Criar produto
             self.produto = Produto.objects.create(
+                codigo_produto=1,
                 nome='Produto Teste',
-                codigo='PROD001',
-                tipo='PRODUTO',
+                descricao='Produto de teste para estoque',
+                ativo=True,
                 unidade_medida='UN',
                 valor_custo=Decimal('10.00'),
                 valor_venda=Decimal('15.00'),
-                is_active=True
+                codigo_ncm='12345678',
+                origem_mercadoria='0',
+                aliquota_icms=Decimal('18.00'),
+                aliquota_ipi=Decimal('0.00')
             )
     
     def test_processar_entrada_estoque_criar_novo(self):
@@ -1158,13 +1170,17 @@ class ReservaEstoqueTests(TestCase):
             )
             
             self.produto = Produto.objects.create(
+                codigo_produto=2,
                 nome='Produto Teste',
-                codigo='PROD001',
-                tipo='PRODUTO',
+                descricao='Produto de teste para reservas',
+                ativo=True,
                 unidade_medida='UN',
                 valor_custo=Decimal('10.00'),
                 valor_venda=Decimal('15.00'),
-                is_active=True
+                codigo_ncm='12345678',
+                origem_mercadoria='0',
+                aliquota_icms=Decimal('18.00'),
+                aliquota_ipi=Decimal('0.00')
             )
             
             self.estoque = Estoque.objects.create(
@@ -1395,13 +1411,17 @@ class PrevisaoMovimentacaoTests(TestCase):
             )
             
             self.produto = Produto.objects.create(
+                codigo_produto=3,
                 nome='Produto Teste',
-                codigo='PROD001',
-                tipo='PRODUTO',
+                descricao='Produto de teste para previsões',
+                ativo=True,
                 unidade_medida='UN',
                 valor_custo=Decimal('10.00'),
                 valor_venda=Decimal('15.00'),
-                is_active=True
+                codigo_ncm='12345678',
+                origem_mercadoria='0',
+                aliquota_icms=Decimal('18.00'),
+                aliquota_ipi=Decimal('0.00')
             )
             
             self.estoque = Estoque.objects.create(
