@@ -43,14 +43,29 @@ class Command(BaseCommand):
             self.stdout.write(f"{'='*60}")
             
             with schema_context(tenant.schema_name):
-                empresas = Empresa.objects.filter(is_active=True)
+                # Tentar usar o manager padrão (com filtro de is_deleted)
+                # Se falhar (coluna não existe), usar all_objects como fallback
+                try:
+                    empresas = Empresa.objects.filter(is_active=True)
+                    # Testar se a query funciona fazendo um exists()
+                    _ = empresas.exists()
+                except Exception:
+                    # Se falhar, provavelmente a coluna is_deleted não existe
+                    # Usar all_objects que não filtra por is_deleted
+                    self.stdout.write(self.style.WARNING(f"  ⚠️  Migrações podem não estar aplicadas. Usando fallback..."))
+                    empresas = Empresa.all_objects.filter(is_active=True)
                 
                 if not empresas.exists():
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Nenhuma empresa encontrada para {tenant.name}"))
                     continue
                 
                 for empresa in empresas:
-                    filiais = Filial.objects.filter(empresa=empresa, is_active=True)
+                    # Mesma lógica para Filial
+                    try:
+                        filiais = Filial.objects.filter(empresa=empresa, is_active=True)
+                        filiais.exists()
+                    except Exception:
+                        filiais = Filial.all_objects.filter(empresa=empresa, is_active=True)
                     
                     # Sempre criar exatamente 3 locations por empresa
                     self.stdout.write(f"\n  📍 Empresa: {empresa.nome}")

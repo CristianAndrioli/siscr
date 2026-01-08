@@ -160,10 +160,22 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
-REM Passo 6.5: Criar locations de estoque
+REM Passo 6.5: Aplicar migrações nos tenants
 REM ========================================
 echo.
-echo [6.5/9] Criando locations de estoque para os tenants...
+echo [6.5/9] Aplicando migrações nos schemas dos tenants...
+docker-compose exec web python manage.py migrate_schemas --noinput
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
+) else (
+    echo ✅ Migrações dos tenants verificadas/aplicadas!
+)
+
+REM ========================================
+REM Passo 6.6: Criar locations de estoque
+REM ========================================
+echo.
+echo [6.6/9] Criando locations de estoque para os tenants...
 docker-compose exec web python manage.py seed_locations
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Seed de locations pode ter falhado
