@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { publicService, type Plan } from '../services/public';
+import { authService } from '../services/auth';
+import { paymentsService } from '../services/payments';
 
 function Plans() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [testingCheckout, setTestingCheckout] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    setIsAuthenticated(authService.isAuthenticated());
+  }, []);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -28,6 +37,50 @@ function Plans() {
       style: 'currency',
       currency: 'BRL',
     });
+  };
+
+  const handleQuickTest = async () => {
+    // Verificar autenticação
+    const authenticated = authService.isAuthenticated();
+    if (!authenticated) {
+      navigate('/login?redirect=/plans');
+      return;
+    }
+
+    // Buscar plano Pro (tentar por slug primeiro, depois por nome)
+    const proPlan = plans.find((p) => 
+      p.slug === 'pro' || 
+      p.slug === 'Pro' ||
+      p.name.toLowerCase().includes('pro') ||
+      p.name.toLowerCase() === 'pro'
+    );
+    
+    if (!proPlan) {
+      setError('Plano Pro não encontrado. Planos disponíveis: ' + plans.map(p => p.name).join(', '));
+      return;
+    }
+
+    setTestingCheckout(true);
+    setError('');
+
+    try {
+      console.log('Criando checkout para plano:', proPlan);
+      const { checkout_url } = await paymentsService.createCheckoutSession(
+        proPlan.id,
+        'monthly'
+      );
+      
+      console.log('Checkout criado, redirecionando para:', checkout_url);
+      // Redirecionar para checkout do Stripe
+      window.location.href = checkout_url;
+    } catch (err: any) {
+      console.error('Erro ao criar checkout:', err);
+      setError(
+        err.response?.data?.error ||
+        'Erro ao criar checkout. Verifique se está logado e tente novamente.'
+      );
+      setTestingCheckout(false);
+    }
   };
 
   if (loading) {
@@ -81,9 +134,38 @@ function Plans() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             Escolha o Plano Ideal
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-xl text-gray-600 mb-6">
             Planos flexíveis para empresas de todos os tamanhos
           </p>
+          
+          {/* Botão de Teste Rápido */}
+          <div className="mb-8">
+            <button
+              onClick={handleQuickTest}
+              disabled={testingCheckout || loading}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors shadow-lg"
+            >
+              {testingCheckout ? (
+                <>
+                  <span className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                  Criando checkout...
+                </>
+              ) : (
+                '🧪 Teste Rápido - Checkout Pro (Mensal)'
+              )}
+            </button>
+            <p className="text-sm text-gray-500 mt-2">
+              {isAuthenticated 
+                ? 'Teste rápido do checkout com plano Pro - Redireciona direto para Stripe'
+                : '⚠️ Faça login primeiro para usar o teste rápido'}
+            </p>
+          </div>
+          
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6 max-w-2xl mx-auto">
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -149,7 +231,7 @@ function Plans() {
               </ul>
 
               <Link
-                to={`/signup?plan=${plan.id}`}
+                to={isAuthenticated ? `/checkout?plan_id=${plan.id}` : `/signup?plan=${plan.id}`}
                 className={`block w-full text-center py-3 rounded-lg font-semibold ${
                   plan.is_trial
                     ? 'bg-indigo-600 text-white hover:bg-indigo-700'

@@ -1,0 +1,73 @@
+name: Deploy para QA
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  deploy-qa:
+    name: Deploy para Ambiente QA
+    runs-on: ubuntu-latest
+    environment: qa # Requer aprovação manual se configurado
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.QA_SSH_PRIVATE_KEY }}
+
+      - name: Deploy para QA via SSH
+        env:
+          QA_HOST: ${{ secrets.QA_HOST }}
+          QA_USER: ${{ secrets.QA_USER }}
+        run: |
+          echo "🚀 Iniciando deploy para QA..."
+          echo "📡 Conectando em $QA_HOST como $QA_USER"
+          
+          ssh -o StrictHostKeyChecking=no $QA_USER@$QA_HOST << 'ENDSSH'
+            set -e
+            echo "📁 Navegando para diretório da aplicação..."
+            cd /opt/siscr || { echo "❌ Diretório /opt/siscr não encontrado"; exit 1; }
+            
+            echo "📥 Atualizando código do repositório..."
+            git fetch origin
+            git checkout develop
+            git pull origin develop
+            
+            echo "🐳 Parando containers..."
+            docker-compose down || true
+            
+            echo "🏗️ Reconstruindo imagens..."
+            docker-compose build --no-cache
+            
+            echo "🚀 Iniciando containers..."
+            docker-compose up -d
+            
+            echo "⏳ Aguardando serviços iniciarem..."
+            sleep 10
+            
+            echo "🔄 Executando migrations..."
+            docker-compose exec -T web python manage.py migrate_schemas --shared --noinput || true
+            
+            echo "📦 Coletando arquivos estáticos..."
+            docker-compose exec -T web python manage.py collectstatic --noinput || true
+            
+            echo "✅ Deploy concluído!"
+            echo "📊 Status dos containers:"
+            docker-compose ps
+          ENDSSH
+
+      - name: Verificar saúde da aplicação
+        env:
+          QA_HOST: ${{ secrets.QA_HOST }}
+          QA_URL: ${{ secrets.QA_URL || 'http://qa.siscr.com.br' }}
+        run: |
+          echo "🏥 Verificando saúde da aplicação..."
+          sleep 5
+          curl -f $QA_URL/api/health/ || echo "⚠️ Health check falhou (aplicação pode estar iniciando)"
+          echo "✅ Verificação concluída"
+

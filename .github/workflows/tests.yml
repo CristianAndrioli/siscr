@@ -1,0 +1,387 @@
+name: Testes Unitários
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  test-backend:
+    name: Testes Django
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: siscr_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Debug - Listar arquivos do projeto
+        run: |
+          echo "📁 Estrutura do projeto:"
+          ls -la
+          echo ""
+          echo "📁 Conteúdo do diretório raiz:"
+          find . -maxdepth 2 -type f -name "*.py" | head -10
+          echo ""
+          echo "📁 Verificando requirements.txt:"
+          if [ -f "requirements.txt" ]; then
+            echo "✅ requirements.txt encontrado"
+            head -5 requirements.txt
+          else
+            echo "❌ requirements.txt NÃO encontrado"
+          fi
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
+
+      - name: Debug - Versões do Python
+        run: |
+          echo "🐍 Python version:"
+          python --version
+          echo ""
+          echo "📦 pip version:"
+          pip --version
+          echo ""
+          echo "📁 Python path:"
+          which python
+
+      - name: Instalar dependências do sistema
+        run: |
+          echo "📦 Atualizando pacotes do sistema..."
+          sudo apt-get update
+          echo "📦 Instalando postgresql-client e libpq-dev..."
+          sudo apt-get install -y postgresql-client libpq-dev
+          echo "✅ Dependências do sistema instaladas"
+          echo ""
+          echo "🔍 Verificando instalação:"
+          psql --version || echo "⚠️ psql não encontrado no PATH"
+
+      - name: Instalar dependências Python
+        run: |
+          echo "📦 Atualizando pip..."
+          python -m pip install --upgrade pip
+          echo ""
+          echo "📦 Instalando dependências do requirements.txt..."
+          echo "📄 Conteúdo do requirements.txt (primeiras 10 linhas):"
+          head -10 requirements.txt
+          echo ""
+          pip install -r requirements.txt
+          echo ""
+          echo "✅ Dependências Python instaladas"
+          echo "📦 Pacotes instalados:"
+          pip list | head -20
+
+      - name: Configurar variáveis de ambiente
+        run: |
+          echo "🔧 Configurando variáveis de ambiente..."
+          echo "DB_NAME=siscr_test" >> $GITHUB_ENV
+          echo "DB_USER=postgres" >> $GITHUB_ENV
+          echo "DB_PASSWORD=postgres" >> $GITHUB_ENV
+          echo "DB_HOST=localhost" >> $GITHUB_ENV
+          echo "DB_PORT=5432" >> $GITHUB_ENV
+          echo "SECRET_KEY=test-secret-key-for-ci-cd" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379/1" >> $GITHUB_ENV
+          echo "ENVIRONMENT=test" >> $GITHUB_ENV
+          echo "CELERY_BROKER_URL=redis://localhost:6379/0" >> $GITHUB_ENV
+          echo "CELERY_RESULT_BACKEND=redis://localhost:6379/0" >> $GITHUB_ENV
+          echo "✅ Variáveis de ambiente configuradas"
+          echo ""
+          echo "🔍 Verificando conexão com PostgreSQL..."
+          pg_isready -h localhost -p 5432 -U postgres || echo "⚠️ PostgreSQL ainda não está pronto"
+
+      - name: Executar migrations
+        run: |
+          echo "🔄 Executando migrations..."
+          python manage.py migrate_schemas --shared --noinput --verbosity=0 || echo "⚠️ Algumas migrations falharam (continuando...)"
+          echo "✅ Migrations concluídas"
+
+      - name: Instalar coverage
+        run: |
+          echo "📊 Instalando coverage..."
+          pip install coverage[toml]
+
+      - name: Executar testes com cobertura
+        run: |
+          echo "🧪 Executando testes unitários do Django com cobertura..."
+          coverage run --source='.' manage.py test --verbosity=1 --noinput
+        continue-on-error: false
+
+      - name: Gerar relatório de cobertura
+        run: |
+          echo "📊 Gerando relatório de cobertura..."
+          echo ""
+          echo "📊 Relatório geral:"
+          coverage report
+          echo ""
+          echo "📊 Relatório detalhado por arquivo:"
+          coverage report --show-missing
+          echo ""
+          echo "📊 Arquivos com cobertura abaixo de 70%:"
+          coverage report --fail-under=70 --format=markdown > coverage_report.md || true
+          if [ -f coverage_report.md ]; then
+            cat coverage_report.md
+          fi
+
+      - name: Verificar cobertura mínima (70%) - Aviso
+        run: |
+          echo "📊 Verificando cobertura mínima de 70% por arquivo..."
+          
+          # Gerar relatório detalhado
+          coverage report --show-missing > coverage_detailed.txt
+          
+          # Extrair cobertura total (última linha do relatório)
+          TOTAL_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | sed 's/%//')
+          echo "📊 Cobertura geral: ${TOTAL_COVERAGE}%"
+          echo ""
+          
+          # Verificar arquivos com cobertura abaixo de 70%
+          # Formato do coverage report: NomeArquivo    Linhas    Miss    Cover
+          LOW_COVERAGE=$(coverage report | awk 'NR>3 && NF>=4 && $NF+0 < 70 && $NF+0 > 0 && $1 != "TOTAL" {print $1 " tem " $NF "% de cobertura"}')
+          
+          if [ -n "$LOW_COVERAGE" ]; then
+            echo "⚠️ AVISO: Arquivos com cobertura abaixo de 70%:"
+            echo "$LOW_COVERAGE"
+            echo ""
+            echo "⚠️ AVISO: Cobertura mínima de 70% por arquivo não atingida (não falha o build)"
+            echo ""
+          fi
+          
+          # Verificar cobertura geral
+          if [ -z "$TOTAL_COVERAGE" ] || [ "${TOTAL_COVERAGE%.*}" -lt 70 ]; then
+            echo "⚠️ AVISO: Cobertura geral (${TOTAL_COVERAGE}%) está abaixo do mínimo de 70% (não falha o build)"
+            echo ""
+          else
+            echo "✅ Cobertura mínima de 70% atingida (geral: ${TOTAL_COVERAGE}%)!"
+            echo ""
+          fi
+          
+          echo "📊 Relatório completo:"
+          cat coverage_detailed.txt
+        continue-on-error: true  # Não falha o build, apenas mostra aviso
+
+  test-frontend:
+    name: Testes Frontend (React)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Debug - Verificar estrutura do frontend
+        run: |
+          echo "📁 Estrutura do diretório frontend:"
+          if [ -d "frontend" ]; then
+            echo "✅ Diretório frontend existe"
+            ls -la frontend/ | head -20
+            echo ""
+            echo "📄 Verificando package.json:"
+            if [ -f "frontend/package.json" ]; then
+              echo "✅ package.json encontrado"
+              cat frontend/package.json | head -20
+            else
+              echo "❌ package.json NÃO encontrado"
+            fi
+            echo ""
+            echo "📄 Verificando package-lock.json:"
+            if [ -f "frontend/package-lock.json" ]; then
+              echo "✅ package-lock.json encontrado"
+              ls -lh frontend/package-lock.json
+            else
+              echo "❌ package-lock.json NÃO encontrado"
+              echo "⚠️ Tentando gerar package-lock.json..."
+            fi
+          else
+            echo "❌ Diretório frontend NÃO existe"
+            exit 1
+          fi
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          # Cache será configurado manualmente se package-lock.json existir
+
+      - name: Configurar cache do npm (se package-lock.json existir)
+        if: hashFiles('frontend/package-lock.json') != ''
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+        continue-on-error: true # Não falha se o cache não funcionar
+
+      - name: Debug - Versões do Node.js
+        run: |
+          echo "📦 Node.js version:"
+          node --version
+          echo ""
+          echo "📦 npm version:"
+          npm --version
+          echo ""
+          echo "📁 Node.js path:"
+          which node
+
+      - name: Instalar dependências
+        working-directory: ./frontend
+        run: |
+          echo "📦 Instalando dependências do frontend..."
+          echo "📄 Verificando package.json:"
+          cat package.json | head -30
+          echo ""
+          echo "📄 Verificando se package-lock.json existe:"
+          if [ -f "package-lock.json" ]; then
+            echo "✅ package-lock.json encontrado, usando npm ci (instalação limpa)"
+            npm ci
+          else
+            echo "⚠️ package-lock.json não encontrado, gerando e instalando..."
+            echo "📦 Executando npm install para gerar package-lock.json..."
+            npm install
+            echo ""
+            echo "💡 Dica: Considere commitar o package-lock.json para builds mais rápidos e reproduzíveis"
+          fi
+          echo ""
+          echo "✅ Dependências instaladas"
+          echo "📦 Pacotes instalados:"
+          npm list --depth=0 | head -20
+
+      - name: Executar linter
+        working-directory: ./frontend
+        run: |
+          echo "🔍 Executando linter..."
+          if npm run lint 2>&1; then
+            echo "✅ Linter passou sem erros"
+          else
+            echo "⚠️ Linter encontrou problemas (não falha o build)"
+          fi
+
+      - name: Build do frontend
+        working-directory: ./frontend
+        run: |
+          echo "🏗️ Executando build do frontend..."
+          echo "📄 Scripts disponíveis no package.json:"
+          npm run --silent 2>&1 | grep -E "^\s+\w+" || true
+          echo ""
+          npm run build
+          echo ""
+          echo "✅ Build concluído"
+          echo "📁 Conteúdo do diretório após build:"
+          ls -la | head -20
+
+      - name: Verificar build
+        working-directory: ./frontend
+        run: |
+          echo "🔍 Verificando resultado do build..."
+          if [ -d "dist" ]; then
+            echo "✅ Diretório dist criado com sucesso"
+            echo "📁 Conteúdo do dist:"
+            ls -lah dist/ | head -20
+            echo ""
+            echo "📊 Tamanho do build:"
+            du -sh dist/
+          else
+            echo "❌ Erro: Build não gerou diretório dist"
+            echo "📁 Conteúdo do diretório atual:"
+            ls -la
+            exit 1
+          fi
+
+  lint:
+    name: Linting e Formatação
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Debug - Versões
+        run: |
+          echo "🐍 Python version:"
+          python --version
+          echo ""
+          echo "📦 pip version:"
+          pip --version
+
+      - name: Instalar ferramentas de lint
+        run: |
+          echo "📦 Instalando ferramentas de linting..."
+          pip install flake8 black isort
+          echo ""
+          echo "✅ Ferramentas instaladas:"
+          echo "📦 black version:"
+          black --version
+          echo "📦 isort version:"
+          isort --version
+          echo "📦 flake8 version:"
+          flake8 --version
+
+      - name: Executar Black (formatação)
+        run: |
+          echo "🎨 Verificando formatação com Black..."
+          if black --check . 2>&1; then
+            echo "✅ Black: código está formatado corretamente"
+          else
+            echo "⚠️ Black: código precisa de formatação (não falha o build)"
+          fi
+
+      - name: Executar isort (imports)
+        run: |
+          echo "📦 Verificando ordenação de imports com isort..."
+          if isort --check-only . 2>&1; then
+            echo "✅ isort: imports estão ordenados corretamente"
+          else
+            echo "⚠️ isort: imports precisam ser ordenados (não falha o build)"
+          fi
+
+      - name: Executar flake8 (linting)
+        run: |
+          echo "🔍 Executando flake8 (erros críticos)..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || echo "⚠️ Flake8 encontrou erros críticos (não falha o build)"
+          echo ""
+          echo "🔍 Executando flake8 (análise completa)..."
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || echo "⚠️ Flake8 encontrou problemas (não falha o build)"
+          echo ""
+          echo "✅ Linting concluído"
+

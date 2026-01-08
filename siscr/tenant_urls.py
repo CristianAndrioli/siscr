@@ -8,10 +8,20 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 urlpatterns = [
     # Admin do tenant
     path('admin/', admin.site.urls),
+    
+    # Swagger/OpenAPI Documentation (para documentar APIs do tenant)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # APIs de autenticação multi-tenant
     path('', include('accounts.urls')),
@@ -20,6 +30,18 @@ urlpatterns = [
     
     # APIs de cadastros (pessoas, produtos, serviços, etc.)
     path('api/cadastros/', include('cadastros.api.urls')),
+    
+    # API de estoque
+    path('api/estoque/', include('estoque.api.urls')),
+    
+    # API de relatórios
+    path('api/reports/', include('reports.api.urls')),
+    
+    # API de gerenciamento de usuários do tenant
+    path('api/accounts/', include('accounts.api.urls')),
+    
+    # API de empresas e filiais
+    path('api/tenants/', include('tenants.api.urls')),
     
     # APIs de pagamentos
     path('api/payments/', include('payments.api.urls')),

@@ -195,5 +195,34 @@ export const authService = {
     const response = await api.get('/auth/me/');
     return response.data;
   },
+
+  /**
+   * Atualiza informações do perfil do usuário
+   */
+  updateProfile: async (data: {
+    user?: {
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+    };
+    profile?: {
+      phone?: string;
+    };
+  }): Promise<{
+    message: string;
+    user: {
+      id: number;
+      username: string;
+      email: string;
+      first_name?: string;
+      last_name?: string;
+    };
+    profile: {
+      phone?: string;
+    };
+  }> => {
+    const response = await api.put('/auth/me/', data);
+    return response.data;
+  },
 };
 

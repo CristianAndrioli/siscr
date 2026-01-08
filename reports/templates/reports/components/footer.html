@@ -1,0 +1,29 @@
+<footer class="report-footer">
+    <div class="footer-content">
+        <p>Gerado em {{ data_geracao|date:"d/m/Y H:i" }}</p>
+        {% if usuario %}
+        <p>Usuário: {{ usuario.nome|default:usuario.username }}</p>
+        {% endif %}
+    </div>
+    <div class="page-info">
+        <p>Página <span class="page-number"></span></p>
+    </div>
+</footer>
+
+<script>
+    // Numeração de páginas (será processado pelo WeasyPrint)
+    document.addEventListener('DOMContentLoaded', function() {
+        // WeasyPrint suporta numeração automática via CSS
+    });
+</script>
+
+<style>
+    @page {
+        @bottom-right {
+            content: "Página " counter(page) " de " counter(pages);
+            font-size: 10px;
+            color: #666;
+        }
+    }
+</style>
+

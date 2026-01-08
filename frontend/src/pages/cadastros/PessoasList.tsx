@@ -1,5 +1,5 @@
 import { useCrud } from '../../hooks/useCrud';
-import { DataGrid } from '../../components/common';
+import { DataGrid, ErrorMessage, LoadingSpinner } from '../../components/common';
 import { pessoasService } from '../../services/cadastros/pessoas';
 import { useNavigate } from 'react-router-dom';
 import { useGridColumns } from '../../hooks/useGridColumns';
@@ -96,8 +96,12 @@ export function PessoasList() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          {error}
+        <ErrorMessage message={error} onClose={() => {}} dismissible={false} />
+      )}
+
+      {loading && !data && (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner size="lg" text="Carregando pessoas..." />
         </div>
       )}
 

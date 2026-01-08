@@ -14,39 +14,90 @@ from .models import PaymentMethod, Payment, Invoice
 from subscriptions.models import Subscription
 from tenants.models import Tenant
 
+# Configurar Stripe se não estiver em modo simulado
+if settings.STRIPE_MODE != 'simulated':
+    stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY_TEST', '')
+    stripe.api_version = getattr(settings, 'STRIPE_API_VERSION', '2024-11-20.acacia')
+
 
 @csrf_exempt
 @require_POST
 def stripe_webhook(request):
     """
     Webhook do Stripe para processar eventos
+    Suporta Stripe CLI para desenvolvimento local
+    
+    IMPORTANTE: Para desenvolvimento local, use Stripe CLI:
+    stripe listen --forward-to localhost:8000/api/webhooks/stripe/
+    
+    Os webhooks são logados no console e no Django logging.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
     
-    # Verificar assinatura do webhook (apenas em produção/test)
-    if settings.STRIPE_MODE != 'simulated':
-        try:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-            )
-        except ValueError:
-            return HttpResponse(status=400)
-        except stripe.error.SignatureVerificationError:
-            return HttpResponse(status=400)
-    else:
+    # Log da requisição recebida
+    logger.info(f"[WEBHOOK] Requisição recebida de {request.META.get('REMOTE_ADDR', 'unknown')}")
+    logger.info(f"[WEBHOOK] Content-Type: {request.META.get('CONTENT_TYPE', 'unknown')}")
+    logger.info(f"[WEBHOOK] Payload size: {len(payload)} bytes")
+    
+    # Verificar assinatura do webhook
+    # Stripe CLI usa um webhook secret especial (whsec_...)
+    # Em desenvolvimento com Stripe CLI, podemos aceitar sem verificação ou usar o secret do CLI
+    webhook_secret = settings.STRIPE_WEBHOOK_SECRET
+    
+    if settings.STRIPE_MODE == 'simulated':
         # Em modo simulado, apenas parsear JSON
         try:
             event = json.loads(payload)
+            logger.info(f"[WEBHOOK] Modo simulado - Evento parseado sem verificação")
         except json.JSONDecodeError:
+            logger.error("[WEBHOOK] Erro ao parsear JSON em modo simulado")
             return HttpResponse(status=400)
+    else:
+        # Verificar assinatura do webhook
+        # Se usar Stripe CLI, o secret será fornecido pelo CLI
+        # Se não tiver secret configurado, aceitar (apenas para desenvolvimento local)
+        if webhook_secret:
+            try:
+                event = stripe.Webhook.construct_event(
+                    payload, sig_header, webhook_secret
+                )
+                logger.info(f"[WEBHOOK] Assinatura verificada com sucesso")
+            except ValueError as e:
+                logger.error(f"[WEBHOOK] Erro ao parsear payload: {str(e)}")
+                return HttpResponse(status=400)
+            except stripe.error.SignatureVerificationError as e:
+                logger.error(f"[WEBHOOK] Erro na verificação de assinatura: {str(e)}")
+                return HttpResponse(status=400)
+        else:
+            # Sem secret configurado (desenvolvimento local com Stripe CLI)
+            # Aceitar evento sem verificação (NÃO RECOMENDADO EM PRODUÇÃO)
+            try:
+                event = json.loads(payload)
+                logger.warning("[WEBHOOK] ⚠️ Modo desenvolvimento - Evento aceito SEM verificação de assinatura")
+            except json.JSONDecodeError:
+                logger.error("[WEBHOOK] Erro ao parsear JSON")
+                return HttpResponse(status=400)
     
     # Processar evento
     event_type = event.get('type')
+    event_id = event.get('id', 'unknown')
     event_data = event.get('data', {}).get('object', {})
     
+    # Log do evento recebido
+    logger.info(f"[WEBHOOK] ✅ Evento recebido: {event_type} (ID: {event_id})")
+    logger.info(f"[WEBHOOK] Event data keys: {list(event_data.keys())}")
+    if 'metadata' in event_data:
+        logger.info(f"[WEBHOOK] Metadata: {event_data.get('metadata', {})}")
+    logger.debug(f"[WEBHOOK] Event data: {json.dumps(event_data, indent=2, default=str)}")
+    
     try:
-        if event_type == 'payment_intent.succeeded':
+        if event_type == 'checkout.session.completed':
+            handle_checkout_session_completed(event_data)
+        elif event_type == 'payment_intent.succeeded':
             handle_payment_intent_succeeded(event_data)
         elif event_type == 'payment_intent.payment_failed':
             handle_payment_intent_failed(event_data)
@@ -65,11 +116,12 @@ def stripe_webhook(request):
         elif event_type == 'payment_method.detached':
             handle_payment_method_detached(event_data)
         
-        return JsonResponse({'status': 'success'})
+        logger.info(f"[WEBHOOK] ✅ Evento {event_type} processado com sucesso")
+        return JsonResponse({'status': 'success', 'event_type': event_type, 'event_id': event_id})
     except Exception as e:
-        # Log do erro (em produção, usar logging)
-        print(f"Erro ao processar webhook: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        # Log do erro
+        logger.error(f"[WEBHOOK] ❌ Erro ao processar webhook {event_type} (ID: {event_id}): {str(e)}", exc_info=True)
+        return JsonResponse({'error': str(e), 'event_type': event_type, 'event_id': event_id}, status=500)
 
 
 @transaction.atomic
@@ -148,6 +200,9 @@ def handle_payment_intent_failed(event_data):
 @transaction.atomic
 def handle_invoice_payment_succeeded(event_data):
     """Processa fatura paga com sucesso"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     invoice_id = event_data.get('id')
     subscription_id = event_data.get('subscription')
     amount = event_data.get('amount_paid', 0) / 100
@@ -193,6 +248,20 @@ def handle_invoice_payment_succeeded(event_data):
         invoice.is_paid = True
         invoice.paid_at = timezone.now()
         invoice.save()
+    
+    # Reativar tenant se estiver suspenso
+    if not tenant.is_active:
+        tenant.is_active = True
+        tenant.save()
+        logger.info(f"[WEBHOOK] Tenant {tenant.name} reativado após pagamento bem-sucedido")
+        # Chamar tarefa Celery para reativação (envia notificação)
+        from subscriptions.tasks import reactivate_tenant
+        reactivate_tenant.delay(tenant.id)
+    else:
+        # Enviar notificação de pagamento bem-sucedido
+        from subscriptions.notifications import SubscriptionNotificationService
+        notification_service = SubscriptionNotificationService()
+        notification_service.send_payment_succeeded_notification(subscription)
 
 
 @transaction.atomic
@@ -233,6 +302,11 @@ def handle_invoice_payment_failed(event_data):
     # Atualizar subscription para past_due
     subscription.status = 'past_due'
     subscription.save()
+    
+    # Enviar notificação de pagamento falhado
+    from subscriptions.notifications import SubscriptionNotificationService
+    notification_service = SubscriptionNotificationService()
+    notification_service.send_payment_failed_notification(subscription)
 
 
 @transaction.atomic
@@ -342,4 +416,124 @@ def handle_payment_method_detached(event_data):
     if payment_method:
         payment_method.is_active = False
         payment_method.save()
+
+
+@transaction.atomic
+def handle_checkout_session_completed(event_data):
+    """
+    Processa conclusão de checkout session
+    Cria ou atualiza subscription quando checkout é concluído
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    session_id = event_data.get('id')
+    customer_id = event_data.get('customer')
+    subscription_id = event_data.get('subscription')
+    metadata = event_data.get('metadata', {})
+    
+    logger.info(f"[WEBHOOK] [checkout.session.completed] Processando session_id={session_id}")
+    logger.info(f"[WEBHOOK] [checkout.session.completed] Metadata recebida: {metadata}")
+    
+    tenant_id = metadata.get('tenant_id')
+    plan_id = metadata.get('plan_id')
+    billing_cycle = metadata.get('billing_cycle', 'monthly')
+    
+    if not tenant_id or not plan_id:
+        # Log de erro mas não falhar (pode ser checkout de outro sistema)
+        logger.warning(f"[WEBHOOK] [checkout.session.completed] Checkout session {session_id} sem metadata de tenant/plan. Metadata: {metadata}")
+        return
+    
+    logger.info(f"[WEBHOOK] [checkout.session.completed] Tenant ID: {tenant_id}, Plan ID: {plan_id}, Billing Cycle: {billing_cycle}")
+    
+    try:
+        tenant = Tenant.objects.get(id=tenant_id)
+    except Tenant.DoesNotExist:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Tenant {tenant_id} não encontrado para checkout session {session_id}")
+        return
+    
+    # Buscar ou criar PaymentMethod com customer_id
+    payment_method = PaymentMethod.objects.filter(
+        tenant=tenant,
+        stripe_customer_id=customer_id
+    ).first()
+    
+    if not payment_method:
+        # Criar PaymentMethod básico se não existir
+        payment_method = PaymentMethod.objects.create(
+            tenant=tenant,
+            type='card',  # Assumir cartão por padrão
+            stripe_customer_id=customer_id,
+            is_default=True,
+        )
+    
+    # Buscar plano
+    try:
+        from subscriptions.models import Plan
+        plan = Plan.objects.get(id=plan_id)
+    except Plan.DoesNotExist:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Plano {plan_id} não encontrado para checkout session {session_id}")
+        return
+    
+    # Buscar ou criar Subscription
+    subscription = Subscription.objects.filter(
+        tenant=tenant
+    ).first()
+    
+    if subscription:
+        # Atualizar subscription existente
+        logger.info(f"[WEBHOOK] [checkout.session.completed] Subscription encontrada: ID={subscription.id}, Status atual={subscription.status}")
+        subscription.plan = plan
+        subscription.payment_gateway_id = subscription_id
+        # Ativar subscription quando pagamento for confirmado
+        # Se estava 'pending', agora fica 'active'
+        old_status = subscription.status
+        if subscription.status == 'pending':
+            subscription.status = 'active'
+            logger.info(f"[WEBHOOK] [checkout.session.completed] ✅ Status alterado de 'pending' para 'active'")
+        elif subscription.status not in ['active', 'trial']:
+            # Se estava cancelada/expirada, reativar
+            subscription.status = 'active'
+            logger.info(f"[WEBHOOK] [checkout.session.completed] ✅ Status alterado de '{old_status}' para 'active'")
+        subscription.billing_cycle = billing_cycle
+        
+        # Atualizar períodos se disponível no Stripe
+        if subscription_id and settings.STRIPE_MODE != 'simulated':
+            try:
+                import stripe
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                subscription.current_period_start = datetime.fromtimestamp(
+                    stripe_sub['current_period_start'], tz=timezone.utc
+                )
+                subscription.current_period_end = datetime.fromtimestamp(
+                    stripe_sub['current_period_end'], tz=timezone.utc
+                )
+                logger.info(f"[WEBHOOK] [checkout.session.completed] Períodos atualizados do Stripe")
+            except Exception as e:
+                logger.warning(f"[WEBHOOK] [checkout.session.completed] Erro ao buscar períodos do Stripe: {str(e)}")
+                # Se falhar, usar valores padrão
+        
+        subscription.save()
+        logger.info(f"[WEBHOOK] [checkout.session.completed] ✅ Subscription {subscription.id} salva com status '{subscription.status}'")
+    else:
+        # Criar nova subscription
+        period_start = timezone.now()
+        if billing_cycle == 'yearly':
+            period_end = period_start + timedelta(days=365)
+        else:
+            period_end = period_start + timedelta(days=30)
+        
+        subscription = Subscription.objects.create(
+            tenant=tenant,
+            plan=plan,
+            status='active',
+            billing_cycle=billing_cycle,
+            current_period_start=period_start,
+            current_period_end=period_end,
+            payment_gateway_id=subscription_id,
+        )
 

@@ -1,87 +1,74 @@
+import { useNavigate } from 'react-router-dom';
+import { DataGrid } from './DataGrid';
 import type { GridColumn } from '../../types';
 
-interface RelatedRecordsProps {
+export interface RelatedRecord {
+  id: number | string;
+  [key: string]: unknown;
+}
+
+interface RelatedRecordsProps<T = RelatedRecord> {
   title: string;
-  records?: unknown[];
-  columns?: GridColumn[];
-  onRecordClick?: (record: unknown) => void;
+  records: T[];
+  columns: GridColumn<T>[];
+  basePath: string; // Caminho base para navegação (ex: '/usuarios', '/roles')
+  getRecordId: (record: T) => number | string;
   emptyMessage?: string;
+  loading?: boolean;
 }
 
 /**
- * RelatedRecords - Componente para exibir registros relacionados
- * Usado na aba "Related" do DetailView
+ * Componente para exibir registros relacionados em uma grid
+ * Estilo Salesforce - empilhado na aba Relacionados
  */
-export function RelatedRecords({
+export default function RelatedRecords<T extends RelatedRecord = RelatedRecord>({
   title,
-  records = [],
-  columns = [],
-  onRecordClick,
-  emptyMessage = 'Nenhum registro relacionado encontrado',
-}: RelatedRecordsProps) {
-  const handleRecordClick = (record: unknown): void => {
-    if (onRecordClick) {
-      onRecordClick(record);
-    }
+  records,
+  columns,
+  basePath,
+  getRecordId,
+  emptyMessage = `Nenhum ${title.toLowerCase()} encontrado.`,
+  loading = false,
+}: RelatedRecordsProps<T>) {
+  const navigate = useNavigate();
+
+  const handleRowClick = (record: T) => {
+    const id = getRecordId(record);
+    navigate(`${basePath}/${id}`);
   };
 
-  if (records.length === 0) {
-    return (
-      <div className="border border-gray-200 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-        <p className="text-sm text-gray-500">{emptyMessage}</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-500 mt-1">{records.length} registro(s) encontrado(s)</p>
+    <div className="mb-6">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
+        <p className="text-sm text-gray-500 mt-1">
+          {records.length} registro(s) encontrado(s)
+        </p>
       </div>
-      
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              {columns.map((column) => (
-                <th
-                  key={column.key}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  {column.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {records.map((record, index) => {
-              const recordObj = record as Record<string, unknown>;
-              return (
-                <tr
-                  key={(recordObj.id as string | number) || index}
-                  onClick={() => handleRecordClick(record)}
-                  className={`hover:bg-indigo-50 transition-colors ${
-                    onRecordClick ? 'cursor-pointer' : ''
-                  }`}
-                >
-                  {columns.map((column) => (
-                    <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {column.render
-                        ? column.render(recordObj[column.key], record)
-                        : String(recordObj[column.key] ?? '-')}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        </div>
+      ) : records.length === 0 ? (
+        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+          <p className="text-gray-500">{emptyMessage}</p>
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <DataGrid<T>
+            data={records}
+            columns={columns}
+            onRowClick={handleRowClick}
+            loading={false}
+            pagination={null}
+            showActions={false}
+            searchPlaceholder=""
+            emptyMessage={emptyMessage}
+            gridId={`related-${title.toLowerCase().replace(/\s+/g, '-')}`}
+          />
+        </div>
+      )}
     </div>
   );
 }
-
-export default RelatedRecords;
-

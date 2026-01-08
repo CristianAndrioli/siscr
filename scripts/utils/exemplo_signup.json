@@ -1,0 +1,14 @@
+{
+  "tenant_name": "Minha Empresa LTDA",
+  "domain": "minhaempresa",
+  "plan_id": 1,
+  "admin_username": "admin",
+  "admin_email": "admin@minhaempresa.com",
+  "admin_password": "SenhaSegura123!",
+  "admin_first_name": "João",
+  "admin_last_name": "Silva",
+  "empresa_nome": "Minha Empresa LTDA",
+  "empresa_cnpj": "12.345.678/0001-90",
+  "empresa_razao_social": "Minha Empresa LTDA"
+}
+

@@ -7,18 +7,30 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
     TokenVerifyView,
 )
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 urlpatterns = [
     # Rota padrão do painel de administração do Django
     path('admin/', admin.site.urls),
+    
+    # Swagger/OpenAPI Documentation
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # API Authentication (JWT)
     path('api/auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('api/auth/token/verify/', TokenVerifyView.as_view(), name='token_verify'),
     
-    # API Routes
+    # API Routes - Ordem importa: rotas mais específicas primeiro
     path('api/cadastros/', include('cadastros.api.urls')),
+    path('api/accounts/', include('accounts.api.urls')),  # API de gerenciamento de usuários
+    path('api/payments/', include('payments.api.urls')),  # API de pagamentos
     path('api/', include('core.api.urls')),  # Mantém API geral do core (se houver)
     
     # APIs de autenticação multi-tenant

@@ -1,11 +1,10 @@
 services:
   db:
-    image: postgres:15-alpine
-    container_name: siscr_db
+    image: postgres:15
     environment:
-      POSTGRES_DB: siscr_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      - POSTGRES_DB=siscr_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -18,19 +17,19 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: siscr_redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   web:
     build: .
-    container_name: siscr_web
-    command: sh -c "python manage.py migrate_schemas --shared --noinput && python manage.py runserver 0.0.0.0:8000"
+    command: bash -c "python manage.py makemigrations --noinput || true && python manage.py migrate_schemas --shared --noinput || true && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
-      - static_volume:/app/static
     ports:
       - "8000:8000"
     environment:
@@ -42,6 +41,65 @@ services:
       - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
       - REDIS_URL=redis://redis:6379/1
       - ENVIRONMENT=development
+      # Stripe - Chaves de teste (sandbox)
+      # IMPORTANTE: Configure as variáveis de ambiente STRIPE_SECRET_KEY_TEST e STRIPE_PUBLISHABLE_KEY_TEST
+      # no arquivo .env ou diretamente no sistema antes de executar docker-compose
+      - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
+      - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
+      - STRIPE_MODE=test
+      # Celery
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery_worker:
+    build: .
+    command: celery -A siscr worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DB_NAME=siscr_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - REDIS_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
+      - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
+      - STRIPE_MODE=test
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery_beat:
+    build: .
+    command: celery -A siscr beat --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DB_NAME=siscr_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=django-insecure-docker-dev-key-change-in-production
+      - REDIS_URL=redis://redis:6379/1
+      - ENVIRONMENT=development
+      - STRIPE_SECRET_KEY_TEST=${STRIPE_SECRET_KEY_TEST:-}
+      - STRIPE_PUBLISHABLE_KEY_TEST=${STRIPE_PUBLISHABLE_KEY_TEST:-}
+      - STRIPE_MODE=test
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy
@@ -50,6 +108,4 @@ services:
 
 volumes:
   postgres_data:
-  static_volume:
-  redis_data:
 

@@ -1,0 +1,826 @@
+"""
+ViewSets da API do módulo de Estoque
+"""
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q, Sum
+from decimal import Decimal
+
+from estoque.models import (
+    Location, Estoque, MovimentacaoEstoque,
+    ReservaEstoque, PrevisaoMovimentacao, GrupoFilial
+)
+from estoque.services import (
+    processar_entrada_estoque,
+    processar_saida_estoque,
+    processar_transferencia,
+    cancelar_transferencia,
+    criar_reserva,
+    confirmar_reserva,
+    cancelar_reserva,
+    EstoqueServiceError
+)
+from cadastros.models import Produto
+from cadastros.utils import filter_by_empresa_filial, get_current_empresa_filial
+from accounts.permissions import is_tenant_admin
+from .serializers import (
+    LocationSerializer,
+    EstoqueSerializer,
+    MovimentacaoEstoqueSerializer,
+    ReservaEstoqueSerializer,
+    PrevisaoMovimentacaoSerializer,
+    GrupoFilialSerializer,
+    ProcessarEntradaSerializer,
+    ProcessarSaidaSerializer,
+    ProcessarTransferenciaSerializer,
+    CriarReservaSerializer,
+    EstoqueConsolidadoSerializer,
+    ProcessarMultiplasEntradasSerializer,
+)
+from django.http import HttpResponse
+
+
+class LocationViewSet(viewsets.ModelViewSet):
+    """ViewSet para Location"""
+    queryset = Location.objects.all()
+    serializer_class = LocationSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['nome', 'codigo', 'cidade', 'estado']
+    filterset_fields = ['tipo', 'is_active', 'empresa', 'filial']
+    
+    def get_queryset(self):
+        """
+        Filtra locations por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê locations da empresa/filial configurada.
+        Isso garante isolamento total entre empresas dentro do mesmo tenant.
+        """
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        
+        # SEMPRE filtrar por empresa/filial do usuário (mesmo para admin)
+        # Isso garante que usuário da empresa A não veja locations da empresa B
+        if not empresa:
+            # Se usuário não tem empresa configurada, não pode ver nenhuma location
+            queryset = queryset.none()
+        elif filial:
+            # Se tem filial, mostrar:
+            # 1. Locations específicas dessa filial
+            # 2. Locations da empresa sem filial (compartilhadas)
+            queryset = queryset.filter(
+                Q(empresa=empresa, filial=filial) |
+                Q(empresa=empresa, filial__isnull=True)
+            )
+        else:
+            # Se tem apenas empresa, mostrar todas as locations da empresa
+            # (de todas as filiais + sem filial)
+            queryset = queryset.filter(empresa=empresa)
+        
+        return queryset.order_by('empresa', 'nome')
+
+
+class EstoqueViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet para Estoque (somente leitura e atualização parcial)"""
+    queryset = Estoque.objects.all()
+    serializer_class = EstoqueSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['produto__nome', 'produto__codigo', 'location__nome']
+    filterset_fields = ['empresa', 'location', 'produto']
+    
+    def get_queryset(self):
+        """
+        Filtra estoques por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê estoques da empresa/filial configurada.
+        Isso garante isolamento total entre empresas dentro do mesmo tenant.
+        """
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        
+        # SEMPRE filtrar por empresa/filial do usuário (mesmo para admin)
+        if not empresa:
+            queryset = queryset.none()
+        elif filial:
+            queryset = queryset.filter(
+                Q(empresa=empresa, location__filial=filial) |
+                Q(empresa=empresa, location__filial__isnull=True)
+            )
+        else:
+            queryset = queryset.filter(empresa=empresa)
+        
+        return queryset.select_related('produto', 'location', 'empresa').order_by('produto__nome')
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Permite atualização parcial (ex: estoque_minimo, estoque_maximo)"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def consolidado(self, request):
+        """Retorna estoque consolidado por empresa ou grupo de filiais"""
+        serializer = EstoqueConsolidadoSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        produto_id = serializer.validated_data.get('produto_id')
+        empresa_id = serializer.validated_data.get('empresa_id')
+        grupo_filial_id = serializer.validated_data.get('grupo_filial_id')
+        
+        # Se não for admin, usar empresa/filial do usuário
+        if not is_tenant_admin(request.user):
+            empresa_id = empresa.id if empresa else None
+        
+        if grupo_filial_id:
+            # Estoque consolidado por grupo de filiais
+            try:
+                grupo = GrupoFilial.objects.get(id=grupo_filial_id, empresa=empresa)
+                if produto_id:
+                    produto = Produto.objects.get(id=produto_id)
+                    consolidado = grupo.get_estoque_consolidado(produto)
+                    return Response(consolidado)
+                else:
+                    return Response({'error': 'produto_id é obrigatório para grupo de filiais'}, 
+                                  status=status.HTTP_400_BAD_REQUEST)
+            except GrupoFilial.DoesNotExist:
+                return Response({'error': 'Grupo de filiais não encontrado'}, 
+                              status=status.HTTP_404_NOT_FOUND)
+        
+        elif empresa_id:
+            # Estoque consolidado por empresa
+            from tenants.models import Empresa
+            try:
+                empresa_consolidada = Empresa.objects.get(id=empresa_id)
+                estoques = Estoque.objects.filter(empresa=empresa_consolidada)
+                
+                if produto_id:
+                    estoques = estoques.filter(produto_id=produto_id)
+                
+                consolidado = estoques.aggregate(
+                    total_atual=Sum('quantidade_atual'),
+                    total_reservada=Sum('quantidade_reservada'),
+                    total_disponivel=Sum('quantidade_disponivel'),
+                    total_prevista_entrada=Sum('quantidade_prevista_entrada'),
+                    total_prevista_saida=Sum('quantidade_prevista_saida'),
+                )
+                
+                valor_total = sum(e.valor_total for e in estoques)
+                
+                return Response({
+                    'quantidade_atual': consolidado['total_atual'] or Decimal('0.000'),
+                    'quantidade_reservada': consolidado['total_reservada'] or Decimal('0.000'),
+                    'quantidade_disponivel': consolidado['total_disponivel'] or Decimal('0.000'),
+                    'quantidade_prevista_entrada': consolidado['total_prevista_entrada'] or Decimal('0.000'),
+                    'quantidade_prevista_saida': consolidado['total_prevista_saida'] or Decimal('0.000'),
+                    'valor_total': Decimal(str(valor_total)),
+                    'locations': estoques.values('location').distinct().count(),
+                })
+            except Empresa.DoesNotExist:
+                return Response({'error': 'Empresa não encontrada'}, 
+                              status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'empresa_id ou grupo_filial_id é obrigatório'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def entrada(self, request):
+        """Processa entrada de estoque"""
+        serializer = ProcessarEntradaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            produto = Produto.objects.get(id=serializer.validated_data['produto_id'])
+            location = Location.objects.get(id=serializer.validated_data['location_id'])
+            
+            resultado = processar_entrada_estoque(
+                produto=produto,
+                location=location,
+                empresa=empresa,
+                quantidade=serializer.validated_data['quantidade'],
+                valor_unitario=serializer.validated_data['valor_unitario'],
+                origem=serializer.validated_data.get('origem', 'COMPRA'),
+                documento_referencia=serializer.validated_data.get('documento_referencia'),
+                numero_nota_fiscal=serializer.validated_data.get('numero_nota_fiscal'),
+                serie_nota_fiscal=serializer.validated_data.get('serie_nota_fiscal'),
+                observacoes=serializer.validated_data.get('observacoes'),
+            )
+            
+            return Response({
+                'estoque': EstoqueSerializer(resultado['estoque']).data,
+                'movimentacao': MovimentacaoEstoqueSerializer(resultado['movimentacao']).data,
+                'custo_medio_anterior': str(resultado['custo_medio_anterior']),
+                'custo_medio_novo': str(resultado['custo_medio_novo']),
+            }, status=status.HTTP_201_CREATED)
+            
+        except Produto.DoesNotExist:
+            return Response({'error': 'Produto não encontrado'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Location.DoesNotExist:
+            return Response({'error': 'Location não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def saida(self, request):
+        """Processa saída de estoque"""
+        serializer = ProcessarSaidaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            produto = Produto.objects.get(id=serializer.validated_data['produto_id'])
+            location = Location.objects.get(id=serializer.validated_data['location_id'])
+            
+            valor_unitario = serializer.validated_data.get('valor_unitario')
+            if not valor_unitario:
+                # Buscar custo médio do estoque
+                try:
+                    estoque = Estoque.objects.get(produto=produto, location=location, empresa=empresa)
+                    valor_unitario = estoque.valor_custo_medio
+                except Estoque.DoesNotExist:
+                    return Response({'error': 'Estoque não encontrado'}, 
+                                  status=status.HTTP_404_NOT_FOUND)
+            
+            resultado = processar_saida_estoque(
+                produto=produto,
+                location=location,
+                empresa=empresa,
+                quantidade=serializer.validated_data['quantidade'],
+                valor_unitario=valor_unitario,
+                origem=serializer.validated_data.get('origem', 'VENDA'),
+                documento_referencia=serializer.validated_data.get('documento_referencia'),
+                numero_nota_fiscal=serializer.validated_data.get('numero_nota_fiscal'),
+                serie_nota_fiscal=serializer.validated_data.get('serie_nota_fiscal'),
+                observacoes=serializer.validated_data.get('observacoes'),
+                verificar_estoque_minimo=serializer.validated_data.get('verificar_estoque_minimo', True),
+            )
+            
+            response_data = {
+                'estoque': EstoqueSerializer(resultado['estoque']).data,
+                'movimentacao': MovimentacaoEstoqueSerializer(resultado['movimentacao']).data,
+            }
+            
+            if resultado.get('alerta_estoque_minimo'):
+                response_data['alerta_estoque_minimo'] = resultado['alerta_estoque_minimo']
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
+            
+        except Produto.DoesNotExist:
+            return Response({'error': 'Produto não encontrado'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Location.DoesNotExist:
+            return Response({'error': 'Location não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def transferencia(self, request):
+        """Processa transferência de estoque"""
+        serializer = ProcessarTransferenciaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Produto usa codigo_produto como chave primária, não id
+            produto = Produto.objects.get(codigo_produto=int(serializer.validated_data['produto_id']))
+            location_origem = Location.objects.get(id=serializer.validated_data['location_origem_id'])
+            location_destino = Location.objects.get(id=serializer.validated_data['location_destino_id'])
+            
+            resultado = processar_transferencia(
+                produto=produto,
+                location_origem=location_origem,
+                location_destino=location_destino,
+                empresa=empresa,
+                quantidade=serializer.validated_data['quantidade'],
+                valor_unitario=serializer.validated_data.get('valor_unitario'),
+                documento_referencia=serializer.validated_data.get('documento_referencia'),
+                observacoes=serializer.validated_data.get('observacoes'),
+            )
+            
+            return Response({
+                'movimentacao_saida': MovimentacaoEstoqueSerializer(resultado['movimentacao_saida']).data,
+                'movimentacao_entrada': MovimentacaoEstoqueSerializer(resultado['movimentacao_entrada']).data,
+                'estoque_origem': EstoqueSerializer(resultado['estoque_origem']).data,
+                'estoque_destino': EstoqueSerializer(resultado['estoque_destino']).data,
+            }, status=status.HTTP_201_CREATED)
+            
+        except Produto.DoesNotExist:
+            return Response({'error': 'Produto não encontrado'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Location.DoesNotExist:
+            return Response({'error': 'Location não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def entrada_multipla(self, request):
+        """
+        Processa múltiplas entradas de estoque (modo desenvolvimento).
+        Apenas disponível quando ENVIRONMENT=development.
+        """
+        from django.conf import settings
+        
+        # Verificar se está em modo desenvolvimento
+        if getattr(settings, 'ENVIRONMENT', 'production') != 'development':
+            return Response(
+                {'error': 'Este recurso está disponível apenas em modo de desenvolvimento'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = ProcessarMultiplasEntradasSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        resultados = []
+        erros = []
+        
+        for idx, entrada_data in enumerate(serializer.validated_data['entradas']):
+            try:
+                # Produto usa codigo_produto como chave primária, não id
+                produto = Produto.objects.get(codigo_produto=int(entrada_data['produto_id']))
+                location = Location.objects.get(id=int(entrada_data['location_id']))
+                
+                # Validar que location pertence à empresa
+                if location.empresa != empresa:
+                    erros.append(f"Linha {idx + 1}: Location não pertence à empresa do usuário")
+                    continue
+                
+                # Validar que location permite entrada
+                if not location.permite_entrada:
+                    erros.append(f"Linha {idx + 1}: Location '{location.nome}' não permite entrada")
+                    continue
+                
+                quantidade = Decimal(str(entrada_data['quantidade']))
+                valor_unitario = Decimal(str(entrada_data.get('valor_unitario', '0.00')))
+                
+                resultado = processar_entrada_estoque(
+                    produto=produto,
+                    location=location,
+                    empresa=empresa,
+                    quantidade=quantidade,
+                    valor_unitario=valor_unitario,
+                    origem=entrada_data.get('origem', 'COMPRA'),
+                    documento_referencia=entrada_data.get('documento_referencia'),
+                    observacoes=entrada_data.get('observacoes'),
+                )
+                
+                resultados.append({
+                    'linha': idx + 1,
+                    'produto': produto.nome,
+                    'location': location.nome,
+                    'quantidade': str(quantidade),
+                    'estoque_id': resultado['estoque'].id,
+                })
+                
+            except Produto.DoesNotExist:
+                erros.append(f"Linha {idx + 1}: Produto não encontrado")
+            except Location.DoesNotExist:
+                erros.append(f"Linha {idx + 1}: Location não encontrada")
+            except EstoqueServiceError as e:
+                erros.append(f"Linha {idx + 1}: {str(e)}")
+            except Exception as e:
+                erros.append(f"Linha {idx + 1}: Erro inesperado - {str(e)}")
+        
+        if erros:
+            return Response({
+                'error': 'Alguns itens falharam',
+                'erros': erros,
+                'resultados': resultados,
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({
+            'success': True,
+            'processados': len(resultados),
+            'resultados': resultados,
+        }, status=status.HTTP_201_CREATED)
+
+
+class MovimentacaoEstoqueViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet para MovimentacaoEstoque (somente leitura)"""
+    queryset = MovimentacaoEstoque.objects.all()
+    serializer_class = MovimentacaoEstoqueSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['estoque__produto__nome', 'documento_referencia', 'numero_nota_fiscal']
+    filterset_fields = ['tipo', 'origem', 'status', 'estoque', 'estoque__location']
+    
+    def get_queryset(self):
+        """
+        Filtra movimentações por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê movimentações da empresa/filial configurada.
+        """
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
+            queryset = queryset.none()
+        else:
+            queryset = queryset.filter(estoque__empresa=empresa)
+        
+        return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('-data_movimentacao')
+    
+    @action(detail=False, methods=['get'])
+    def transferencias(self, request):
+        """
+        Retorna transferências agrupadas (uma linha por transferência, não duas movimentações separadas).
+        Agrupa movimentações de SAIDA e ENTRADA com origem='TRANSFERENCIA' que têm o mesmo documento_referencia
+        e location_origem/location_destino.
+        """
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        # Buscar movimentações de transferência (apenas SAIDA, pois ENTRADA é o par)
+        transferencias_saida = MovimentacaoEstoque.objects.filter(
+            estoque__empresa=empresa,
+            origem='TRANSFERENCIA',
+            tipo='SAIDA',
+            location_origem__isnull=False,
+            location_destino__isnull=False
+        ).select_related(
+            'estoque__produto',
+            'location_origem',
+            'location_destino'
+        ).order_by('-data_movimentacao', '-created_at')
+        
+        # Agrupar e formatar transferências
+        transferencias_formatadas = []
+        for mov_saida in transferencias_saida:
+            # Buscar a movimentação de entrada correspondente
+            mov_entrada = MovimentacaoEstoque.objects.filter(
+                origem='TRANSFERENCIA',
+                tipo='ENTRADA',
+                location_origem=mov_saida.location_origem,
+                location_destino=mov_saida.location_destino,
+                estoque__produto=mov_saida.estoque.produto,
+                documento_referencia=mov_saida.documento_referencia,
+                data_movimentacao=mov_saida.data_movimentacao,
+                created_at=mov_saida.created_at
+            ).select_related('estoque__produto', 'location_origem', 'location_destino').first()
+            
+            transferencias_formatadas.append({
+                'id': mov_saida.id,  # Usar ID da saída como identificador principal
+                'produto_id': mov_saida.estoque.produto.codigo_produto,
+                'produto_nome': mov_saida.estoque.produto.nome,
+                'produto_codigo': str(mov_saida.estoque.produto.codigo_produto),
+                'location_origem_id': mov_saida.location_origem.id,
+                'location_origem_nome': mov_saida.location_origem.nome,
+                'location_origem_codigo': mov_saida.location_origem.codigo,
+                'location_destino_id': mov_saida.location_destino.id,
+                'location_destino_nome': mov_saida.location_destino.nome,
+                'location_destino_codigo': mov_saida.location_destino.codigo,
+                'quantidade': str(mov_saida.quantidade),
+                'valor_unitario': str(mov_saida.valor_unitario),
+                'valor_total': str(mov_saida.valor_unitario * mov_saida.quantidade),
+                'documento_referencia': mov_saida.documento_referencia,
+                'observacoes': mov_saida.observacoes,
+                'data_movimentacao': mov_saida.data_movimentacao.isoformat() if mov_saida.data_movimentacao else None,
+                'created_at': mov_saida.created_at.isoformat() if mov_saida.created_at else None,
+                'movimentacao_saida_id': mov_saida.id,
+                'movimentacao_entrada_id': mov_entrada.id if mov_entrada else None,
+                'status': mov_saida.status,
+                'motivo_cancelamento': mov_saida.motivo_cancelamento,
+            })
+        
+        # Paginação manual
+        from rest_framework.pagination import PageNumberPagination
+        paginator = PageNumberPagination()
+        paginator.page_size = int(request.query_params.get('page_size', 20))
+        page = paginator.paginate_queryset(transferencias_formatadas, request)
+        
+        if page is not None:
+            return paginator.get_paginated_response(page)
+        
+        return Response(transferencias_formatadas)
+    
+    @action(detail=False, methods=['get'], url_path='transferencias/(?P<transferencia_id>[^/.]+)')
+    def get_transferencia(self, request, transferencia_id=None):
+        """
+        Busca uma transferência específica pelo ID da movimentação de saída.
+        """
+        try:
+            movimentacao_saida = MovimentacaoEstoque.objects.select_related(
+                'estoque', 'estoque__produto', 'location_origem', 'location_destino'
+            ).get(id=transferencia_id, origem='TRANSFERENCIA', tipo='SAIDA')
+        except MovimentacaoEstoque.DoesNotExist:
+            return Response({'error': 'Transferência não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        
+        # Buscar movimentação de entrada correspondente
+        movimentacao_entrada = MovimentacaoEstoque.objects.filter(
+            origem='TRANSFERENCIA',
+            tipo='ENTRADA',
+            location_origem=movimentacao_saida.location_origem,
+            location_destino=movimentacao_saida.location_destino,
+            estoque__produto=movimentacao_saida.estoque.produto,
+            documento_referencia=movimentacao_saida.documento_referencia,
+            data_movimentacao=movimentacao_saida.data_movimentacao,
+            created_at=movimentacao_saida.created_at
+        ).select_related('estoque').first()
+        
+        transferencia_formatada = {
+            'id': movimentacao_saida.id,
+            'produto_id': movimentacao_saida.estoque.produto.codigo_produto,
+            'produto_nome': movimentacao_saida.estoque.produto.nome,
+            'produto_codigo': str(movimentacao_saida.estoque.produto.codigo_produto),
+            'location_origem_id': movimentacao_saida.location_origem.id,
+            'location_origem_nome': movimentacao_saida.location_origem.nome,
+            'location_origem_codigo': movimentacao_saida.location_origem.codigo,
+            'location_destino_id': movimentacao_saida.location_destino.id,
+            'location_destino_nome': movimentacao_saida.location_destino.nome,
+            'location_destino_codigo': movimentacao_saida.location_destino.codigo,
+            'quantidade': str(movimentacao_saida.quantidade),
+            'valor_unitario': str(movimentacao_saida.valor_unitario),
+            'valor_total': str(movimentacao_saida.valor_unitario * movimentacao_saida.quantidade),
+            'documento_referencia': movimentacao_saida.documento_referencia,
+            'observacoes': movimentacao_saida.observacoes,
+            'data_movimentacao': movimentacao_saida.data_movimentacao.isoformat() if movimentacao_saida.data_movimentacao else None,
+            'created_at': movimentacao_saida.created_at.isoformat() if movimentacao_saida.created_at else None,
+            'movimentacao_saida_id': movimentacao_saida.id,
+            'movimentacao_entrada_id': movimentacao_entrada.id if movimentacao_entrada else None,
+            'status': movimentacao_saida.status,
+            'motivo_cancelamento': movimentacao_saida.motivo_cancelamento,
+        }
+        
+        return Response(transferencia_formatada)
+    
+    @action(detail=True, methods=['post'], url_path='cancelar-transferencia')
+    def cancelar_transferencia(self, request, pk=None):
+        """
+        Cancela uma transferência revertendo as movimentações de estoque.
+        Usa o ID da movimentação de saída (que é o ID retornado na lista de transferências).
+        """
+        try:
+            movimentacao_saida = MovimentacaoEstoque.objects.get(id=pk)
+        except MovimentacaoEstoque.DoesNotExist:
+            return Response({'error': 'Transferência não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        
+        motivo = request.data.get('motivo')
+        
+        try:
+            resultado = cancelar_transferencia(
+                movimentacao_saida_id=movimentacao_saida.id,
+                motivo=motivo
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Transferência cancelada com sucesso',
+                'movimentacao_saida': MovimentacaoEstoqueSerializer(resultado['movimentacao_saida']).data,
+                'movimentacao_entrada': MovimentacaoEstoqueSerializer(resultado['movimentacao_entrada']).data,
+                'estoque_origem': EstoqueSerializer(resultado['estoque_origem']).data,
+                'estoque_destino': EstoqueSerializer(resultado['estoque_destino']).data,
+            })
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f'Erro ao cancelar transferência: {str(e)}'}, 
+                          status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ReservaEstoqueViewSet(viewsets.ModelViewSet):
+    """ViewSet para ReservaEstoque"""
+    queryset = ReservaEstoque.objects.all()
+    serializer_class = ReservaEstoqueSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['estoque__produto__nome', 'documento_referencia']
+    filterset_fields = ['tipo', 'origem', 'status', 'estoque']
+    
+    def get_queryset(self):
+        """
+        Filtra reservas por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê reservas da empresa/filial configurada.
+        """
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
+            queryset = queryset.none()
+        else:
+            queryset = queryset.filter(estoque__empresa=empresa)
+        
+        return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('-created_at')
+    
+    def create(self, request, *args, **kwargs):
+        """Cria uma nova reserva"""
+        serializer = CriarReservaSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        empresa, filial = get_current_empresa_filial(request.user)
+        if not empresa:
+            return Response({'error': 'Empresa não configurada para o usuário'}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            produto = Produto.objects.get(id=serializer.validated_data['produto_id'])
+            location = Location.objects.get(id=serializer.validated_data['location_id'])
+            
+            resultado = criar_reserva(
+                produto=produto,
+                location=location,
+                empresa=empresa,
+                quantidade=serializer.validated_data['quantidade'],
+                tipo=serializer.validated_data.get('tipo', 'SOFT'),
+                origem=serializer.validated_data.get('origem', 'VENDA'),
+                documento_referencia=serializer.validated_data.get('documento_referencia'),
+                minutos_expiracao=serializer.validated_data.get('minutos_expiracao', 30),
+                observacoes=serializer.validated_data.get('observacoes'),
+            )
+            
+            return Response({
+                'reserva': ReservaEstoqueSerializer(resultado['reserva']).data,
+                'estoque': EstoqueSerializer(resultado['estoque']).data,
+            }, status=status.HTTP_201_CREATED)
+            
+        except Produto.DoesNotExist:
+            return Response({'error': 'Produto não encontrado'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except Location.DoesNotExist:
+            return Response({'error': 'Location não encontrada'}, 
+                          status=status.HTTP_404_NOT_FOUND)
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def confirmar(self, request, pk=None):
+        """Confirma uma reserva"""
+        reserva = self.get_object()
+        
+        try:
+            resultado = confirmar_reserva(reserva)
+            return Response({
+                'reserva': ReservaEstoqueSerializer(resultado['reserva']).data,
+                'estoque': EstoqueSerializer(resultado['estoque']).data,
+            })
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        """Cancela uma reserva"""
+        reserva = self.get_object()
+        motivo = request.data.get('motivo')
+        
+        try:
+            resultado = cancelar_reserva(reserva, motivo=motivo)
+            return Response({
+                'reserva': ReservaEstoqueSerializer(resultado['reserva']).data,
+                'estoque': EstoqueSerializer(resultado['estoque']).data,
+            })
+        except EstoqueServiceError as e:
+            return Response({'error': str(e)}, 
+                          status=status.HTTP_400_BAD_REQUEST)
+
+
+class PrevisaoMovimentacaoViewSet(viewsets.ModelViewSet):
+    """ViewSet para PrevisaoMovimentacao"""
+    queryset = PrevisaoMovimentacao.objects.all()
+    serializer_class = PrevisaoMovimentacaoSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['estoque__produto__nome', 'documento_referencia']
+    filterset_fields = ['tipo', 'origem', 'status', 'estoque']
+    
+    def get_queryset(self):
+        """
+        Filtra previsões por empresa/filial atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê previsões da empresa/filial configurada.
+        """
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
+            queryset = queryset.none()
+        else:
+            queryset = queryset.filter(estoque__empresa=empresa)
+        
+        return queryset.select_related('estoque', 'estoque__produto', 'estoque__location').order_by('data_prevista')
+
+
+class GrupoFilialViewSet(viewsets.ModelViewSet):
+    """ViewSet para GrupoFilial"""
+    queryset = GrupoFilial.objects.all()
+    serializer_class = GrupoFilialSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['nome', 'codigo']
+    filterset_fields = ['empresa', 'regra_alocacao', 'is_active']
+    
+    def get_queryset(self):
+        """
+        Filtra grupos por empresa atual do usuário.
+        
+        IMPORTANTE: Mesmo admin do tenant só vê grupos da empresa configurada.
+        """
+        queryset = super().get_queryset()
+        empresa, filial = get_current_empresa_filial(self.request.user)
+        
+        # SEMPRE filtrar por empresa do usuário (mesmo para admin)
+        if not empresa:
+            queryset = queryset.none()
+        else:
+            queryset = queryset.filter(empresa=empresa)
+        
+        return queryset.select_related('empresa').prefetch_related('filiais').order_by('empresa', 'nome')
+
+
+class RelatorioViewSet(viewsets.ViewSet):
+    """ViewSet para Relatórios de Estoque"""
+    permission_classes = [IsAuthenticated]
+    
+    @action(detail=False, methods=['get'])
+    def estoque_por_location(self, request):
+        """Relatório de estoque por location"""
+        # TODO: Implementar lógica de relatório
+        return Response([])
+    
+    @action(detail=False, methods=['get'])
+    def estoque_consolidado(self, request):
+        """Relatório de estoque consolidado"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'location': None,
+            'produtos': [],
+            'total_produtos': 0,
+            'valor_total_geral': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def movimentacoes(self, request):
+        """Relatório de movimentações"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'movimentacoes': [],
+            'total_entradas': '0.00',
+            'total_saidas': '0.00',
+            'saldo': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def reservas(self, request):
+        """Relatório de reservas"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'reservas': [],
+            'total_reservas': 0,
+            'total_quantidade_reservada': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def indicadores(self, request):
+        """Indicadores de estoque"""
+        # TODO: Implementar lógica de relatório
+        return Response({
+            'rotatividade': '0.00',
+            'giro_estoque': '0.00',
+            'dias_estoque': 0,
+            'produtos_parados': 0,
+            'produtos_estoque_minimo': 0,
+            'valor_total_estoque': '0.00',
+            'custo_medio_geral': '0.00'
+        })
+    
+    @action(detail=False, methods=['get'])
+    def exportar(self, request):
+        """Exportar relatório"""
+        formato = request.query_params.get('formato', 'xlsx')
+        # TODO: Implementar exportação
+        return Response({
+            'message': f'Exportação em {formato} ainda não implementada'
+        }, status=status.HTTP_501_NOT_IMPLEMENTED)
+

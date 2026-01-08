@@ -83,8 +83,8 @@ yarn-error.log*
 node_modules/
 npm-debug.log
 yarn-error.log
-package-lock.json
-yarn.lock
+# package-lock.json - DEVE estar no repositório para builds reproduzíveis
+# yarn.lock
 
 # Frontend React
 frontend/node_modules/
@@ -169,4 +169,21 @@ secrets.json
 *.key
 *.cert
 .secrets/
+
+# Terraform
+terraform/environments/*/terraform.tfvars
+terraform/environments/*/.terraform/
+terraform/environments/*/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 

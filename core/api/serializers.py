@@ -1,25 +1,34 @@
+"""
+Serializers para API do core
+"""
 from rest_framework import serializers
-# Models movidos para cadastros app
-from cadastros.models import Pessoa, Produto, Servico
+from public.models import EmailSettings
 
 
-class PessoaSerializer(serializers.ModelSerializer):
+class EmailSettingsSerializer(serializers.ModelSerializer):
+    """Serializer para configurações de email"""
+    
     class Meta:
-        model = Pessoa
-        fields = '__all__'
-        read_only_fields = ('codigo_cadastro',)
-
-
-class ProdutoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Produto
-        fields = '__all__'
-        read_only_fields = ('codigo_produto',)
-
-
-class ServicoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Servico
-        fields = '__all__'
-        read_only_fields = ('codigo_servico',)
-
+        model = EmailSettings
+        fields = [
+            'id', 'backend', 'host', 'port', 'use_tls', 'use_ssl',
+            'username', 'password', 'from_email', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'password': {'write_only': True},  # Não retornar senha na leitura
+        }
+    
+    def validate(self, attrs):
+        """Valida se configurações SMTP estão completas quando backend é SMTP"""
+        if attrs.get('backend') == 'smtp':
+            if not attrs.get('host'):
+                raise serializers.ValidationError({
+                    'host': 'Servidor SMTP é obrigatório quando backend é SMTP'
+                })
+            if not attrs.get('username'):
+                raise serializers.ValidationError({
+                    'username': 'Usuário é obrigatório quando backend é SMTP'
+                })
+        return attrs

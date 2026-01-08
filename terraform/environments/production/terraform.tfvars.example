@@ -1,0 +1,6 @@
+# Exemplo de arquivo terraform.tfvars para PRODUÇÃO
+# ⚠️ CUIDADO: Este arquivo contém configurações de produção
+# Copie para terraform.tfvars e NUNCA commite o arquivo real!
+
+aws_key_pair_name = "siscr-keypair-production"
+

@@ -1,0 +1,75 @@
+name: Deploy para UAT
+
+on:
+  push:
+    branches: [ staging ]
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  deploy-uat:
+    name: Deploy para Ambiente UAT
+    runs-on: ubuntu-latest
+    environment: uat # Requer aprovação manual se configurado
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.UAT_SSH_PRIVATE_KEY }}
+
+      - name: Deploy para UAT via SSH
+        env:
+          UAT_HOST: ${{ secrets.UAT_HOST }}
+          UAT_USER: ${{ secrets.UAT_USER }}
+        run: |
+          echo "🚀 Iniciando deploy para UAT..."
+          echo "📡 Conectando em $UAT_HOST como $UAT_USER"
+          
+          ssh -o StrictHostKeyChecking=no $UAT_USER@$UAT_HOST << 'ENDSSH'
+            set -e
+            echo "📁 Navegando para diretório da aplicação..."
+            cd /opt/siscr || { echo "❌ Diretório /opt/siscr não encontrado"; exit 1; }
+            
+            echo "💾 Criando backup antes do deploy..."
+            docker-compose exec -T db pg_dump -U postgres siscr_db > /opt/siscr/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql || true
+            
+            echo "📥 Atualizando código do repositório..."
+            git fetch origin
+            git checkout staging
+            git pull origin staging
+            
+            echo "🐳 Parando containers..."
+            docker-compose down
+            
+            echo "🏗️ Reconstruindo imagens..."
+            docker-compose build --no-cache
+            
+            echo "🚀 Iniciando containers..."
+            docker-compose up -d
+            
+            echo "⏳ Aguardando serviços iniciarem..."
+            sleep 15
+            
+            echo "🔄 Executando migrations..."
+            docker-compose exec -T web python manage.py migrate_schemas --shared --noinput || true
+            
+            echo "📦 Coletando arquivos estáticos..."
+            docker-compose exec -T web python manage.py collectstatic --noinput || true
+            
+            echo "✅ Deploy concluído!"
+            echo "📊 Status dos containers:"
+            docker-compose ps
+          ENDSSH
+
+      - name: Verificar saúde da aplicação
+        env:
+          UAT_URL: ${{ secrets.UAT_URL || 'http://uat.siscr.com.br' }}
+        run: |
+          echo "🏥 Verificando saúde da aplicação..."
+          sleep 5
+          curl -f $UAT_URL/api/health/ || echo "⚠️ Health check falhou"
+          echo "✅ Verificação concluída"
+

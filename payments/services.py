@@ -24,8 +24,16 @@ class StripeService:
         # Configurar Stripe apenas se não estiver em modo simulado
         if self.stripe_mode == 'live':
             stripe.api_key = settings.STRIPE_SECRET_KEY
+            stripe.api_version = getattr(settings, 'STRIPE_API_VERSION', '2024-11-20.acacia')
         elif self.stripe_mode == 'test':
-            stripe.api_key = settings.STRIPE_SECRET_KEY_TEST
+            stripe_secret_key = getattr(settings, 'STRIPE_SECRET_KEY_TEST', '')
+            if not stripe_secret_key:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning('STRIPE_SECRET_KEY_TEST não configurado. Configure via variável de ambiente.')
+            stripe.api_key = stripe_secret_key
+            # Configurar versão da API
+            stripe.api_version = getattr(settings, 'STRIPE_API_VERSION', '2024-11-20.acacia')
         # Se simulado, não configura stripe.api_key
     
     def _is_simulated(self):
@@ -160,7 +168,7 @@ class StripeService:
     
     def cancel_subscription(self, subscription_id):
         """
-        Cancela uma assinatura no Stripe
+        Cancela uma assinatura no Stripe (ao fim do período)
         """
         if self._is_simulated():
             # Simular cancelamento
@@ -176,6 +184,35 @@ class StripeService:
                 cancel_at_period_end=True,
             )
             return subscription
+        except Exception as e:
+            raise Exception(f"Erro ao cancelar subscription no Stripe: {str(e)}")
+    
+    def cancel_subscription_immediately(self, subscription_id):
+        """
+        Cancela uma assinatura no Stripe imediatamente (não espera o fim do período)
+        Usado quando o tenant é excluído
+        """
+        if self._is_simulated():
+            # Simular cancelamento imediato
+            return {
+                'id': subscription_id,
+                'status': 'canceled',
+                'canceled_at': int(timezone.now().timestamp()),
+            }
+        
+        try:
+            # Cancelar imediatamente usando delete (cancela e não renova)
+            subscription = stripe.Subscription.delete(subscription_id)
+            return subscription
+        except stripe.error.InvalidRequestError as e:
+            # Se a subscription já foi cancelada ou não existe, apenas logar
+            if 'No such subscription' in str(e) or 'already canceled' in str(e):
+                return {
+                    'id': subscription_id,
+                    'status': 'canceled',
+                    'deleted': True,
+                }
+            raise Exception(f"Erro ao cancelar subscription no Stripe: {str(e)}")
         except Exception as e:
             raise Exception(f"Erro ao cancelar subscription no Stripe: {str(e)}")
     
@@ -211,6 +248,76 @@ class StripeService:
             return stripe.Subscription.retrieve(subscription_id)
         except Exception as e:
             raise Exception(f"Erro ao atualizar subscription no Stripe: {str(e)}")
+    
+    def create_checkout_session(self, price_id, customer_id=None, customer_email=None, success_url=None, cancel_url=None, metadata=None):
+        """
+        Cria uma sessão de checkout do Stripe
+        Usado para redirecionar o cliente para o checkout do Stripe
+        """
+        if self._is_simulated():
+            # Simular criação de checkout session
+            return {
+                'id': f'cs_simulated_{timezone.now().timestamp()}',
+                'url': f'http://localhost:5173/checkout/success?session_id=cs_simulated_{timezone.now().timestamp()}',
+                'payment_status': 'unpaid',
+            }
+        
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # Verificar se Stripe está configurado
+            if not stripe.api_key:
+                raise Exception('Stripe não está configurado. Configure STRIPE_SECRET_KEY_TEST via variável de ambiente.')
+            
+            checkout_data = {
+                'mode': 'subscription',
+                'line_items': [{
+                    'price': price_id,
+                    'quantity': 1,
+                }],
+                'success_url': success_url or 'http://localhost:5173/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url': cancel_url or 'http://localhost:5173/checkout/cancel',
+            }
+            
+            if customer_id:
+                checkout_data['customer'] = customer_id
+            elif customer_email:
+                checkout_data['customer_email'] = customer_email
+            
+            if metadata:
+                checkout_data['metadata'] = metadata
+            
+            logger.info(f'Criando checkout session no Stripe com price_id: {price_id}, customer_id: {customer_id}')
+            session = stripe.checkout.Session.create(**checkout_data)
+            logger.info(f'Checkout session criada: {session.id}')
+            return session
+        except stripe.error.StripeError as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro do Stripe: {str(e)}')
+            raise Exception(f"Erro do Stripe ao criar checkout session: {str(e)}")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Erro ao criar checkout session: {str(e)}')
+            raise Exception(f"Erro ao criar checkout session no Stripe: {str(e)}")
+    
+    def retrieve_checkout_session(self, session_id):
+        """
+        Recupera uma sessão de checkout do Stripe
+        """
+        if self._is_simulated():
+            return {
+                'id': session_id,
+                'payment_status': 'paid',
+                'subscription': f'sub_simulated_{timezone.now().timestamp()}',
+            }
+        
+        try:
+            return stripe.checkout.Session.retrieve(session_id)
+        except Exception as e:
+            raise Exception(f"Erro ao recuperar checkout session no Stripe: {str(e)}")
 
 
 # Instância global do serviço

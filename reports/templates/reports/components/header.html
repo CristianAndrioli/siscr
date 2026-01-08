@@ -1,0 +1,34 @@
+{% if config.incluir_logo or config.incluir_dados_empresa %}
+<header class="report-header">
+    {% if config.incluir_logo %}
+    <div class="logo">
+        {% if config.logo_upload %}
+        <img src="{{ config.logo_upload.url }}" alt="Logo">
+        {% elif config.logo_url %}
+        <img src="{{ config.logo_url }}" alt="Logo">
+        {% elif empresa.logo %}
+        <img src="{{ empresa.logo.url }}" alt="Logo">
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    {% if config.incluir_dados_empresa %}
+    <div class="empresa-info">
+        <h1>{{ config.nome_empresa|default:empresa.nome|default:"Empresa" }}</h1>
+        {% if config.endereco or empresa.endereco %}
+        <p>{{ config.endereco|default:empresa.endereco }}</p>
+        {% endif %}
+        {% if config.telefone or empresa.telefone %}
+        <p>Tel: {{ config.telefone|default:empresa.telefone }}</p>
+        {% endif %}
+        {% if config.email or empresa.email %}
+        <p>Email: {{ config.email|default:empresa.email }}</p>
+        {% endif %}
+        {% if config.cnpj or empresa.cnpj %}
+        <p>CNPJ: {{ config.cnpj|default:empresa.cnpj }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</header>
+{% endif %}
+

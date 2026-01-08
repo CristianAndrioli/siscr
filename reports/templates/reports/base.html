@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ template.nome }} - {{ config.nome_empresa|default:empresa.nome|default:"SISCR" }}</title>
+    {% include 'reports/components/styles.html' %}
+    {% if template.template_css %}
+    <style>
+        {{ template.template_css|safe }}
+    </style>
+    {% endif %}
+</head>
+<body>
+    {% if config.incluir_logo or config.incluir_dados_empresa %}
+    {% include 'reports/components/header.html' %}
+    {% endif %}
+    
+    <div class="report-content">
+        {{ content|safe }}
+    </div>
+    
+    {% include 'reports/components/footer.html' %}
+</body>
+</html>
+

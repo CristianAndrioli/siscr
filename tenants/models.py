@@ -30,6 +30,14 @@ class Tenant(TenantMixin):
         help_text='Data e hora da última modificação do registro'
     )
     
+    # Backup
+    last_backup_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Último Backup Manual',
+        help_text='Data e hora do último backup manual realizado'
+    )
+    
     # Configurações
     is_active = models.BooleanField(default=True, verbose_name='Ativo')
     

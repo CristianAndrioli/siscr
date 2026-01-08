@@ -128,10 +128,7 @@ class Command(BaseCommand):
                     {
                         'nome': 'Comércio & Serviços Premium',
                         'cnpj': '45.678.901/0001-23',
-                        'filiais': [
-                            {'nome': 'Matriz - Florianópolis', 'codigo': '001'},
-                            {'nome': 'Filial - Curitiba', 'codigo': '002'},
-                        ]
+                        'filiais': []  # Empresa SEM filiais para testar comportamento sem estrutura de filiais
                     }
                 ]
             }
@@ -156,7 +153,9 @@ class Command(BaseCommand):
         self.stdout.write("\n📋 Resumo:")
         self.stdout.write("  1. Comércio Simples: 1 empresa, 1 filial")
         self.stdout.write("  2. Grupo Expansão: 1 empresa, 2 filiais")
-        self.stdout.write("  3. Holding Diversificada: 2 empresas, 2 filiais cada")
+        self.stdout.write("  3. Holding Diversificada: 2 empresas")
+        self.stdout.write("     - Tech Solutions Brasil: 2 filiais")
+        self.stdout.write("     - Comércio & Serviços Premium: 0 filiais (sem filial)")
         self.stdout.write("\n🔐 Senha padrão para todos os usuários: senha123")
 
     def criar_tenant_completo(self, tenant_name, schema_name, empresas_config):
@@ -227,11 +226,12 @@ class Command(BaseCommand):
             # Criar empresas e filiais
             for emp_config in empresas_config:
                 # Usar get_or_create para evitar duplicatas se o script for executado múltiplas vezes
+                # IMPORTANTE: Filtrar por tenant também para garantir isolamento correto
                 cidade, estado = random.choice(CIDADES)
                 empresa, created = Empresa.objects.get_or_create(
                     cnpj=emp_config['cnpj'],
+                    tenant=tenant,  # Adicionar tenant na busca para garantir isolamento
                     defaults={
-                        'tenant': tenant,
                         'nome': emp_config['nome'],
                         'razao_social': f"{emp_config['nome']} LTDA",
                         'cidade': cidade,
@@ -327,6 +327,37 @@ class Command(BaseCommand):
                     codigo += 1
             
             # Criar funcionários (2 por filial)
+            # Primeiro, criar funcionários para empresas que NÃO têm filiais
+            for empresa in empresas_criadas:
+                # Verificar se esta empresa tem filiais
+                empresa_tem_filiais = any(f.empresa == empresa for f in filiais_criadas)
+                if not empresa_tem_filiais:
+                    # Empresa sem filiais: criar 2 funcionários diretamente na empresa
+                    for i in range(2):
+                        nome = random.choice(NOMES_PESSOAS)
+                        cidade, estado = random.choice(CIDADES)
+                        pessoa = Pessoa.objects.create(
+                            codigo_cadastro=codigo,
+                            tipo='PF',
+                            cpf_cnpj=gerar_cpf(),
+                            nome_completo=nome,
+                            empresa=empresa,
+                            filial=None,  # Sem filial
+                            logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
+                            numero=str(random.randint(100, 999)),
+                            bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
+                            cidade=cidade,
+                            estado=estado,
+                            cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
+                            telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
+                            email=f"{nome.lower().replace(' ', '.')}@{empresa.nome.lower().replace(' ', '')}.com.br",
+                            cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
+                            comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
+                        )
+                        pessoas_criadas.append(pessoa)
+                        codigo += 1
+            
+            # Depois, criar funcionários para filiais
             for filial in filiais_criadas:
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)
@@ -470,10 +501,145 @@ class Command(BaseCommand):
             
             self.stdout.write(f"  ✅ {len(contas_pagar)} contas a pagar criadas")
             
-            # Criar usuários (2 por filial) - precisa fazer no schema público
+            # Criar usuário admin primeiro (um por tenant)
             self.stdout.write("\n👤 Criando usuários...")
             usuarios_criados = []
             
+            # Criar usuário admin do tenant
+            admin_nome = f"Admin {tenant_name}"
+            admin_username = f"admin.{schema_name}"
+            admin_email = f"admin@{schema_name}.com"
+            
+            with schema_context('public'):
+                user_admin, created = User.objects.get_or_create(
+                    username=admin_username,
+                    defaults={
+                        'email': admin_email,
+                        'first_name': 'Admin',
+                        'last_name': tenant_name,
+                    }
+                )
+                if created:
+                    user_admin.set_password('senha123')
+                    user_admin.save()
+                
+                # Criar perfil
+                profile_admin, _ = UserProfile.objects.get_or_create(
+                    user=user_admin,
+                    defaults={
+                        'current_tenant': tenant,
+                        'current_empresa': empresas_criadas[0] if empresas_criadas else None,
+                        'current_filial': filiais_criadas[0] if filiais_criadas else None,
+                    }
+                )
+                if not profile_admin.current_tenant:
+                    profile_admin.current_tenant = tenant
+                    if empresas_criadas:
+                        profile_admin.current_empresa = empresas_criadas[0]
+                    if filiais_criadas:
+                        profile_admin.current_filial = filiais_criadas[0]
+                    profile_admin.save()
+                
+                # Criar membership como admin
+                membership_admin, _ = TenantMembership.objects.get_or_create(
+                    user=user_admin,
+                    tenant=tenant,
+                    defaults={
+                        'role': 'admin',
+                        'is_active': True,
+                    }
+                )
+                # Garantir que seja admin mesmo se já existir
+                if membership_admin.role != 'admin':
+                    membership_admin.role = 'admin'
+                    membership_admin.save()
+            
+            # Criar no schema do tenant também
+            with schema_context(schema_name):
+                user_admin_tenant, _ = User.objects.get_or_create(
+                    username=admin_username,
+                    defaults={
+                        'email': admin_email,
+                        'first_name': 'Admin',
+                        'last_name': tenant_name,
+                    }
+                )
+                if not user_admin_tenant.has_usable_password():
+                    user_admin_tenant.set_password('senha123')
+                    user_admin_tenant.save()
+                usuarios_criados.append(user_admin_tenant)
+                self.stdout.write(f"    ✅ Admin: {admin_username} (role: admin)")
+            
+            # Criar usuários normais (2 por filial)
+            # Primeiro, criar usuários para empresas que NÃO têm filiais
+            for empresa in empresas_criadas:
+                # Verificar se esta empresa tem filiais
+                empresa_tem_filiais = any(f.empresa == empresa for f in filiais_criadas)
+                if not empresa_tem_filiais:
+                    # Empresa sem filiais: criar 2 usuários diretamente na empresa
+                    for i in range(2):
+                        nome = random.choice(NOMES_PESSOAS)
+                        username = f"{nome.lower().replace(' ', '.')}.emp.{empresa.id}"
+                        if i > 0:
+                            username = f"{username}.{i}"
+                        email = f"{username}@{tenant.schema_name}.com"
+                        
+                        # Criar no schema público
+                        with schema_context('public'):
+                            user_public, created = User.objects.get_or_create(
+                                username=username,
+                                defaults={
+                                    'email': email,
+                                    'first_name': nome.split()[0],
+                                    'last_name': ' '.join(nome.split()[1:]) if len(nome.split()) > 1 else '',
+                                }
+                            )
+                            if created:
+                                user_public.set_password('senha123')
+                                user_public.save()
+                            
+                            # Criar perfil
+                            profile, _ = UserProfile.objects.get_or_create(
+                                user=user_public,
+                                defaults={
+                                    'current_tenant': tenant,
+                                    'current_empresa': empresa,
+                                    'current_filial': None,  # Sem filial
+                                }
+                            )
+                            if not profile.current_tenant:
+                                profile.current_tenant = tenant
+                                profile.current_empresa = empresa
+                                profile.current_filial = None
+                                profile.save()
+                            
+                            # Criar membership
+                            TenantMembership.objects.get_or_create(
+                                user=user_public,
+                                tenant=tenant,
+                                defaults={
+                                    'role': 'user',
+                                    'is_active': True,
+                                }
+                            )
+                        
+                        # Criar no schema do tenant também
+                        with schema_context(schema_name):
+                            user_tenant, _ = User.objects.get_or_create(
+                                username=username,
+                                defaults={
+                                    'email': email,
+                                    'first_name': nome.split()[0],
+                                    'last_name': ' '.join(nome.split()[1:]) if len(nome.split()) > 1 else '',
+                                }
+                            )
+                            if not user_tenant.has_usable_password():
+                                user_tenant.set_password('senha123')
+                                user_tenant.save()
+                            usuarios_criados.append(user_tenant)
+                            self.stdout.write(f"    ✅ Usuário: {username} ({empresa.nome} - sem filial)")
+            
+            # Depois, criar usuários para filiais
             for filial in filiais_criadas:
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)

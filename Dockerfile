@@ -5,6 +5,13 @@ WORKDIR /app
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y \
     postgresql-client \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libgdk-pixbuf-xlib-2.0-dev \
+    libffi-dev \
+    shared-mime-info \
+    libglib2.0-0 \
+    libglib2.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar dependências Python

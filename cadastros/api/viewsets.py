@@ -28,10 +28,10 @@ class PessoaViewSet(viewsets.ModelViewSet):
     search_fields = ['cpf_cnpj', 'nome_completo', 'razao_social', 'nome_fantasia', 'cidade', 'email']
 
     def get_queryset(self):
-        """Filtra pessoas por empresa/filial atual do usuário."""
+        """Filtra pessoas por empresa/filial atual do usuário. Admin do tenant vê todos os dados."""
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
-        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial, user=self.request.user)
 
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
@@ -56,10 +56,10 @@ class ProdutoViewSet(viewsets.ModelViewSet):
     search_fields = ['nome', 'descricao', 'codigo_ncm']
 
     def get_queryset(self):
-        """Filtra produtos por empresa/filial atual do usuário."""
+        """Filtra produtos por empresa/filial atual do usuário. Admin do tenant vê todos os dados."""
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
-        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial, user=self.request.user)
 
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
@@ -81,10 +81,10 @@ class ServicoViewSet(viewsets.ModelViewSet):
     search_fields = ['nome', 'descricao', 'codigo_ncm']
 
     def get_queryset(self):
-        """Filtra serviços por empresa/filial atual do usuário."""
+        """Filtra serviços por empresa/filial atual do usuário. Admin do tenant vê todos os dados."""
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
-        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial, user=self.request.user)
 
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
@@ -105,10 +105,10 @@ class ContaReceberViewSet(viewsets.ModelViewSet):
     search_fields = ['numero_documento', 'cliente__razao_social', 'cliente__nome_fantasia', 'descricao']
     
     def get_queryset(self):
-        """Filtra contas a receber por empresa/filial atual do usuário."""
+        """Filtra contas a receber por empresa/filial atual do usuário. Admin do tenant vê todos os dados."""
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
-        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial, user=self.request.user)
     
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):
@@ -128,10 +128,10 @@ class ContaPagarViewSet(viewsets.ModelViewSet):
     search_fields = ['numero_documento', 'fornecedor__razao_social', 'fornecedor__nome_fantasia', 'descricao']
     
     def get_queryset(self):
-        """Filtra contas a pagar por empresa/filial atual do usuário."""
+        """Filtra contas a pagar por empresa/filial atual do usuário. Admin do tenant vê todos os dados."""
         queryset = super().get_queryset()
         empresa, filial = get_current_empresa_filial(self.request.user)
-        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial)
+        return filter_by_empresa_filial(queryset, empresa=empresa, filial=filial, user=self.request.user)
     
     @action(detail=False, methods=['get'])
     def proximo_codigo(self, request):

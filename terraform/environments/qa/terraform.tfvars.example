@@ -1,0 +1,6 @@
+# Exemplo de arquivo terraform.tfvars para QA
+# Copie este arquivo para terraform.tfvars e preencha com seus valores
+# NUNCA commite terraform.tfvars com valores reais!
+
+aws_key_pair_name = "siscr-keypair"
+

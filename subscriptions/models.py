@@ -79,6 +79,22 @@ class Plan(SiscrModelBase):
         verbose_name='Funcionalidades'
     )
     
+    # Stripe Price IDs
+    stripe_price_id_monthly = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Stripe Price ID (Mensal)',
+        help_text='ID do preço mensal no Stripe (ex: price_xxx)'
+    )
+    stripe_price_id_yearly = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Stripe Price ID (Anual)',
+        help_text='ID do preço anual no Stripe (ex: price_xxx)'
+    )
+    
     class Meta:
         verbose_name = 'Plano'
         verbose_name_plural = 'Planos'
@@ -89,6 +105,91 @@ class Plan(SiscrModelBase):
     
     def __str__(self):
         return self.name
+    
+    def get_stripe_price_id(self, billing_cycle='monthly'):
+        """
+        Retorna o Stripe Price ID baseado no ciclo de cobrança
+        """
+        if billing_cycle == 'yearly':
+            return self.stripe_price_id_yearly or self.stripe_price_id_monthly
+        return self.stripe_price_id_monthly
+    
+    def sync_prices_from_stripe(self, force=False):
+        """
+        Sincroniza preços do Stripe para o banco local
+        Atualiza price_monthly e price_yearly com os valores do Stripe
+        
+        Args:
+            force: Se True, sincroniza mesmo se já foi sincronizado recentemente
+        
+        Returns:
+            dict: {'updated': bool, 'monthly_price': Decimal, 'yearly_price': Decimal or None}
+        """
+        from django.conf import settings
+        from decimal import Decimal
+        import logging
+        
+        logger = logging.getLogger(__name__)
+        
+        stripe_mode = getattr(settings, 'STRIPE_MODE', 'simulated')
+        if stripe_mode == 'simulated':
+            # Em modo simulado, não sincroniza
+            return {'updated': False, 'monthly_price': self.price_monthly, 'yearly_price': self.price_yearly}
+        
+        try:
+            import stripe
+            
+            updated = False
+            monthly_price = self.price_monthly
+            yearly_price = self.price_yearly
+            
+            # Sincronizar preço mensal
+            if self.stripe_price_id_monthly:
+                try:
+                    price = stripe.Price.retrieve(self.stripe_price_id_monthly)
+                    # Stripe armazena preços em centavos
+                    new_monthly = Decimal(price.unit_amount) / 100
+                    
+                    if new_monthly != self.price_monthly:
+                        self.price_monthly = new_monthly
+                        monthly_price = new_monthly
+                        updated = True
+                        logger.info(f'Preço mensal do plano {self.name} atualizado: R$ {self.price_monthly} -> R$ {new_monthly}')
+                except stripe.error.StripeError as e:
+                    logger.warning(f'Erro ao buscar preço mensal do Stripe para plano {self.name}: {str(e)}')
+                except Exception as e:
+                    logger.error(f'Erro inesperado ao sincronizar preço mensal do plano {self.name}: {str(e)}')
+            
+            # Sincronizar preço anual
+            if self.stripe_price_id_yearly:
+                try:
+                    price = stripe.Price.retrieve(self.stripe_price_id_yearly)
+                    # Stripe armazena preços em centavos
+                    new_yearly = Decimal(price.unit_amount) / 100
+                    
+                    if new_yearly != (self.price_yearly or Decimal('0')):
+                        self.price_yearly = new_yearly
+                        yearly_price = new_yearly
+                        updated = True
+                        logger.info(f'Preço anual do plano {self.name} atualizado: R$ {self.price_yearly} -> R$ {new_yearly}')
+                except stripe.error.StripeError as e:
+                    logger.warning(f'Erro ao buscar preço anual do Stripe para plano {self.name}: {str(e)}')
+                except Exception as e:
+                    logger.error(f'Erro inesperado ao sincronizar preço anual do plano {self.name}: {str(e)}')
+            
+            # Salvar apenas se houve atualização
+            if updated:
+                self.save(update_fields=['price_monthly', 'price_yearly'])
+            
+            return {
+                'updated': updated,
+                'monthly_price': monthly_price,
+                'yearly_price': yearly_price,
+            }
+            
+        except Exception as e:
+            logger.error(f'Erro ao sincronizar preços do Stripe para plano {self.name}: {str(e)}', exc_info=True)
+            return {'updated': False, 'monthly_price': self.price_monthly, 'yearly_price': self.price_yearly}
 
 
 class Feature(SiscrModelBase):
@@ -121,6 +222,7 @@ class Subscription(SiscrModelBase):
     """
     STATUS_CHOICES = [
         ('trial', 'Trial'),
+        ('pending', 'Aguardando Pagamento'),
         ('active', 'Ativa'),
         ('past_due', 'Pagamento Atrasado'),
         ('canceled', 'Cancelada'),
@@ -204,6 +306,7 @@ class Subscription(SiscrModelBase):
     @property
     def is_active(self):
         """Verifica se assinatura está ativa"""
+        # 'pending' não é considerado ativo - precisa pagamento confirmado
         if self.status not in ['active', 'trial']:
             return False
         return self.current_period_end > timezone.now()

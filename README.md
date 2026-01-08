@@ -359,7 +359,22 @@ siscr/
 
 ### Variáveis de Ambiente
 
-O projeto usa variáveis de ambiente para configuração. No `docker-compose.yml` estão definidas:
+O projeto usa variáveis de ambiente para configuração. 
+
+**Para desenvolvimento local (fora do Docker):**
+
+1. Copie o arquivo de exemplo:
+   ```bash
+   # Linux/Mac
+   cp env.example .env
+   
+   # Windows
+   copy env.example .env
+   ```
+
+2. Edite o arquivo `.env` e configure as variáveis necessárias.
+
+**No Docker Compose**, as variáveis estão definidas no `docker-compose.yml`:
 
 - `DB_NAME`: Nome do banco de dados (padrão: `siscr_db`)
 - `DB_USER`: Usuário do PostgreSQL (padrão: `postgres`)
@@ -367,6 +382,8 @@ O projeto usa variáveis de ambiente para configuração. No `docker-compose.yml
 - `DB_HOST`: Host do banco (padrão: `db`)
 - `DB_PORT`: Porta do banco (padrão: `5432`)
 - `SECRET_KEY`: Chave secreta do Django (altere em produção!)
+
+**⚠️ IMPORTANTE:** Em produção, configure todas as variáveis de ambiente adequadamente. Veja o arquivo `env.example` para a lista completa de variáveis disponíveis.
 
 ### Portas
 
@@ -468,6 +485,15 @@ docker-compose up -d --build
 - **Axios**: Cliente HTTP
 
 ---
+
+## 📚 Documentação
+
+Documentação completa disponível na pasta `docs/`:
+
+- **[Documentação da API](./docs/API_DOCUMENTATION.md)** - Guia completo de todos os endpoints da API
+- **[Guia de Setup para Desenvolvimento](./docs/SETUP_DEVELOPMENT.md)** - Como configurar o ambiente de desenvolvimento
+- **[Guia de Testes](./docs/TESTES.md)** - Como executar e escrever testes
+- **[Roadmap CI/CD](./docs/CI_CD_ROADMAP.md)** - Estratégia de CI/CD e deploy
 
 ## 📞 Suporte
 

@@ -101,27 +101,44 @@ function Perfil() {
       setError('');
       setLoading(true);
 
-      // TODO: Implementar endpoint de atualização de perfil
-      // Por enquanto, apenas simular sucesso
+      // Atualizar perfil via API
+      const response = await authService.updateProfile({
+        user: {
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          email: formData.email,
+        },
+        profile: {
+          phone: formData.phone,
+        },
+      });
+
+      // Atualizar dados locais
       if (data) {
         setData({
           ...data,
           user: {
             ...data.user,
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            email: formData.email,
+            first_name: response.user.first_name,
+            last_name: response.user.last_name,
+            email: response.user.email,
           },
           profile: {
             ...data.profile,
-            phone: formData.phone,
+            phone: response.profile.phone,
           },
         });
-        setIsEditing(false);
-        alert('Perfil atualizado com sucesso!');
       }
+
+      setIsEditing(false);
+      // Usar mensagem de sucesso mais elegante
+      setError('');
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao atualizar perfil';
+      const axiosError = err as { response?: { data?: { error?: string; detail?: string } } };
+      const errorMessage = 
+        axiosError.response?.data?.error || 
+        axiosError.response?.data?.detail || 
+        (err instanceof Error ? err.message : 'Erro ao atualizar perfil');
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -166,12 +183,23 @@ function Perfil() {
     );
   }
 
-  if (!data) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-red-600">Erro ao carregar perfil</p>
-          {error && <p className="text-sm text-gray-500 mt-2">{error}</p>}
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando perfil...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center max-w-md">
+          <p className="text-red-600 text-lg font-semibold mb-2">Erro ao carregar perfil</p>
+          {error && <p className="text-sm text-gray-500">{error}</p>}
         </div>
       </div>
     );

@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCrud } from '../../hooks/useCrud';
-import { DetailView, DynamicForm } from '../../components/common';
+import { DetailView, DynamicForm, Alert } from '../../components/common';
 import { pessoasService } from '../../services/cadastros/pessoas';
 import { useAutoFormFields } from '../../hooks/useAutoFormFields';
 import { ESTADOS } from '../../utils/constants';
@@ -211,6 +211,68 @@ export function PessoasDetail() {
     }
   };
 
+  // Configuração dos campos para exibição (DEVE vir antes de qualquer retorno antecipado)
+  const fields = [
+    { key: 'codigo_cadastro', label: 'Código' },
+    { key: 'tipo', label: 'Tipo', render: (value: unknown) => (value === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica') },
+    { key: 'cpf_cnpj', label: 'CPF/CNPJ' },
+    { key: 'nome_completo', label: 'Nome Completo' },
+    { key: 'razao_social', label: 'Razão Social' },
+    { key: 'nome_fantasia', label: 'Nome Fantasia' },
+    { key: 'inscricao_estadual', label: 'Inscrição Estadual' },
+    { key: 'contribuinte', label: 'Contribuinte ICMS', render: (value: unknown) => (value ? 'Sim' : 'Não') },
+    { key: 'logradouro', label: 'Logradouro' },
+    { key: 'numero', label: 'Número' },
+    { key: 'letra', label: 'Letra' },
+    { key: 'complemento', label: 'Complemento' },
+    { key: 'bairro', label: 'Bairro' },
+    { key: 'cidade', label: 'Cidade' },
+    { key: 'estado', label: 'Estado' },
+    { key: 'cep', label: 'CEP' },
+    { key: 'nome_contato', label: 'Nome do Contato' },
+    { key: 'telefone_fixo', label: 'Telefone Fixo' },
+    { key: 'telefone_celular', label: 'Telefone Celular' },
+    { key: 'email', label: 'Email' },
+    { key: 'cargo', label: 'Cargo' },
+    { key: 'comissoes', label: 'Comissões (%)' },
+    { key: 'observacoes', label: 'Observações' },
+  ];
+
+  // Gerar tabs (DEVE vir antes de qualquer retorno antecipado)
+  const tabs = useMemo(() => {
+    const detailTab = {
+      id: 'detalhamento',
+      label: 'Detalhamento',
+      content: (
+        <div className="space-y-6">
+          {error && (
+            <Alert type="error" message={error} onClose={() => {}} dismissible={false} />
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {currentRecord && fields.map((field) => {
+              const value = (currentRecord as Record<string, unknown>)[field.key];
+              const displayValue = field.render ? field.render(value) : (value ?? '-');
+              return (
+                <div key={field.key} className="border-b border-gray-200 pb-2">
+                  <label className="text-sm font-medium text-gray-500">{field.label}</label>
+                  <p className="mt-1 text-sm text-gray-900">{displayValue}</p>
+                </div>
+              );
+            })}
+            {!currentRecord && (
+              <div className="col-span-2 text-center text-gray-500 py-8">
+                Carregando dados...
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+    };
+    
+    return [detailTab];
+  }, [currentRecord, fields, error]);
+
   // Se for novo ou estiver editando, mostrar formulário
   if (id === 'novo' || isEditing) {
     return (
@@ -280,39 +342,11 @@ export function PessoasDetail() {
     );
   }
 
-  // Configuração dos campos para exibição
-  const fields = [
-    { key: 'codigo_cadastro', label: 'Código' },
-    { key: 'tipo', label: 'Tipo', render: (value: unknown) => (value === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica') },
-    { key: 'cpf_cnpj', label: 'CPF/CNPJ' },
-    { key: 'nome_completo', label: 'Nome Completo' },
-    { key: 'razao_social', label: 'Razão Social' },
-    { key: 'nome_fantasia', label: 'Nome Fantasia' },
-    { key: 'inscricao_estadual', label: 'Inscrição Estadual' },
-    { key: 'contribuinte', label: 'Contribuinte ICMS', render: (value: unknown) => (value ? 'Sim' : 'Não') },
-    { key: 'logradouro', label: 'Logradouro' },
-    { key: 'numero', label: 'Número' },
-    { key: 'letra', label: 'Letra' },
-    { key: 'complemento', label: 'Complemento' },
-    { key: 'bairro', label: 'Bairro' },
-    { key: 'cidade', label: 'Cidade' },
-    { key: 'estado', label: 'Estado' },
-    { key: 'cep', label: 'CEP' },
-    { key: 'nome_contato', label: 'Nome do Contato' },
-    { key: 'telefone_fixo', label: 'Telefone Fixo' },
-    { key: 'telefone_celular', label: 'Telefone Celular' },
-    { key: 'email', label: 'Email' },
-    { key: 'cargo', label: 'Cargo' },
-    { key: 'comissoes', label: 'Comissões (%)' },
-    { key: 'observacoes', label: 'Observações' },
-  ];
-
   return (
     <DetailView
       title={currentRecord?.nome_completo || currentRecord?.razao_social || `Pessoa #${id}`}
       subtitle={`Código: ${currentRecord?.codigo_cadastro || id}`}
-      fields={fields}
-      data={currentRecord as Record<string, unknown>}
+      tabs={tabs}
       onEdit={() => setIsEditing(true)}
       onDelete={() => handleDeleteRecord(id!)}
       onBack={() => navigate('/cadastros/pessoas')}

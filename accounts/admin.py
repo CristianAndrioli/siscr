@@ -10,7 +10,16 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# User admin já está registrado pelo Django, não precisa registrar novamente
+# Importar modelos de roles
+try:
+    from .models_roles import CustomRole, ModulePermission
+except ImportError:
+    CustomRole = None
+    ModulePermission = None
+
+# Desregistrar o UserAdmin padrão do Django para registrar um customizado
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
 
 
 class TenantMembershipInline(admin.TabularInline):
@@ -19,6 +28,87 @@ class TenantMembershipInline(admin.TabularInline):
     extra = 0
     fields = ['user', 'role', 'is_active', 'joined_at']
     readonly_fields = ['joined_at']
+
+
+@admin.register(User)
+class CustomUserAdmin(BaseUserAdmin):
+    """Admin customizado para User com informações de tenant, empresa e filial"""
+    # Adicionar campos customizados ao list_display padrão
+    list_display = list(BaseUserAdmin.list_display) + ['tenant_display', 'empresa_display', 'filial_display']
+    list_filter = list(BaseUserAdmin.list_filter) + ['profile__current_tenant']
+    
+    def get_queryset(self, request):
+        """Otimizar queries com select_related"""
+        qs = super().get_queryset(request)
+        return qs.select_related('profile__current_tenant', 'profile__current_empresa', 'profile__current_filial')
+    
+    def tenant_display(self, obj):
+        """Exibe o tenant atual do usuário"""
+        try:
+            profile = obj.profile
+            if profile and profile.current_tenant:
+                url = reverse('admin:tenants_tenant_change', args=[profile.current_tenant.pk])
+                return format_html('<a href="{}">{}</a>', url, profile.current_tenant.name)
+        except UserProfile.DoesNotExist:
+            pass
+        
+        # Se não tem profile, tentar buscar pelos memberships
+        memberships = TenantMembership.objects.filter(user=obj, is_active=True).select_related('tenant')
+        if memberships.exists():
+            tenants = [membership.tenant.name for membership in memberships[:3]]
+            if len(tenants) == 1:
+                membership = memberships.first()
+                url = reverse('admin:tenants_tenant_change', args=[membership.tenant.pk])
+                return format_html('<a href="{}">{}</a>', url, membership.tenant.name)
+            else:
+                return format_html('<span title="{}">{} tenants</span>', ', '.join(tenants), len(tenants))
+        
+        return '-'
+    tenant_display.short_description = 'Tenant'
+    
+    def empresa_display(self, obj):
+        """Exibe a empresa atual do usuário"""
+        try:
+            profile = obj.profile
+            if profile and profile.current_empresa:
+                empresa_nome = profile.current_empresa.nome
+                # Mostrar também o tenant se disponível
+                if profile.current_tenant:
+                    return format_html(
+                        '{}<br><small style="color: #666;">Tenant: {}</small>',
+                        empresa_nome,
+                        profile.current_tenant.name
+                    )
+                return empresa_nome
+        except UserProfile.DoesNotExist:
+            pass
+        return '-'
+    empresa_display.short_description = 'Empresa'
+    
+    def filial_display(self, obj):
+        """Exibe a filial atual do usuário"""
+        try:
+            profile = obj.profile
+            if profile and profile.current_filial:
+                filial_nome = profile.current_filial.nome
+                # Mostrar também a empresa e tenant se disponíveis
+                parts = [filial_nome]
+                if profile.current_empresa:
+                    parts.append(f'Empresa: {profile.current_empresa.nome}')
+                if profile.current_tenant:
+                    parts.append(f'Tenant: {profile.current_tenant.name}')
+                
+                if len(parts) > 1:
+                    return format_html(
+                        '{}<br><small style="color: #666;">{}</small>',
+                        parts[0],
+                        '<br>'.join(parts[1:])
+                    )
+                return filial_nome
+        except UserProfile.DoesNotExist:
+            pass
+        return '-'
+    filial_display.short_description = 'Filial'
 
 
 @admin.register(UserProfile)
@@ -121,3 +211,89 @@ class TenantMembershipAdmin(admin.ModelAdmin):
         url = reverse('admin:tenants_tenant_change', args=[obj.tenant.pk])
         return format_html('<a href="{}">{}</a>', url, obj.tenant.name)
     tenant_link.short_description = 'Tenant'
+
+
+# Registrar modelos de roles se disponíveis
+if CustomRole and ModulePermission:
+    class ModulePermissionInline(admin.TabularInline):
+        """Inline para mostrar permissões de módulo de um role"""
+        model = ModulePermission
+        extra = 0
+        fields = ['module', 'module_display', 'actions']
+        readonly_fields = ['module_display']
+    
+    @admin.register(CustomRole)
+    class CustomRoleAdmin(admin.ModelAdmin):
+        """Admin para roles customizados"""
+        list_display = [
+            'name',
+            'code',
+            'tenant',
+            'is_active',
+            'is_system',
+            'permissions_count',
+            'created_at',
+        ]
+        list_filter = ['is_active', 'is_system', 'tenant', 'created_at']
+        search_fields = ['name', 'code', 'description', 'tenant__name']
+        readonly_fields = ['is_system', 'created_at', 'updated_at']
+        inlines = [ModulePermissionInline]
+        
+        fieldsets = (
+            ('Informações Básicas', {
+                'fields': ('tenant', 'name', 'code', 'description', 'is_active', 'is_system')
+            }),
+            ('Permissões', {
+                'fields': (),
+                'description': 'Configure as permissões por módulo usando a seção abaixo'
+            }),
+            ('Datas', {
+                'fields': ('created_at', 'updated_at')
+            }),
+        )
+        
+        def permissions_count(self, obj):
+            """Conta o número de permissões configuradas"""
+            return obj.module_permissions.count()
+        permissions_count.short_description = 'Permissões'
+        
+        def get_readonly_fields(self, request, obj=None):
+            """Torna is_system e code readonly se for role do sistema"""
+            readonly = list(self.readonly_fields)
+            if obj and obj.is_system:
+                readonly.append('code')
+                readonly.append('name')
+            return readonly
+    
+    @admin.register(ModulePermission)
+    class ModulePermissionAdmin(admin.ModelAdmin):
+        """Admin para permissões de módulo"""
+        list_display = [
+            'role',
+            'module_display',
+            'module',
+            'actions_display',
+            'created_at',
+        ]
+        list_filter = ['module', 'role__tenant', 'role']
+        search_fields = ['module', 'module_display', 'role__name']
+        readonly_fields = ['created_at', 'updated_at']
+        
+        def actions_display(self, obj):
+            """Exibe as ações de forma legível"""
+            if not obj.actions:
+                return '-'
+            action_labels = {
+                'view': 'Visualizar',
+                'add': 'Criar',
+                'change': 'Editar',
+                'delete': 'Excluir',
+                'export': 'Exportar',
+                'import': 'Importar',
+                'approve': 'Aprovar',
+                'reject': 'Rejeitar',
+                'manage': 'Gerenciar',
+            }
+            labels = [action_labels.get(action, action) for action in obj.actions]
+            return ', '.join(labels)
+        actions_display.short_description = 'Ações'
