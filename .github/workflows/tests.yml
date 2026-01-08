@@ -125,16 +125,13 @@ jobs:
       - name: Executar migrations
         run: |
           echo "🔄 Executando migrations..."
-          python manage.py migrate_schemas --shared --noinput || echo "⚠️ Algumas migrations falharam (continuando...)"
+          python manage.py migrate_schemas --shared --noinput --verbosity=0 || echo "⚠️ Algumas migrations falharam (continuando...)"
           echo "✅ Migrations concluídas"
 
       - name: Executar testes unitários
         run: |
           echo "🧪 Executando testes unitários do Django..."
-          echo "📊 Verbosidade: 2 (detalhado)"
-          python manage.py test --verbosity=2 --noinput
-          echo ""
-          echo "✅ Testes concluídos com sucesso!"
+          python manage.py test --verbosity=1 --noinput
         continue-on-error: false
 
       - name: Verificar cobertura (opcional)
@@ -143,7 +140,7 @@ jobs:
           pip install coverage
           echo ""
           echo "📊 Executando testes com coverage..."
-          coverage run --source='.' manage.py test
+          coverage run --source='.' manage.py test --verbosity=0
           echo ""
           echo "📊 Relatório de cobertura:"
           coverage report --fail-under=70 || echo "⚠️ Cobertura abaixo de 70% (não falha o build)"
