@@ -72,9 +72,20 @@ if %errorlevel% equ 0 (
     echo (Isso pode levar alguns minutos na primeira execução)
     docker-compose build
     if %errorlevel% neq 0 (
-        echo ❌ Erro ao construir imagens!
-        pause
-        exit /b 1
+        echo.
+        echo ⚠️  Build com cache falhou. Tentando sem cache...
+        echo (Isso pode levar mais tempo, mas resolve problemas de cache corrompido)
+        docker-compose build --no-cache
+        if %errorlevel% neq 0 (
+            echo.
+            echo ❌ Erro ao construir imagens mesmo sem cache!
+            echo.
+            echo 💡 Tente executar manualmente:
+            echo    docker system prune -a
+            echo    docker-compose build --no-cache
+            pause
+            exit /b 1
+        )
     )
     docker-compose up -d
     if %errorlevel% neq 0 (
