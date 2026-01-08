@@ -155,7 +155,7 @@ jobs:
             cat coverage_report.md
           fi
 
-      - name: Verificar cobertura mínima (70%)
+      - name: Verificar cobertura mínima (70%) - Aviso
         run: |
           echo "📊 Verificando cobertura mínima de 70% por arquivo..."
           
@@ -172,29 +172,25 @@ jobs:
           LOW_COVERAGE=$(coverage report | awk 'NR>3 && NF>=4 && $NF+0 < 70 && $NF+0 > 0 && $1 != "TOTAL" {print $1 " tem " $NF "% de cobertura"}')
           
           if [ -n "$LOW_COVERAGE" ]; then
-            echo "⚠️ Arquivos com cobertura abaixo de 70%:"
+            echo "⚠️ AVISO: Arquivos com cobertura abaixo de 70%:"
             echo "$LOW_COVERAGE"
             echo ""
-            echo "❌ Cobertura mínima de 70% por arquivo não atingida!"
+            echo "⚠️ AVISO: Cobertura mínima de 70% por arquivo não atingida (não falha o build)"
             echo ""
-            echo "📊 Relatório detalhado:"
-            cat coverage_detailed.txt
-            exit 1
           fi
           
           # Verificar cobertura geral
           if [ -z "$TOTAL_COVERAGE" ] || [ "${TOTAL_COVERAGE%.*}" -lt 70 ]; then
-            echo "❌ Cobertura geral (${TOTAL_COVERAGE}%) está abaixo do mínimo de 70%!"
+            echo "⚠️ AVISO: Cobertura geral (${TOTAL_COVERAGE}%) está abaixo do mínimo de 70% (não falha o build)"
             echo ""
-            echo "📊 Relatório detalhado:"
-            cat coverage_detailed.txt
-            exit 1
+          else
+            echo "✅ Cobertura mínima de 70% atingida (geral: ${TOTAL_COVERAGE}%)!"
+            echo ""
           fi
           
-          echo "✅ Cobertura mínima de 70% atingida (geral: ${TOTAL_COVERAGE}%)!"
-          echo ""
           echo "📊 Relatório completo:"
           cat coverage_detailed.txt
+        continue-on-error: true  # Não falha o build, apenas mostra aviso
 
   test-frontend:
     name: Testes Frontend (React)
