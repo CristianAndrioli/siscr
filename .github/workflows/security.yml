@@ -46,9 +46,16 @@ jobs:
       - name: Verificar credenciais hardcoded
         run: |
           echo "🔍 Verificando credenciais hardcoded..."
-          # Padrões comuns de credenciais
-          if grep -r "password.*=.*['\"].*[a-zA-Z0-9]" --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" . | grep -v "test" | grep -v "example"; then
-            echo "⚠️ Possíveis credenciais hardcoded encontradas!"
+          # Verificar apenas padrões realmente suspeitos de credenciais hardcoded
+          # Excluir: migrations, testes, node_modules, variáveis de código, campos de modelo
+          SUSPICIOUS=$(grep -rE "(password|api_key|secret_key|api_secret|access_token|refresh_token|bearer_token)\s*=\s*['\"][^'\"]{8,}['\"]" \
+            --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" \
+            --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=migrations \
+            . 2>/dev/null | grep -vE "(\.get\(|\.pop\(|models\.|CharField|TextField|attrs\.|validated_data\.|request\.data\.|\.data\.get|password_confirm|password_reset|password_strength|passwordStrength|htmlFor|label|className|test|example)" || true)
+          
+          if [ -n "$SUSPICIOUS" ]; then
+            echo "⚠️ Possíveis credenciais hardcoded encontradas:"
+            echo "$SUSPICIOUS"
             exit 1
           else
             echo "✅ Nenhuma credencial hardcoded encontrada"
