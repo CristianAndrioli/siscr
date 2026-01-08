@@ -1,0 +1,49 @@
+[run]
+source = .
+omit =
+    */migrations/*
+    manage.py
+    */settings.py
+    */wsgi.py
+    */asgi.py
+    */__pycache__/*
+    */venv/*
+    */env/*
+    */node_modules/*
+    */tests.py
+    */test_*.py
+    */__init__.py
+    */admin.py
+    */apps.py
+    */urls.py
+    */celery.py
+    */middleware.py
+    */base_models.py
+    */templates/*
+    */static/*
+    */dist/*
+    */build/*
+    */cache/*
+    */logs/*
+    */scripts/*
+    */database/*
+    */terraform/*
+    */docs/*
+    */frontend/*
+    */public/*
+    */staticfiles/*
+    */media/*
+
+[report]
+# Excluir linhas que não precisam de cobertura
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+
+[html]
+directory = htmlcov

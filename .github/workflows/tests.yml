@@ -128,22 +128,73 @@ jobs:
           python manage.py migrate_schemas --shared --noinput --verbosity=0 || echo "⚠️ Algumas migrations falharam (continuando...)"
           echo "✅ Migrations concluídas"
 
-      - name: Executar testes unitários
-        run: |
-          echo "🧪 Executando testes unitários do Django..."
-          python manage.py test --verbosity=1 --noinput
-        continue-on-error: false
-
-      - name: Verificar cobertura (opcional)
+      - name: Instalar coverage
         run: |
           echo "📊 Instalando coverage..."
-          pip install coverage
+          pip install coverage[toml]
+
+      - name: Executar testes com cobertura
+        run: |
+          echo "🧪 Executando testes unitários do Django com cobertura..."
+          coverage run --source='.' manage.py test --verbosity=1 --noinput
+        continue-on-error: false
+
+      - name: Gerar relatório de cobertura
+        run: |
+          echo "📊 Gerando relatório de cobertura..."
           echo ""
-          echo "📊 Executando testes com coverage..."
-          coverage run --source='.' manage.py test --verbosity=0
+          echo "📊 Relatório geral:"
+          coverage report
           echo ""
-          echo "📊 Relatório de cobertura:"
-          coverage report --fail-under=70 || echo "⚠️ Cobertura abaixo de 70% (não falha o build)"
+          echo "📊 Relatório detalhado por arquivo:"
+          coverage report --show-missing
+          echo ""
+          echo "📊 Arquivos com cobertura abaixo de 70%:"
+          coverage report --fail-under=70 --format=markdown > coverage_report.md || true
+          if [ -f coverage_report.md ]; then
+            cat coverage_report.md
+          fi
+
+      - name: Verificar cobertura mínima (70%)
+        run: |
+          echo "📊 Verificando cobertura mínima de 70% por arquivo..."
+          
+          # Gerar relatório detalhado
+          coverage report --show-missing > coverage_detailed.txt
+          
+          # Extrair cobertura total (última linha do relatório)
+          TOTAL_COVERAGE=$(coverage report | tail -n 1 | awk '{print $NF}' | sed 's/%//')
+          echo "📊 Cobertura geral: ${TOTAL_COVERAGE}%"
+          echo ""
+          
+          # Verificar arquivos com cobertura abaixo de 70%
+          # Formato do coverage report: NomeArquivo    Linhas    Miss    Cover
+          LOW_COVERAGE=$(coverage report | awk 'NR>3 && NF>=4 && $NF+0 < 70 && $NF+0 > 0 && $1 != "TOTAL" {print $1 " tem " $NF "% de cobertura"}')
+          
+          if [ -n "$LOW_COVERAGE" ]; then
+            echo "⚠️ Arquivos com cobertura abaixo de 70%:"
+            echo "$LOW_COVERAGE"
+            echo ""
+            echo "❌ Cobertura mínima de 70% por arquivo não atingida!"
+            echo ""
+            echo "📊 Relatório detalhado:"
+            cat coverage_detailed.txt
+            exit 1
+          fi
+          
+          # Verificar cobertura geral
+          if [ -z "$TOTAL_COVERAGE" ] || [ "${TOTAL_COVERAGE%.*}" -lt 70 ]; then
+            echo "❌ Cobertura geral (${TOTAL_COVERAGE}%) está abaixo do mínimo de 70%!"
+            echo ""
+            echo "📊 Relatório detalhado:"
+            cat coverage_detailed.txt
+            exit 1
+          fi
+          
+          echo "✅ Cobertura mínima de 70% atingida (geral: ${TOTAL_COVERAGE}%)!"
+          echo ""
+          echo "📊 Relatório completo:"
+          cat coverage_detailed.txt
 
   test-frontend:
     name: Testes Frontend (React)
