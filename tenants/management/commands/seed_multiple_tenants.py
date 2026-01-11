@@ -82,6 +82,32 @@ def gerar_cpf():
 
 class Command(BaseCommand):
     help = 'Cria 3 tenants com dados realistas e completos'
+    
+    def _create_tenant_via_sql(self, cursor, schema_name, tenant_name):
+        """Cria tenant via SQL direto, verificando colunas disponíveis"""
+        # Verificar se as colunas created_at/updated_at existem
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'tenants_tenant' 
+            AND column_name IN ('created_at', 'updated_at')
+        """)
+        has_timestamp_cols = len(cursor.fetchall()) == 2
+        
+        if has_timestamp_cols:
+            cursor.execute("""
+                INSERT INTO tenants_tenant (schema_name, name, is_active, created_at, updated_at)
+                VALUES (%s, %s, %s, NOW(), NOW())
+                RETURNING id
+            """, [schema_name, tenant_name, True])
+        else:
+            # Se não tiver as colunas, inserir sem elas
+            cursor.execute("""
+                INSERT INTO tenants_tenant (schema_name, name, is_active)
+                VALUES (%s, %s, %s)
+                RETURNING id
+            """, [schema_name, tenant_name, True])
 
     def handle(self, *args, **options):
         self.stdout.write("🚀 Iniciando criação de tenants com dados realistas...")
@@ -182,9 +208,17 @@ class Command(BaseCommand):
                 """, [schema_name])
                 row = cursor.fetchone()
                 if row:
-                    tenant = Tenant(id=row[0], name=row[1], schema_name=row[2], is_active=row[3])
-                    tenant._state.adding = False
-                    self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} já existe. Pulando..."))
+                    tenant_id = row[0]
+                    # Verificar se o ID realmente existe na tabela (garantir integridade)
+                    cursor.execute("SELECT id FROM tenants_tenant WHERE id = %s", [tenant_id])
+                    if cursor.fetchone():
+                        tenant = Tenant(id=tenant_id, name=row[1], schema_name=row[2], is_active=row[3])
+                        tenant._state.adding = False
+                        self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} já existe. Pulando..."))
+                    else:
+                        # ID não existe na tabela, precisa criar
+                        self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} encontrado mas ID não existe na tabela. Recriando..."))
+                        tenant = None
         except Exception as e:
             # Se falhar, pode ser que a tabela não exista ou tenha estrutura diferente
             self.stdout.write(self.style.WARNING(f"⚠️  Erro ao buscar tenant: {e}"))
@@ -192,59 +226,33 @@ class Command(BaseCommand):
         
         if tenant is None:
             # Tenant não existe, criar
-            try:
-                tenant = Tenant.objects.create(
-                    name=tenant_name,
-                    schema_name=schema_name,
-                    is_active=True
-                )
-                self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado: {tenant.name}"))
-            except Exception as e:
-                # Se falhar, pode ser que as colunas created_at/updated_at não existam
-                # Tentar criar usando SQL direto ou apenas campos básicos
-                self.stdout.write(self.style.WARNING(f"⚠️  Erro ao criar tenant: {e}"))
-                self.stdout.write(self.style.WARNING(f"⚠️  Tentando criar tenant usando método alternativo..."))
-                from django.db import connection
-                with connection.cursor() as cursor:
-                    # Verificar se o tenant já existe no banco (mesmo que não esteja na tabela)
-                    cursor.execute("SELECT id FROM tenants_tenant WHERE schema_name = %s", [schema_name])
-                    row = cursor.fetchone()
-                    if row:
-                        tenant_id = row[0]
-                        # Criar objeto Tenant com apenas o ID
+            from django.db import connection
+            with connection.cursor() as cursor:
+                # Primeiro verificar se já existe (pode ter sido criado em outra execução)
+                cursor.execute("SELECT id FROM tenants_tenant WHERE schema_name = %s", [schema_name])
+                row = cursor.fetchone()
+                if row:
+                    tenant_id = row[0]
+                    # Verificar se o ID realmente existe
+                    cursor.execute("SELECT id FROM tenants_tenant WHERE id = %s", [tenant_id])
+                    if cursor.fetchone():
                         tenant = Tenant(id=tenant_id, schema_name=schema_name, name=tenant_name, is_active=True)
-                        tenant._state.adding = False  # Marcar como não sendo novo
+                        tenant._state.adding = False
                         self.stdout.write(self.style.SUCCESS(f"✅ Tenant encontrado no banco: {tenant_name}"))
                     else:
-                        # Criar tenant via SQL direto
-                        # Primeiro verificar se as colunas created_at/updated_at existem
-                        cursor.execute("""
-                            SELECT column_name 
-                            FROM information_schema.columns 
-                            WHERE table_schema = 'public' 
-                            AND table_name = 'tenants_tenant' 
-                            AND column_name IN ('created_at', 'updated_at')
-                        """)
-                        has_timestamp_cols = len(cursor.fetchall()) == 2
-                        
-                        if has_timestamp_cols:
-                            cursor.execute("""
-                                INSERT INTO tenants_tenant (schema_name, name, is_active, created_at, updated_at)
-                                VALUES (%s, %s, %s, NOW(), NOW())
-                                RETURNING id
-                            """, [schema_name, tenant_name, True])
-                        else:
-                            # Se não tiver as colunas, inserir sem elas
-                            cursor.execute("""
-                                INSERT INTO tenants_tenant (schema_name, name, is_active)
-                                VALUES (%s, %s, %s)
-                                RETURNING id
-                            """, [schema_name, tenant_name, True])
-                        
+                        # ID não existe, criar novo
+                        self._create_tenant_via_sql(cursor, schema_name, tenant_name)
                         tenant_id = cursor.fetchone()[0]
                         tenant = Tenant(id=tenant_id, schema_name=schema_name, name=tenant_name, is_active=True)
                         tenant._state.adding = False
                         self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado via SQL: {tenant_name}"))
+                else:
+                    # Não existe, criar
+                    self._create_tenant_via_sql(cursor, schema_name, tenant_name)
+                    tenant_id = cursor.fetchone()[0]
+                    tenant = Tenant(id=tenant_id, schema_name=schema_name, name=tenant_name, is_active=True)
+                    tenant._state.adding = False
+                    self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado via SQL: {tenant_name}"))
             
             # Criar domínio apenas se o tenant foi criado agora
             try:
