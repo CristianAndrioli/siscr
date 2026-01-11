@@ -122,8 +122,22 @@ echo 📝 Criando docker-compose.override.yml com portas alternativas...
 REM Verificar se containers já estão rodando
 docker-compose ps | findstr "siscr_web" >nul 2>&1
 if errorlevel 1 goto :no_containers
-echo ⚠️  Containers já estão rodando. Será necessário recriá-los para aplicar novas portas.
-set NEEDS_RECREATE=1
+
+REM Containers estão rodando - verificar se já existe override com portas diferentes
+if exist docker-compose.override.yml (
+    echo ⚠️  Arquivo docker-compose.override.yml já existe. Verificando se precisa atualizar...
+    findstr "!DB_PORT!:5432" docker-compose.override.yml >nul 2>&1
+    if errorlevel 1 (
+        echo ⚠️  Portas no override são diferentes. Será necessário recriar containers.
+        set NEEDS_RECREATE=1
+    ) else (
+        echo ℹ️  Portas no override já estão corretas.
+        set NEEDS_RECREATE=0
+    )
+) else (
+    echo ⚠️  Containers já estão rodando. Será necessário recriá-los para aplicar novas portas.
+    set NEEDS_RECREATE=1
+)
 goto :create_override_file
 
 :no_containers
@@ -255,6 +269,20 @@ echo Verificando e corrigindo migrações do app accounts...
 docker-compose exec web python manage.py fix_accounts_migrations
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do accounts
+)
+
+REM Verificar e corrigir migrações da tabela tenants_tenant se necessário
+echo Verificando e corrigindo migrações da tabela tenants_tenant...
+docker-compose exec web python manage.py fix_tenants_tenant_migrations
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações da tabela tenants_tenant
+)
+
+REM Sincronizar tenants dos schemas para a tabela tenants_tenant
+echo Sincronizando tenants dos schemas para a tabela tenants_tenant...
+docker-compose exec web python manage.py sync_tenants_to_public
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas ao sincronizar tenants
 )
 
 REM ========================================
