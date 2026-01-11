@@ -349,26 +349,22 @@ class Command(BaseCommand):
                     else:
                         self.stdout.write(f"    ⚠️  Filial já existe: {filial.nome}")
             
-            # Recarregar empresas e filiais do banco para garantir que os IDs estão corretos
-            empresas_validas = []
-            for empresa in empresas_criadas:
-                try:
-                    empresa_refreshed = Empresa.objects.get(id=empresa.id, tenant=tenant)
-                    if not empresa_refreshed.is_deleted:
-                        empresas_validas.append(empresa_refreshed)
-                except Empresa.DoesNotExist:
-                    self.stdout.write(self.style.WARNING(f"  ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe mais. Pulando..."))
-                    continue
-            
+            # IMPORTANTE: Buscar empresas e filiais DIRETAMENTE do banco, não confiar nos objetos em memória
+            # Isso garante que estamos usando IDs corretos que realmente existem no banco
+            empresas_validas = list(Empresa.objects.filter(tenant=tenant, is_active=True, is_deleted=False))
             filiais_validas = []
-            for filial in filiais_criadas:
-                try:
-                    filial_refreshed = Filial.objects.get(id=filial.id, empresa=filial.empresa)
-                    if not filial_refreshed.is_deleted:
-                        filiais_validas.append(filial_refreshed)
-                except Filial.DoesNotExist:
-                    self.stdout.write(self.style.WARNING(f"  ⚠️  Filial {filial.nome} (ID: {filial.id}) não existe mais. Pulando..."))
-                    continue
+            
+            # Buscar filiais para cada empresa válida
+            for empresa in empresas_validas:
+                filiais_empresa = list(Filial.objects.filter(empresa=empresa, is_active=True, is_deleted=False))
+                filiais_validas.extend(filiais_empresa)
+            
+            self.stdout.write(f"  📊 Empresas válidas encontradas: {len(empresas_validas)}")
+            self.stdout.write(f"  📊 Filiais válidas encontradas: {len(filiais_validas)}")
+            
+            if not empresas_validas:
+                self.stdout.write(self.style.WARNING("  ⚠️  Nenhuma empresa válida encontrada. Pulando criação de dados..."))
+                return
             
             # Criar pessoas (clientes, fornecedores, funcionários)
             self.stdout.write("\n👥 Criando pessoas...")
@@ -532,6 +528,13 @@ class Command(BaseCommand):
                     while Pessoa.objects.filter(codigo_cadastro=codigo).exists():
                         codigo += 1
                     
+                    # Verificar se a filial realmente existe no banco antes de usar
+                    try:
+                        filial_verificada = Filial.objects.get(id=filial.id, empresa=filial.empresa)
+                    except Filial.DoesNotExist:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} (ID: {filial.id}) não existe. Criando pessoa sem filial..."))
+                        filial_verificada = None
+                    
                     try:
                         pessoa = Pessoa.objects.create(
                             codigo_cadastro=codigo,
@@ -539,7 +542,7 @@ class Command(BaseCommand):
                             cpf_cnpj=cpf,
                             nome_completo=nome,
                             empresa=filial.empresa,
-                            filial=filial,  # Usar a filial validada
+                            filial=filial_verificada,  # Usar None se a filial não existir
                             logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
                             numero=str(random.randint(100, 999)),
                             bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
@@ -547,7 +550,7 @@ class Command(BaseCommand):
                             estado=estado,
                             cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                             telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                            email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br",
+                            email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br" if filial_verificada else f"{nome.lower().replace(' ', '.')}@empresa.com.br",
                             cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
                             comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
                         )
@@ -776,21 +779,30 @@ class Command(BaseCommand):
                     user_admin.set_password('senha123')
                     user_admin.save()
                 
-                # Criar perfil
+                # Criar perfil - verificar se filial existe antes de atribuir
+                current_empresa = empresas_validas[0] if empresas_validas else None
+                current_filial = filiais_validas[0] if filiais_validas else None
+                
+                # Verificar se a filial realmente existe no banco antes de usar
+                if current_filial:
+                    try:
+                        Filial.objects.get(id=current_filial.id, empresa=current_filial.empresa)
+                    except Filial.DoesNotExist:
+                        self.stdout.write(self.style.WARNING(f"  ⚠️  Filial {current_filial.nome} não existe. Usando None..."))
+                        current_filial = None
+                
                 profile_admin, _ = UserProfile.objects.get_or_create(
                     user=user_admin,
                     defaults={
                         'current_tenant': tenant,
-                        'current_empresa': empresas_validas[0] if empresas_validas else None,
-                        'current_filial': filiais_validas[0] if filiais_validas else None,
+                        'current_empresa': current_empresa,
+                        'current_filial': current_filial,
                     }
                 )
                 if not profile_admin.current_tenant:
                     profile_admin.current_tenant = tenant
-                    if empresas_validas:
-                        profile_admin.current_empresa = empresas_validas[0]
-                    if filiais_validas:
-                        profile_admin.current_filial = filiais_validas[0]
+                    profile_admin.current_empresa = current_empresa
+                    profile_admin.current_filial = current_filial  # Pode ser None
                     profile_admin.save()
                 
                 # Criar membership como admin
@@ -915,21 +927,34 @@ class Command(BaseCommand):
                         if created:
                             user_public.set_password('senha123')
                             user_public.save()
-                        
-                        # Criar perfil
-                        profile, _ = UserProfile.objects.get_or_create(
-                            user=user_public,
-                            defaults={
-                                'current_tenant': tenant,
-                                'current_empresa': filial.empresa,
-                                'current_filial': filial,
-                            }
-                        )
-                        if not profile.current_tenant:
-                            profile.current_tenant = tenant
-                            profile.current_empresa = filial.empresa
-                            profile.current_filial = filial
-                            profile.save()
+                            
+                            # Verificar se empresa e filial realmente existem antes de usar
+                            try:
+                                empresa_verificada = Empresa.objects.get(id=filial.empresa.id, tenant=tenant)
+                            except Empresa.DoesNotExist:
+                                self.stdout.write(self.style.WARNING(f"    ⚠️  Empresa {filial.empresa.nome} não existe. Usando None..."))
+                                empresa_verificada = None
+                            
+                            try:
+                                filial_verificada = Filial.objects.get(id=filial.id, empresa=filial.empresa)
+                            except Filial.DoesNotExist:
+                                self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} não existe. Usando None..."))
+                                filial_verificada = None
+                            
+                            # Criar perfil
+                            profile, _ = UserProfile.objects.get_or_create(
+                                user=user_public,
+                                defaults={
+                                    'current_tenant': tenant,
+                                    'current_empresa': empresa_verificada,
+                                    'current_filial': filial_verificada,  # Pode ser None
+                                }
+                            )
+                            if not profile.current_tenant:
+                                profile.current_tenant = tenant
+                                profile.current_empresa = empresa_verificada
+                                profile.current_filial = filial_verificada  # Pode ser None
+                                profile.save()
                         
                         # Criar membership
                         TenantMembership.objects.get_or_create(
