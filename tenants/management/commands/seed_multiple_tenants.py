@@ -169,30 +169,82 @@ class Command(BaseCommand):
         self.stdout.write(f"{'='*60}")
         
         # Verificar se tenant já existe
-        if Tenant.objects.filter(schema_name=schema_name).exists():
-            self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} já existe. Pulando..."))
-            tenant = Tenant.objects.get(schema_name=schema_name)
-        else:
-            # Criar tenant
-            tenant = Tenant.objects.create(
-                name=tenant_name,
-                schema_name=schema_name,
-                is_active=True
-            )
-            self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado: {tenant.name}"))
+        # Usar SQL direto para evitar problemas com colunas faltantes
+        tenant = None
+        try:
+            from django.db import connection
+            with connection.cursor() as cursor:
+                # Tentar buscar apenas campos básicos que sempre existem
+                cursor.execute("""
+                    SELECT id, name, schema_name, is_active 
+                    FROM tenants_tenant 
+                    WHERE schema_name = %s
+                """, [schema_name])
+                row = cursor.fetchone()
+                if row:
+                    tenant = Tenant(id=row[0], name=row[1], schema_name=row[2], is_active=row[3])
+                    tenant._state.adding = False
+                    self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} já existe. Pulando..."))
+        except Exception as e:
+            # Se falhar, pode ser que a tabela não exista ou tenha estrutura diferente
+            self.stdout.write(self.style.WARNING(f"⚠️  Erro ao buscar tenant: {e}"))
+            tenant = None
+        
+        if tenant is None:
+            # Tenant não existe, criar
+            try:
+                tenant = Tenant.objects.create(
+                    name=tenant_name,
+                    schema_name=schema_name,
+                    is_active=True
+                )
+                self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado: {tenant.name}"))
+            except Exception as e:
+                # Se falhar, pode ser que as colunas created_at/updated_at não existam
+                # Tentar criar usando SQL direto ou apenas campos básicos
+                self.stdout.write(self.style.WARNING(f"⚠️  Erro ao criar tenant: {e}"))
+                self.stdout.write(self.style.WARNING(f"⚠️  Tentando criar tenant usando método alternativo..."))
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    # Verificar se o tenant já existe no banco (mesmo que não esteja na tabela)
+                    cursor.execute("SELECT id FROM tenants_tenant WHERE schema_name = %s", [schema_name])
+                    row = cursor.fetchone()
+                    if row:
+                        tenant_id = row[0]
+                        # Criar objeto Tenant com apenas o ID
+                        tenant = Tenant(id=tenant_id, schema_name=schema_name, name=tenant_name, is_active=True)
+                        tenant._state.adding = False  # Marcar como não sendo novo
+                        self.stdout.write(self.style.SUCCESS(f"✅ Tenant encontrado no banco: {tenant_name}"))
+                    else:
+                        # Criar tenant via SQL direto
+                        cursor.execute("""
+                            INSERT INTO tenants_tenant (schema_name, name, is_active, created_at, updated_at)
+                            VALUES (%s, %s, %s, NOW(), NOW())
+                            RETURNING id
+                        """, [schema_name, tenant_name, True])
+                        tenant_id = cursor.fetchone()[0]
+                        tenant = Tenant(id=tenant_id, schema_name=schema_name, name=tenant_name, is_active=True)
+                        tenant._state.adding = False
+                        self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado via SQL: {tenant_name}"))
             
-            # Criar domínio
-            Domain.objects.create(
-                domain=f'{schema_name}.localhost',
-                tenant=tenant,
-                is_primary=True
-            )
-            self.stdout.write(self.style.SUCCESS(f"✅ Domínio criado: {schema_name}.localhost"))
+            # Criar domínio apenas se o tenant foi criado agora
+            try:
+                Domain.objects.get_or_create(
+                    domain=f'{schema_name}.localhost',
+                    tenant=tenant,
+                    defaults={'is_primary': True}
+                )
+                self.stdout.write(self.style.SUCCESS(f"✅ Domínio criado: {schema_name}.localhost"))
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"⚠️  Erro ao criar domínio: {e}"))
             
             # Migrar schema
             self.stdout.write("📦 Aplicando migrações...")
-            call_command('migrate_schemas', schema_name=schema_name, verbosity=0)
-            self.stdout.write(self.style.SUCCESS("✅ Migrações aplicadas"))
+            try:
+                call_command('migrate_schemas', schema_name=schema_name, verbosity=0)
+                self.stdout.write(self.style.SUCCESS("✅ Migrações aplicadas"))
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"⚠️  Erro ao aplicar migrações: {e}"))
         
         # Criar plano básico se não existir
         # Usar only() para buscar apenas campos básicos caso migrações não estejam aplicadas

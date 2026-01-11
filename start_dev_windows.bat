@@ -333,7 +333,17 @@ if %errorlevel% neq 0 (
 )
 
 REM ========================================
-REM Passo 6.5: Criar tenants com dados realistas
+REM Passo 6.5: Garantir que tenants_tenant está sincronizado ANTES do seed
+REM ========================================
+echo.
+echo [6.5/10] Garantindo sincronização de tenants antes do seed...
+docker-compose exec web python manage.py sync_tenants_to_public
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas ao sincronizar tenants
+)
+
+REM ========================================
+REM Passo 7: Criar tenants com dados realistas
 REM ========================================
 echo.
 echo [7/10] Criando tenants com dados realistas...
@@ -344,7 +354,7 @@ echo   • Grupo Expansão (1 empresa, 2 filiais)
 echo   • Holding Diversificada (2 empresas, 2 filiais cada)
 echo.
 echo Verificando se tenants já existem...
-docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from tenants.models import Tenant; tenants = Tenant.objects.filter(schema_name__in=['comercio_simples', 'grupo_expansao', 'holding_diversificada']); count = tenants.count(); exit(0 if count >= 3 else 1)" >nul 2>&1
+docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from django.db import connection; cursor = connection.cursor(); cursor.execute('SELECT COUNT(*) FROM tenants_tenant WHERE schema_name IN (%s, %s, %s)', ['comercio_simples', 'grupo_expansao', 'holding_diversificada']); count = cursor.fetchone()[0]; exit(0 if count >= 3 else 1)" >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ Tenants já existem! Pulando criação...
     echo.
