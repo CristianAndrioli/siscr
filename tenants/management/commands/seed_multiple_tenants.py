@@ -254,19 +254,47 @@ class Command(BaseCommand):
                 # Usar get_or_create para evitar duplicatas se o script for executado múltiplas vezes
                 # IMPORTANTE: Filtrar por tenant também para garantir isolamento correto
                 cidade, estado = random.choice(CIDADES)
-                empresa, created = Empresa.objects.get_or_create(
-                    cnpj=emp_config['cnpj'],
-                    tenant=tenant,  # Adicionar tenant na busca para garantir isolamento
-                    defaults={
-                        'nome': emp_config['nome'],
-                        'razao_social': f"{emp_config['nome']} LTDA",
-                        'cidade': cidade,
-                        'estado': estado,
-                        'email': f"contato@{emp_config['nome'].lower().replace(' ', '')}.com.br",
-                        'telefone': f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
-                        'is_active': True,
-                    }
-                )
+                try:
+                    empresa, created = Empresa.objects.get_or_create(
+                        cnpj=emp_config['cnpj'],
+                        tenant=tenant,  # Adicionar tenant na busca para garantir isolamento
+                        defaults={
+                            'nome': emp_config['nome'],
+                            'razao_social': f"{emp_config['nome']} LTDA",
+                            'cidade': cidade,
+                            'estado': estado,
+                            'email': f"contato@{emp_config['nome'].lower().replace(' ', '')}.com.br",
+                            'telefone': f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
+                            'is_active': True,
+                        }
+                    )
+                except Exception as e:
+                    # Se falhar, pode ser que as colunas não existam - tentar usar all_objects
+                    self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao buscar/criar empresa: {e}"))
+                    self.stdout.write(self.style.WARNING(f"  ⚠️  Tentando usar fallback..."))
+                    try:
+                        empresa = Empresa.all_objects.filter(cnpj=emp_config['cnpj'], tenant=tenant).first()
+                        if not empresa:
+                            # Criar usando apenas campos básicos que sabemos que existem
+                            empresa = Empresa.all_objects.create(
+                                cnpj=emp_config['cnpj'],
+                                tenant=tenant,
+                                nome=emp_config['nome'],
+                                razao_social=f"{emp_config['nome']} LTDA",
+                                cidade=cidade,
+                                estado=estado,
+                                email=f"contato@{emp_config['nome'].lower().replace(' ', '')}.com.br",
+                                telefone=f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
+                                is_active=True,
+                            )
+                            created = True
+                        else:
+                            created = False
+                    except Exception as e2:
+                        self.stdout.write(self.style.ERROR(f"  ❌ Erro ao criar empresa: {e2}"))
+                        self.stdout.write(self.style.ERROR(f"  ❌ As migrações podem não estar aplicadas corretamente."))
+                        self.stdout.write(self.style.ERROR(f"  ❌ Execute: docker-compose exec web python manage.py fix_tenant_migrations"))
+                        raise
                 empresas_criadas.append(empresa)
                 if created:
                     self.stdout.write(f"  ✅ Empresa criada: {empresa.nome}")
@@ -278,18 +306,42 @@ class Command(BaseCommand):
                     cidade, estado = random.choice(CIDADES)
                     codigo_filial = fil_config.get('codigo', '001')
                     # Usar get_or_create para evitar duplicatas
-                    filial, created = Filial.objects.get_or_create(
-                        empresa=empresa,
-                        codigo_filial=codigo_filial,
-                        defaults={
-                            'nome': fil_config['nome'],
-                            'cidade': cidade,
-                            'estado': estado,
-                            'email': f"filial{codigo_filial}@{empresa.nome.lower().replace(' ', '')}.com.br",
-                            'telefone': f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
-                            'is_active': True,
-                        }
-                    )
+                    try:
+                        filial, created = Filial.objects.get_or_create(
+                            empresa=empresa,
+                            codigo_filial=codigo_filial,
+                            defaults={
+                                'nome': fil_config['nome'],
+                                'cidade': cidade,
+                                'estado': estado,
+                                'email': f"filial{codigo_filial}@{empresa.nome.lower().replace(' ', '')}.com.br",
+                                'telefone': f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
+                                'is_active': True,
+                            }
+                        )
+                    except Exception as e:
+                        # Se falhar, tentar usar all_objects
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao buscar/criar filial: {e}"))
+                        try:
+                            filial = Filial.all_objects.filter(empresa=empresa, codigo_filial=codigo_filial).first()
+                            if not filial:
+                                filial = Filial.all_objects.create(
+                                    empresa=empresa,
+                                    codigo_filial=codigo_filial,
+                                    nome=fil_config['nome'],
+                                    cidade=cidade,
+                                    estado=estado,
+                                    email=f"filial{codigo_filial}@{empresa.nome.lower().replace(' ', '')}.com.br",
+                                    telefone=f"({random.randint(11, 99)}) {random.randint(3000, 9999)}-{random.randint(1000, 9999)}",
+                                    is_active=True,
+                                )
+                                created = True
+                            else:
+                                created = False
+                        except Exception as e2:
+                            self.stdout.write(self.style.ERROR(f"    ❌ Erro ao criar filial: {e2}"))
+                            # Continuar mesmo se falhar
+                            continue
                     filiais_criadas.append(filial)
                     if created:
                         self.stdout.write(f"    ✅ Filial criada: {filial.nome}")

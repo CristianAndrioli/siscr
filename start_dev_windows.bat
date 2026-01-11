@@ -140,10 +140,30 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
-REM Passo 6: Criar tenants com dados realistas
+REM Passo 6: Aplicar migrações nos tenants e corrigir colunas (ANTES de criar dados)
 REM ========================================
 echo.
-echo [6/9] Criando tenants com dados realistas...
+echo [6/9] Aplicando migrações nos schemas dos tenants...
+REM Aplicar migrações apenas nos tenants existentes e válidos usando comando Django
+docker-compose exec web python manage.py apply_tenant_migrations
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
+) else (
+    echo ✅ Migrações dos tenants verificadas/aplicadas!
+)
+
+REM Verificar e corrigir colunas faltantes nos tenants (aplica migrações se necessário)
+echo Verificando e corrigindo colunas faltantes nos tenants...
+docker-compose exec web python manage.py fix_tenant_migrations
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações dos tenants
+)
+
+REM ========================================
+REM Passo 6.5: Criar tenants com dados realistas
+REM ========================================
+echo.
+echo [6.5/9] Criando tenants com dados realistas...
 echo.
 echo Este processo criará 3 tenants completos:
 echo   • Comércio Simples (1 empresa, 1 filial)
@@ -166,26 +186,6 @@ if %errorlevel% equ 0 (
     ) else (
         echo ✅ Tenants criados com sucesso!
     )
-)
-
-REM ========================================
-REM Passo 6.5: Aplicar migrações nos tenants e corrigir colunas
-REM ========================================
-echo.
-echo [6.5/9] Aplicando migrações nos schemas dos tenants...
-REM Aplicar migrações apenas nos tenants existentes e válidos usando comando Django
-docker-compose exec web python manage.py apply_tenant_migrations
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
-) else (
-    echo ✅ Migrações dos tenants verificadas/aplicadas!
-)
-
-REM Verificar e corrigir colunas faltantes nos tenants (aplica migrações se necessário)
-echo Verificando e corrigindo colunas faltantes nos tenants...
-docker-compose exec web python manage.py fix_tenant_migrations
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Pode haver problemas com as migrações dos tenants
 )
 
 REM ========================================
