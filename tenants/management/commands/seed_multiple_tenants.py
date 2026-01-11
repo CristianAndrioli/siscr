@@ -349,6 +349,27 @@ class Command(BaseCommand):
                     else:
                         self.stdout.write(f"    ⚠️  Filial já existe: {filial.nome}")
             
+            # Recarregar empresas e filiais do banco para garantir que os IDs estão corretos
+            empresas_validas = []
+            for empresa in empresas_criadas:
+                try:
+                    empresa_refreshed = Empresa.objects.get(id=empresa.id, tenant=tenant)
+                    if not empresa_refreshed.is_deleted:
+                        empresas_validas.append(empresa_refreshed)
+                except Empresa.DoesNotExist:
+                    self.stdout.write(self.style.WARNING(f"  ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe mais. Pulando..."))
+                    continue
+            
+            filiais_validas = []
+            for filial in filiais_criadas:
+                try:
+                    filial_refreshed = Filial.objects.get(id=filial.id, empresa=filial.empresa)
+                    if not filial_refreshed.is_deleted:
+                        filiais_validas.append(filial_refreshed)
+                except Filial.DoesNotExist:
+                    self.stdout.write(self.style.WARNING(f"  ⚠️  Filial {filial.nome} (ID: {filial.id}) não existe mais. Pulando..."))
+                    continue
+            
             # Criar pessoas (clientes, fornecedores, funcionários)
             self.stdout.write("\n👥 Criando pessoas...")
             pessoas_criadas = []
@@ -360,7 +381,7 @@ class Command(BaseCommand):
             except Exception:
                 codigo = 1
             
-            for empresa in empresas_criadas:
+            for empresa in empresas_validas:
                 # 3 clientes por empresa
                 for i in range(3):
                     nome = random.choice(NOMES_PESSOAS)
@@ -447,9 +468,9 @@ class Command(BaseCommand):
             
             # Criar funcionários (2 por filial)
             # Primeiro, criar funcionários para empresas que NÃO têm filiais
-            for empresa in empresas_criadas:
+            for empresa in empresas_validas:
                 # Verificar se esta empresa tem filiais
-                empresa_tem_filiais = any(f.empresa == empresa for f in filiais_criadas)
+                empresa_tem_filiais = any(f.empresa_id == empresa.id for f in filiais_validas)
                 if not empresa_tem_filiais:
                     # Empresa sem filiais: criar 2 funcionários diretamente na empresa
                     for i in range(2):
@@ -494,20 +515,7 @@ class Command(BaseCommand):
                             continue
             
             # Depois, criar funcionários para filiais
-            for filial in filiais_criadas:
-                # Verificar se a filial ainda existe no banco (pode ter sido deletada ou não criada)
-                try:
-                    filial_refreshed = Filial.objects.get(id=filial.id, empresa=filial.empresa)
-                    # Verificar se a filial realmente existe (não está deletada)
-                    if filial_refreshed.is_deleted:
-                        self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} está deletada. Pulando..."))
-                        continue
-                except Filial.DoesNotExist:
-                    self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} não existe mais. Pulando..."))
-                    continue
-                except Exception as e:
-                    self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao buscar filial {filial.nome}: {e}. Pulando..."))
-                    continue
+            for filial in filiais_validas:
                 
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)
@@ -525,20 +533,13 @@ class Command(BaseCommand):
                         codigo += 1
                     
                     try:
-                        # Garantir que a filial existe antes de criar a pessoa
-                        if not Filial.objects.filter(id=filial_refreshed.id, empresa=filial_refreshed.empresa).exists():
-                            self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial_refreshed.nome} não existe. Criando pessoa sem filial..."))
-                            filial_para_usar = None
-                        else:
-                            filial_para_usar = filial_refreshed
-                        
                         pessoa = Pessoa.objects.create(
                             codigo_cadastro=codigo,
                             tipo='PF',
                             cpf_cnpj=cpf,
                             nome_completo=nome,
-                            empresa=filial_refreshed.empresa,
-                            filial=filial_para_usar,  # Usar None se a filial não existir
+                            empresa=filial.empresa,
+                            filial=filial,  # Usar a filial validada
                             logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
                             numero=str(random.randint(100, 999)),
                             bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
@@ -546,7 +547,7 @@ class Command(BaseCommand):
                             estado=estado,
                             cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                             telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                            email=f"{nome.lower().replace(' ', '.')}@{filial_refreshed.empresa.nome.lower().replace(' ', '')}.com.br",
+                            email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br",
                             cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
                             comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
                         )
@@ -564,14 +565,13 @@ class Command(BaseCommand):
             produtos_criados = []
             
             # Buscar o próximo código disponível
-            from django.db.models import Max
             try:
                 max_codigo = Produto.objects.all().aggregate(max_codigo=Max('codigo_produto'))['max_codigo']
                 codigo_produto = (max_codigo or 1000) + 1
             except Exception:
                 codigo_produto = 1001
             
-            for empresa in empresas_criadas:
+            for empresa in empresas_validas:
                 produtos_empresa = random.sample(PRODUTOS, k=min(5, len(PRODUTOS)))
                 for prod_data in produtos_empresa:
                     # Verificar se já existe produto com este código
@@ -622,7 +622,7 @@ class Command(BaseCommand):
             except Exception:
                 codigo_servico = 3001
             
-            for empresa in empresas_criadas:
+            for empresa in empresas_validas:
                 servicos_empresa = random.sample(SERVICOS, k=min(3, len(SERVICOS)))
                 for serv_data in servicos_empresa:
                     # Verificar se já existe serviço com este código
@@ -781,16 +781,16 @@ class Command(BaseCommand):
                     user=user_admin,
                     defaults={
                         'current_tenant': tenant,
-                        'current_empresa': empresas_criadas[0] if empresas_criadas else None,
-                        'current_filial': filiais_criadas[0] if filiais_criadas else None,
+                        'current_empresa': empresas_validas[0] if empresas_validas else None,
+                        'current_filial': filiais_validas[0] if filiais_validas else None,
                     }
                 )
                 if not profile_admin.current_tenant:
                     profile_admin.current_tenant = tenant
-                    if empresas_criadas:
-                        profile_admin.current_empresa = empresas_criadas[0]
-                    if filiais_criadas:
-                        profile_admin.current_filial = filiais_criadas[0]
+                    if empresas_validas:
+                        profile_admin.current_empresa = empresas_validas[0]
+                    if filiais_validas:
+                        profile_admin.current_filial = filiais_validas[0]
                     profile_admin.save()
                 
                 # Criar membership como admin
@@ -825,9 +825,9 @@ class Command(BaseCommand):
             
             # Criar usuários normais (2 por filial)
             # Primeiro, criar usuários para empresas que NÃO têm filiais
-            for empresa in empresas_criadas:
+            for empresa in empresas_validas:
                 # Verificar se esta empresa tem filiais
-                empresa_tem_filiais = any(f.empresa == empresa for f in filiais_criadas)
+                empresa_tem_filiais = any(f.empresa_id == empresa.id for f in filiais_validas)
                 if not empresa_tem_filiais:
                     # Empresa sem filiais: criar 2 usuários diretamente na empresa
                     for i in range(2):
@@ -893,7 +893,7 @@ class Command(BaseCommand):
                             self.stdout.write(f"    ✅ Usuário: {username} ({empresa.nome} - sem filial)")
             
             # Depois, criar usuários para filiais
-            for filial in filiais_criadas:
+            for filial in filiais_validas:
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)
                     username = f"{nome.lower().replace(' ', '.')}.{filial.codigo_filial}"
@@ -963,8 +963,8 @@ class Command(BaseCommand):
             self.stdout.write(f"\n{'='*60}")
             self.stdout.write(self.style.SUCCESS(f"✅ Tenant {tenant_name} criado com sucesso!"))
             self.stdout.write(f"{'='*60}")
-            self.stdout.write(f"  Empresas: {len(empresas_criadas)}")
-            self.stdout.write(f"  Filiais: {len(filiais_criadas)}")
+            self.stdout.write(f"  Empresas: {len(empresas_validas)}")
+            self.stdout.write(f"  Filiais: {len(filiais_validas)}")
             self.stdout.write(f"  Pessoas: {len(pessoas_criadas)}")
             self.stdout.write(f"  Produtos: {len(produtos_criados)}")
             self.stdout.write(f"  Serviços: {len(servicos_criados)}")
