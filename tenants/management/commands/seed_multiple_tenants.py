@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django_tenants.utils import schema_context
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.db.models import Max
 from datetime import date, timedelta
 from decimal import Decimal
 import random
@@ -353,7 +354,6 @@ class Command(BaseCommand):
             pessoas_criadas = []
             
             # Buscar o próximo código disponível
-            from django.db.models import Max
             try:
                 max_codigo = Pessoa.objects.all().aggregate(max_codigo=Max('codigo_cadastro'))['max_codigo']
                 codigo = (max_codigo or 0) + 1
@@ -498,8 +498,15 @@ class Command(BaseCommand):
                 # Verificar se a filial ainda existe no banco (pode ter sido deletada ou não criada)
                 try:
                     filial_refreshed = Filial.objects.get(id=filial.id, empresa=filial.empresa)
+                    # Verificar se a filial realmente existe (não está deletada)
+                    if filial_refreshed.is_deleted:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} está deletada. Pulando..."))
+                        continue
                 except Filial.DoesNotExist:
                     self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} não existe mais. Pulando..."))
+                    continue
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao buscar filial {filial.nome}: {e}. Pulando..."))
                     continue
                 
                 for i in range(2):
@@ -518,13 +525,20 @@ class Command(BaseCommand):
                         codigo += 1
                     
                     try:
+                        # Garantir que a filial existe antes de criar a pessoa
+                        if not Filial.objects.filter(id=filial_refreshed.id, empresa=filial_refreshed.empresa).exists():
+                            self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial_refreshed.nome} não existe. Criando pessoa sem filial..."))
+                            filial_para_usar = None
+                        else:
+                            filial_para_usar = filial_refreshed
+                        
                         pessoa = Pessoa.objects.create(
                             codigo_cadastro=codigo,
                             tipo='PF',
                             cpf_cnpj=cpf,
                             nome_completo=nome,
                             empresa=filial_refreshed.empresa,
-                            filial=filial_refreshed,  # Usar a filial refrescada
+                            filial=filial_para_usar,  # Usar None se a filial não existir
                             logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
                             numero=str(random.randint(100, 999)),
                             bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
@@ -548,63 +562,100 @@ class Command(BaseCommand):
             # Criar produtos (distribuídos entre empresas)
             self.stdout.write("\n📦 Criando produtos...")
             produtos_criados = []
-            codigo_produto = 1001
+            
+            # Buscar o próximo código disponível
+            from django.db.models import Max
+            try:
+                max_codigo = Produto.objects.all().aggregate(max_codigo=Max('codigo_produto'))['max_codigo']
+                codigo_produto = (max_codigo or 1000) + 1
+            except Exception:
+                codigo_produto = 1001
             
             for empresa in empresas_criadas:
                 produtos_empresa = random.sample(PRODUTOS, k=min(5, len(PRODUTOS)))
                 for prod_data in produtos_empresa:
-                    produto = Produto.objects.create(
-                        codigo_produto=codigo_produto,
-                        nome=prod_data['nome'],
-                        descricao=f"Descrição do produto {prod_data['nome']}",
-                        ativo=True,
-                        valor_custo=Decimal(str(prod_data['custo'])),
-                        valor_venda=Decimal(str(prod_data['venda'])),
-                        unidade_medida='UN',
-                        peso_liquido=Decimal(str(random.uniform(0.1, 5.0))),
-                        peso_bruto=Decimal(str(random.uniform(0.2, 6.0))),
-                        codigo_ncm=prod_data['ncm'],
-                        cfop_interno='5102',
-                        origem_mercadoria='1',
-                        cst_icms='00',
-                        aliquota_icms=Decimal('18.00'),
-                        aliquota_ipi=Decimal('0.00'),
-                        moeda_negociacao='BRL',
-                        empresa=empresa,
-                        filial=None,  # Compartilhado
-                    )
-                    produtos_criados.append(produto)
-                    codigo_produto += 1
+                    # Verificar se já existe produto com este código
+                    while Produto.objects.filter(codigo_produto=codigo_produto).exists():
+                        codigo_produto += 1
+                    
+                    try:
+                        produto, created = Produto.objects.get_or_create(
+                            codigo_produto=codigo_produto,
+                            defaults={
+                                'nome': prod_data['nome'],
+                                'descricao': f"Descrição do produto {prod_data['nome']}",
+                                'ativo': True,
+                                'valor_custo': Decimal(str(prod_data['custo'])),
+                                'valor_venda': Decimal(str(prod_data['venda'])),
+                                'unidade_medida': 'UN',
+                                'peso_liquido': Decimal(str(random.uniform(0.1, 5.0))),
+                                'peso_bruto': Decimal(str(random.uniform(0.2, 6.0))),
+                                'codigo_ncm': prod_data['ncm'],
+                                'cfop_interno': '5102',
+                                'origem_mercadoria': '1',
+                                'cst_icms': '00',
+                                'aliquota_icms': Decimal('18.00'),
+                                'aliquota_ipi': Decimal('0.00'),
+                                'moeda_negociacao': 'BRL',
+                                'empresa': empresa,
+                                'filial': None,  # Compartilhado
+                            }
+                        )
+                        if created:
+                            produtos_criados.append(produto)
+                        codigo_produto += 1
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar produto: {e}. Pulando..."))
+                        codigo_produto += 1
+                        continue
             
             self.stdout.write(f"  ✅ {len(produtos_criados)} produtos criados")
             
             # Criar serviços (compartilhados por empresa)
             self.stdout.write("\n🔧 Criando serviços...")
             servicos_criados = []
-            codigo_servico = 3001
+            
+            # Buscar o próximo código disponível
+            try:
+                max_codigo = Servico.objects.all().aggregate(max_codigo=Max('codigo_servico'))['max_codigo']
+                codigo_servico = (max_codigo or 3000) + 1
+            except Exception:
+                codigo_servico = 3001
             
             for empresa in empresas_criadas:
                 servicos_empresa = random.sample(SERVICOS, k=min(3, len(SERVICOS)))
                 for serv_data in servicos_empresa:
-                    servico = Servico.objects.create(
-                        codigo_servico=codigo_servico,
-                        nome=serv_data['nome'],
-                        descricao=f"Serviço de {serv_data['nome']}",
-                        ativo=True,
-                        valor_base=Decimal(str(serv_data['valor'])),
-                        tipo_contrato=serv_data['tipo'],
-                        prazo_execucao=random.choice([5, 10, 15, 30, None]),
-                        valor_impostos_estimado=Decimal(str(serv_data['valor'] * 0.18)),
-                        codigo_ncm='85234900',
-                        cfop='1403',
-                        tributacao_pis=Decimal('1.65'),
-                        tributacao_cofins=Decimal('7.60'),
-                        icms_tributado=False,
-                        empresa=empresa,
-                        filial=None,
-                    )
-                    servicos_criados.append(servico)
-                    codigo_servico += 1
+                    # Verificar se já existe serviço com este código
+                    while Servico.objects.filter(codigo_servico=codigo_servico).exists():
+                        codigo_servico += 1
+                    
+                    try:
+                        servico, created = Servico.objects.get_or_create(
+                            codigo_servico=codigo_servico,
+                            defaults={
+                                'nome': serv_data['nome'],
+                                'descricao': f"Serviço de {serv_data['nome']}",
+                                'ativo': True,
+                                'valor_base': Decimal(str(serv_data['valor'])),
+                                'tipo_contrato': serv_data['tipo'],
+                                'prazo_execucao': random.choice([5, 10, 15, 30, None]),
+                                'valor_impostos_estimado': Decimal(str(serv_data['valor'] * 0.18)),
+                                'codigo_ncm': '85234900',
+                                'cfop': '1403',
+                                'tributacao_pis': Decimal('1.65'),
+                                'tributacao_cofins': Decimal('7.60'),
+                                'icms_tributado': False,
+                                'empresa': empresa,
+                                'filial': None,
+                            }
+                        )
+                        if created:
+                            servicos_criados.append(servico)
+                        codigo_servico += 1
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar serviço: {e}. Pulando..."))
+                        codigo_servico += 1
+                        continue
             
             self.stdout.write(f"  ✅ {len(servicos_criados)} serviços criados")
             
@@ -612,26 +663,46 @@ class Command(BaseCommand):
             self.stdout.write("\n💰 Criando contas a receber...")
             clientes = [p for p in pessoas_criadas if p.tipo == 'PJ' and 'Comércio' in p.razao_social]
             contas_receber = []
-            codigo_conta = 1
+            
+            # Buscar o próximo código disponível
+            try:
+                max_codigo = ContaReceber.objects.all().aggregate(max_codigo=Max('codigo_conta'))['max_codigo']
+                codigo_conta = (max_codigo or 0) + 1
+            except Exception:
+                codigo_conta = 1
             
             for i, cliente in enumerate(clientes[:10]):  # Máximo 10 contas
+                # Verificar se já existe conta com este código
+                while ContaReceber.objects.filter(codigo_conta=codigo_conta).exists():
+                    codigo_conta += 1
+                
                 hoje = date.today()
-                conta = ContaReceber.objects.create(
-                    codigo_conta=codigo_conta,
-                    numero_documento=f'CR-{codigo_conta:03d}/2024',
-                    cliente=cliente,
-                    valor_total=Decimal(str(random.uniform(1000, 10000))),
-                    valor_recebido=Decimal('0.00') if i % 3 != 0 else Decimal(str(random.uniform(500, 5000))),
-                    data_emissao=hoje - timedelta(days=random.randint(1, 60)),
-                    data_vencimento=hoje + timedelta(days=random.randint(1, 30)),
-                    status='Pendente' if i % 3 == 0 else 'Parcial' if i % 3 == 1 else 'Pago',
-                    forma_pagamento=random.choice(['Boleto', 'PIX', 'Transferência', 'Cartão']),
-                    descricao=f'Venda de produtos/serviços - {cliente.razao_social}',
-                    empresa=cliente.empresa,
-                    filial=cliente.filial,
-                )
-                contas_receber.append(conta)
-                codigo_conta += 1
+                numero_doc = f'CR-{codigo_conta:03d}/2024'
+                
+                try:
+                    conta, created = ContaReceber.objects.get_or_create(
+                        codigo_conta=codigo_conta,
+                        defaults={
+                            'numero_documento': numero_doc,
+                            'cliente': cliente,
+                            'valor_total': Decimal(str(random.uniform(1000, 10000))),
+                            'valor_recebido': Decimal('0.00') if i % 3 != 0 else Decimal(str(random.uniform(500, 5000))),
+                            'data_emissao': hoje - timedelta(days=random.randint(1, 60)),
+                            'data_vencimento': hoje + timedelta(days=random.randint(1, 30)),
+                            'status': 'Pendente' if i % 3 == 0 else 'Parcial' if i % 3 == 1 else 'Pago',
+                            'forma_pagamento': random.choice(['Boleto', 'PIX', 'Transferência', 'Cartão']),
+                            'descricao': f'Venda de produtos/serviços - {cliente.razao_social}',
+                            'empresa': cliente.empresa,
+                            'filial': cliente.filial if cliente.filial else None,
+                        }
+                    )
+                    if created:
+                        contas_receber.append(conta)
+                    codigo_conta += 1
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar conta a receber: {e}. Pulando..."))
+                    codigo_conta += 1
+                    continue
             
             self.stdout.write(f"  ✅ {len(contas_receber)} contas a receber criadas")
             
@@ -640,24 +711,46 @@ class Command(BaseCommand):
             fornecedores = [p for p in pessoas_criadas if p.tipo == 'PJ' and 'Fornecimentos' in p.razao_social]
             contas_pagar = []
             
+            # Buscar o próximo código disponível (continuar do último usado em contas a receber)
+            try:
+                max_codigo = ContaPagar.objects.all().aggregate(max_codigo=Max('codigo_conta'))['max_codigo']
+                if max_codigo and max_codigo >= codigo_conta:
+                    codigo_conta = max_codigo + 1
+            except Exception:
+                pass  # Manter codigo_conta do loop anterior
+            
             for i, fornecedor in enumerate(fornecedores[:8]):  # Máximo 8 contas
+                # Verificar se já existe conta com este código
+                while ContaPagar.objects.filter(codigo_conta=codigo_conta).exists():
+                    codigo_conta += 1
+                
                 hoje = date.today()
-                conta = ContaPagar.objects.create(
-                    codigo_conta=codigo_conta,
-                    numero_documento=f'CP-{codigo_conta:03d}/2024',
-                    fornecedor=fornecedor,
-                    valor_total=Decimal(str(random.uniform(500, 8000))),
-                    valor_pago=Decimal('0.00') if i % 2 == 0 else Decimal(str(random.uniform(200, 4000))),
-                    data_emissao=hoje - timedelta(days=random.randint(1, 45)),
-                    data_vencimento=hoje + timedelta(days=random.randint(1, 20)),
-                    status='Pendente' if i % 2 == 0 else 'Pago',
-                    forma_pagamento=random.choice(['Boleto', 'PIX', 'Transferência']),
-                    descricao=f'Compra de produtos/serviços - {fornecedor.razao_social}',
-                    empresa=fornecedor.empresa,
-                    filial=fornecedor.filial,
-                )
-                contas_pagar.append(conta)
-                codigo_conta += 1
+                numero_doc = f'CP-{codigo_conta:03d}/2024'
+                
+                try:
+                    conta, created = ContaPagar.objects.get_or_create(
+                        codigo_conta=codigo_conta,
+                        defaults={
+                            'numero_documento': numero_doc,
+                            'fornecedor': fornecedor,
+                            'valor_total': Decimal(str(random.uniform(500, 8000))),
+                            'valor_pago': Decimal('0.00') if i % 2 == 0 else Decimal(str(random.uniform(200, 4000))),
+                            'data_emissao': hoje - timedelta(days=random.randint(1, 45)),
+                            'data_vencimento': hoje + timedelta(days=random.randint(1, 20)),
+                            'status': 'Pendente' if i % 2 == 0 else 'Pago',
+                            'forma_pagamento': random.choice(['Boleto', 'PIX', 'Transferência']),
+                            'descricao': f'Compra de produtos/serviços - {fornecedor.razao_social}',
+                            'empresa': fornecedor.empresa,
+                            'filial': fornecedor.filial if fornecedor.filial else None,
+                        }
+                    )
+                    if created:
+                        contas_pagar.append(conta)
+                    codigo_conta += 1
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar conta a pagar: {e}. Pulando..."))
+                    codigo_conta += 1
+                    continue
             
             self.stdout.write(f"  ✅ {len(contas_pagar)} contas a pagar criadas")
             
