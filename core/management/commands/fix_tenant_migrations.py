@@ -111,32 +111,32 @@ class Command(BaseCommand):
             with schema_context(tenant.schema_name):
                 tenant_ok = True
                 for table, required_cols in tables_to_check.items():
-                           # Primeiro verificar se a tabela existe
-                           if not check_table_exists(table, tenant.schema_name):
-                               self.stdout.write(self.style.WARNING(f"  ⚠️  Tabela {table} não existe. Tentando criar..."))
-                               from django.core.management import call_command
-                               try:
-                                   # Primeiro tentar aplicar migrações
-                                   call_command('migrate_schemas', schema_name=tenant.schema_name, verbosity=0)
-                                   # Se ainda não existir, tentar criar manualmente
-                                   if not check_table_exists(table, tenant.schema_name):
-                                       self.stdout.write(self.style.WARNING(f"     Migrações não criaram a tabela. Tentando criar manualmente..."))
-                                       call_command('create_tenant_tables', verbosity=0)
-                                       # Verificar novamente
-                                       if not check_table_exists(table, tenant.schema_name):
-                                           self.stdout.write(self.style.ERROR(f"  ❌ Tabela {table} ainda não existe após tentativas"))
-                                           tenant_ok = False
-                                           all_ok = False
-                                           continue
-                                       else:
-                                           self.stdout.write(self.style.SUCCESS(f"     ✅ Tabela {table} criada manualmente"))
-                                   else:
-                                       self.stdout.write(self.style.SUCCESS(f"     ✅ Migrações aplicadas"))
-                               except Exception as e:
-                                   self.stdout.write(self.style.ERROR(f"  ❌ Erro ao criar tabela: {e}"))
-                                   tenant_ok = False
-                                   all_ok = False
-                                   continue
+                    # Primeiro verificar se a tabela existe
+                    if not check_table_exists(table, tenant.schema_name):
+                        self.stdout.write(self.style.WARNING(f"  ⚠️  Tabela {table} não existe. Tentando criar..."))
+                        from django.core.management import call_command
+                        try:
+                            # Primeiro tentar aplicar migrações
+                            call_command('migrate_schemas', schema_name=tenant.schema_name, verbosity=0)
+                            # Se ainda não existir, tentar criar manualmente
+                            if not check_table_exists(table, tenant.schema_name):
+                                self.stdout.write(self.style.WARNING(f"     Migrações não criaram a tabela. Tentando criar manualmente..."))
+                                call_command('create_tenant_tables', verbosity=0)
+                                # Verificar novamente
+                                if not check_table_exists(table, tenant.schema_name):
+                                    self.stdout.write(self.style.ERROR(f"  ❌ Tabela {table} ainda não existe após tentativas"))
+                                    tenant_ok = False
+                                    all_ok = False
+                                    continue
+                                else:
+                                    self.stdout.write(self.style.SUCCESS(f"     ✅ Tabela {table} criada manualmente"))
+                            else:
+                                self.stdout.write(self.style.SUCCESS(f"     ✅ Migrações aplicadas"))
+                        except Exception as e:
+                            self.stdout.write(self.style.ERROR(f"  ❌ Erro ao criar tabela: {e}"))
+                            tenant_ok = False
+                            all_ok = False
+                            continue
                     
                     # Se a tabela existe, verificar colunas
                     missing = []
