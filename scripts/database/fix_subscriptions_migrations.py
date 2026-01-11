@@ -63,36 +63,79 @@ def fix_subscriptions_migrations():
             print(f"  ✅ Tabela {table} está OK")
     
     if missing_columns:
-        print("\n⚠️  Algumas colunas estão faltando. Aplicando migrações...")
+        print("\n⚠️  Algumas colunas estão faltando. Tentando corrigir...")
         try:
-            # Aplicar migrações no schema compartilhado
-            call_command('migrate_schemas', '--shared', verbosity=1)
-            print("✅ Migrações aplicadas!")
+            # Primeiro, tentar aplicar migrações normalmente
+            print("  1. Aplicando migrações normalmente...")
+            call_command('migrate_schemas', '--shared', verbosity=0)
             
-            # Verificar novamente
-            print("\n🔍 Verificando novamente...")
-            all_ok = True
+            # Se ainda faltarem colunas, adicionar manualmente via SQL
+            print("  2. Verificando se ainda faltam colunas...")
+            still_missing = {}
             for table in tables_to_check:
                 missing = []
                 for column in required_columns:
                     if not check_column_exists(table, column):
                         missing.append(column)
-                
                 if missing:
-                    all_ok = False
-                    print(f"  ❌ Tabela {table} ainda está faltando colunas: {', '.join(missing)}")
-                else:
-                    print(f"  ✅ Tabela {table} está OK")
+                    still_missing[table] = missing
             
-            if all_ok:
+            if still_missing:
+                print("  3. Adicionando colunas faltantes manualmente via SQL...")
+                with connection.cursor() as cursor:
+                    for table, missing_cols in still_missing.items():
+                        print(f"     Adicionando colunas na tabela {table}...")
+                        for col in missing_cols:
+                            try:
+                                if col == 'created_at':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP')
+                                elif col == 'updated_at':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP')
+                                elif col == 'is_deleted':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE')
+                                elif col == 'deleted_at':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL')
+                                elif col == 'created_by_id':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS created_by_id BIGINT NULL REFERENCES auth_user(id) ON DELETE SET NULL')
+                                elif col == 'updated_by_id':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS updated_by_id BIGINT NULL REFERENCES auth_user(id) ON DELETE SET NULL')
+                                elif col == 'owner_id':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS owner_id BIGINT NULL REFERENCES auth_user(id) ON DELETE SET NULL')
+                                elif col == 'deleted_by_id':
+                                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN IF NOT EXISTS deleted_by_id BIGINT NULL REFERENCES auth_user(id) ON DELETE SET NULL')
+                                print(f"       ✅ Coluna {col} adicionada")
+                            except Exception as e:
+                                print(f"       ⚠️  Erro ao adicionar coluna {col}: {e}")
+                
+                # Verificar novamente
+                print("\n🔍 Verificando novamente...")
+                all_ok = True
+                for table in tables_to_check:
+                    missing = []
+                    for column in required_columns:
+                        if not check_column_exists(table, column):
+                            missing.append(column)
+                    
+                    if missing:
+                        all_ok = False
+                        print(f"  ❌ Tabela {table} ainda está faltando colunas: {', '.join(missing)}")
+                    else:
+                        print(f"  ✅ Tabela {table} está OK")
+                
+                if all_ok:
+                    print("\n✅ Todas as colunas foram adicionadas com sucesso!")
+                    return True
+                else:
+                    print("\n⚠️  Algumas colunas ainda estão faltando.")
+                    print("   Pode ser necessário recriar as tabelas ou aplicar migrações manualmente.")
+                    return False
+            else:
                 print("\n✅ Todas as migrações foram aplicadas com sucesso!")
                 return True
-            else:
-                print("\n⚠️  Algumas migrações podem não ter sido aplicadas corretamente.")
-                print("   Tente executar manualmente: docker-compose exec web python manage.py migrate_schemas --shared")
-                return False
         except Exception as e:
             print(f"\n❌ Erro ao aplicar migrações: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     else:
         print("\n✅ Todas as tabelas estão com as colunas corretas!")

@@ -113,7 +113,7 @@ if %errorlevel% neq 0 (
 )
 
 REM Verificar e corrigir migrações do subscriptions se necessário
-echo Verificando migrações do app subscriptions...
+echo Verificando e corrigindo migrações do app subscriptions...
 docker-compose exec web python scripts/database/fix_subscriptions_migrations.py
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do subscriptions
@@ -179,6 +179,13 @@ if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
 ) else (
     echo ✅ Migrações dos tenants verificadas/aplicadas!
+)
+
+REM Verificar e corrigir colunas faltantes nos tenants
+echo Verificando e corrigindo colunas faltantes nos tenants...
+docker-compose exec web python scripts/database/fix_tenant_migrations.py
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações dos tenants
 )
 
 REM ========================================
