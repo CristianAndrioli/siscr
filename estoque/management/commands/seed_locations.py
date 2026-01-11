@@ -44,16 +44,25 @@ class Command(BaseCommand):
             
             with schema_context(tenant.schema_name):
                 # Tentar usar o manager padrão (com filtro de is_deleted)
-                # Se falhar (coluna não existe), usar all_objects como fallback
+                # Se falhar (coluna não existe), usar all_objects e apenas campos básicos
                 try:
-                    empresas = Empresa.objects.filter(is_active=True)
+                    empresas = Empresa.objects.filter(is_active=True).only('id', 'nome', 'tenant_id', 'is_active')
                     # Testar se a query funciona fazendo um exists()
                     _ = empresas.exists()
                 except Exception:
-                    # Se falhar, provavelmente a coluna is_deleted não existe
-                    # Usar all_objects que não filtra por is_deleted
+                    # Se falhar, usar all_objects e apenas campos básicos que sabemos que existem
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Migrações podem não estar aplicadas. Usando fallback..."))
-                    empresas = Empresa.all_objects.filter(is_active=True)
+                    try:
+                        # Tentar buscar apenas campos básicos que sempre existem
+                        empresas = Empresa.all_objects.filter(is_active=True).only('id', 'nome', 'tenant_id', 'is_active')
+                    except Exception:
+                        # Se ainda falhar, usar values() para buscar apenas campos específicos
+                        empresas_ids = list(Empresa.all_objects.filter(is_active=True).values_list('id', flat=True))
+                        if not empresas_ids:
+                            self.stdout.write(self.style.WARNING(f"  ⚠️  Nenhuma empresa encontrada para {tenant.name}"))
+                            continue
+                        # Criar queryset mínimo apenas com IDs
+                        empresas = Empresa.all_objects.filter(id__in=empresas_ids).only('id', 'nome', 'tenant_id', 'is_active')
                 
                 if not empresas.exists():
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Nenhuma empresa encontrada para {tenant.name}"))
@@ -62,10 +71,17 @@ class Command(BaseCommand):
                 for empresa in empresas:
                     # Mesma lógica para Filial
                     try:
-                        filiais = Filial.objects.filter(empresa=empresa, is_active=True)
-                        filiais.exists()
+                        filiais = Filial.objects.filter(empresa=empresa, is_active=True).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
+                        _ = filiais.exists()
                     except Exception:
-                        filiais = Filial.all_objects.filter(empresa=empresa, is_active=True)
+                        try:
+                            filiais = Filial.all_objects.filter(empresa=empresa, is_active=True).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
+                        except Exception:
+                            filiais_ids = list(Filial.all_objects.filter(empresa=empresa, is_active=True).values_list('id', flat=True))
+                            if filiais_ids:
+                                filiais = Filial.all_objects.filter(id__in=filiais_ids).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
+                            else:
+                                filiais = Filial.all_objects.none()
                     
                     # Sempre criar exatamente 3 locations por empresa
                     self.stdout.write(f"\n  📍 Empresa: {empresa.nome}")

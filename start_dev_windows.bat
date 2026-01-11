@@ -125,6 +125,8 @@ if %errorlevel% equ 0 (
     docker-compose exec web python manage.py seed_subscriptions
     if %errorlevel% neq 0 (
         echo ⚠️  Aviso: Seed de subscriptions pode ter falhado
+        echo     Isso pode acontecer se as migrações não foram aplicadas corretamente.
+        echo     Tente executar manualmente: docker-compose exec web python manage.py migrate_schemas --shared
     ) else (
         echo ✅ Dados compartilhados criados!
     )
@@ -164,9 +166,10 @@ REM Passo 6.5: Aplicar migrações nos tenants
 REM ========================================
 echo.
 echo [6.5/9] Aplicando migrações nos schemas dos tenants...
-docker-compose exec web python manage.py migrate_schemas --noinput
+REM Aplicar migrações apenas nos tenants existentes usando script Python
+docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from tenants.models import Tenant; from django.core.management import call_command; tenants = Tenant.objects.filter(is_active=True); [call_command('migrate_schemas', schema_name=t.schema_name, verbosity=0) for t in tenants]"
 if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
+    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
 ) else (
     echo ✅ Migrações dos tenants verificadas/aplicadas!
 )
