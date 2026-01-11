@@ -495,6 +495,13 @@ class Command(BaseCommand):
             
             # Depois, criar funcionários para filiais
             for filial in filiais_criadas:
+                # Verificar se a filial ainda existe no banco (pode ter sido deletada ou não criada)
+                try:
+                    filial_refreshed = Filial.objects.get(id=filial.id, empresa=filial.empresa)
+                except Filial.DoesNotExist:
+                    self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} não existe mais. Pulando..."))
+                    continue
+                
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)
                     cidade, estado = random.choice(CIDADES)
@@ -516,8 +523,8 @@ class Command(BaseCommand):
                             tipo='PF',
                             cpf_cnpj=cpf,
                             nome_completo=nome,
-                            empresa=filial.empresa,
-                            filial=filial,
+                            empresa=filial_refreshed.empresa,
+                            filial=filial_refreshed,  # Usar a filial refrescada
                             logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
                             numero=str(random.randint(100, 999)),
                             bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
@@ -525,7 +532,7 @@ class Command(BaseCommand):
                             estado=estado,
                             cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                             telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                            email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br",
+                            email=f"{nome.lower().replace(' ', '.')}@{filial_refreshed.empresa.nome.lower().replace(' ', '')}.com.br",
                             cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
                             comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
                         )

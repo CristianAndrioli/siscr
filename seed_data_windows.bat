@@ -46,6 +46,13 @@ if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do subscriptions
 )
 
+REM Verificar e corrigir migrações do accounts se necessário
+echo Verificando e corrigindo migrações do app accounts...
+docker-compose exec web python manage.py fix_accounts_migrations
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações do accounts
+)
+
 REM ========================================
 REM Passo 2: Seed de dados compartilhados (Subscriptions)
 REM ========================================
