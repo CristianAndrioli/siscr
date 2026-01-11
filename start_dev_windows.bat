@@ -114,7 +114,7 @@ if %errorlevel% neq 0 (
 
 REM Verificar e corrigir migrações do subscriptions se necessário
 echo Verificando e corrigindo migrações do app subscriptions...
-docker-compose exec web python manage.py shell -c "exec(open('/app/scripts/database/fix_subscriptions_migrations.py').read())"
+docker-compose exec web python manage.py fix_subscriptions_migrations
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do subscriptions
 )
