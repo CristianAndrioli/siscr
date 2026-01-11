@@ -79,6 +79,9 @@ TENANT_APPS = [
     'cadastros',  # App de cadastros (Pessoa, Produto, Servico)
     'estoque',  # App de estoque (Location, Estoque, Movimentações)
     'reports',  # App de relatórios (templates e configurações)
+    'faturamento',  # App de faturamento (NF-e, NFSe, documentos fiscais)
+    'financeiro',  # App financeiro (Contas a Receber/Pagar, Boletos, Pagamentos)
+    'vendas',  # App de vendas (Pedidos, Orçamentos, orquestração)
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
