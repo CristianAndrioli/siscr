@@ -1,10 +1,14 @@
 """
 Script para aplicar migrações apenas nos tenants existentes e válidos
 Uso: python manage.py shell < scripts/database/apply_tenant_migrations.py
-Ou: docker-compose exec web python scripts/database/apply_tenant_migrations.py
+Ou: docker-compose exec web python -c "import sys; sys.path.insert(0, '/app'); exec(open('/app/scripts/database/apply_tenant_migrations.py').read())"
 """
 import os
 import sys
+
+# Adicionar o diretório raiz ao path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import django
 
 # Configurar Django

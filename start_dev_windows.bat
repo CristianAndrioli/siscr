@@ -114,7 +114,7 @@ if %errorlevel% neq 0 (
 
 REM Verificar e corrigir migrações do subscriptions se necessário
 echo Verificando e corrigindo migrações do app subscriptions...
-docker-compose exec web python scripts/database/fix_subscriptions_migrations.py
+docker-compose exec web python manage.py shell -c "exec(open('/app/scripts/database/fix_subscriptions_migrations.py').read())"
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do subscriptions
 )
@@ -174,7 +174,7 @@ REM ========================================
 echo.
 echo [6.5/9] Aplicando migrações nos schemas dos tenants...
 REM Aplicar migrações apenas nos tenants existentes e válidos usando script Python
-docker-compose exec web python scripts/database/apply_tenant_migrations.py
+docker-compose exec web python manage.py shell -c "exec(open('/app/scripts/database/apply_tenant_migrations.py').read())"
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
 ) else (
@@ -183,7 +183,7 @@ if %errorlevel% neq 0 (
 
 REM Verificar e corrigir colunas faltantes nos tenants
 echo Verificando e corrigindo colunas faltantes nos tenants...
-docker-compose exec web python scripts/database/fix_tenant_migrations.py
+docker-compose exec web python manage.py shell -c "exec(open('/app/scripts/database/fix_tenant_migrations.py').read())"
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações dos tenants
 )

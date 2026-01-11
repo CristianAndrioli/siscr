@@ -1,10 +1,15 @@
 """
 Script para verificar e corrigir migrações do app subscriptions
 Verifica se as colunas do SiscrModelBase existem e aplica migrações se necessário
-Uso: docker-compose exec web python scripts/database/fix_subscriptions_migrations.py
+Uso: docker-compose exec web python manage.py shell < scripts/database/fix_subscriptions_migrations.py
+Ou: docker-compose exec web python -c "import sys; sys.path.insert(0, '/app'); exec(open('/app/scripts/database/fix_subscriptions_migrations.py').read())"
 """
 import os
 import sys
+
+# Adicionar o diretório raiz ao path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import django
 
 # Configurar Django

@@ -1,10 +1,14 @@
 """
 Script para verificar e corrigir migrações nos schemas dos tenants
 Adiciona colunas do SiscrModelBase se estiverem faltando
-Uso: docker-compose exec web python scripts/database/fix_tenant_migrations.py
+Uso: docker-compose exec web python -c "import sys; sys.path.insert(0, '/app'); exec(open('/app/scripts/database/fix_tenant_migrations.py').read())"
 """
 import os
 import sys
+
+# Adicionar o diretório raiz ao path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import django
 
 # Configurar Django

@@ -90,10 +90,11 @@ class Command(BaseCommand):
                     # Usar try/except para lidar com tabela que não existe
                     try:
                         locations_existentes = Location.objects.filter(empresa=empresa).count()
-                    except Exception:
-                        # Se a tabela não existe, assumir 0 e tentar criar
-                        self.stdout.write(self.style.WARNING(f"    ⚠️  Tabela de locations não existe. Tentando criar..."))
-                        locations_existentes = 0
+                    except Exception as e:
+                        # Se a tabela não existe, pular este tenant
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Tabela de locations não existe neste tenant. Pulando..."))
+                        self.stdout.write(self.style.WARNING(f"    Execute migrações: docker-compose exec web python manage.py migrate_schemas --schema={tenant.schema_name}"))
+                        continue
                     if locations_existentes >= 3:
                         self.stdout.write(f"    ✅ Já existem {locations_existentes} locations para esta empresa (pulando)")
                         continue
@@ -137,9 +138,13 @@ class Command(BaseCommand):
             tipo = random.choice(TIPOS_LOCATION)[0]
             codigo = f"{schema_name[:3].upper()}-{empresa.id:02d}-{filial.codigo_filial}-LOC{i+1:02d}"
             
-            # Verificar se já existe
-            if Location.objects.filter(codigo=codigo).exists():
-                continue
+            # Verificar se já existe (com tratamento de erro caso tabela não exista)
+            try:
+                if Location.objects.filter(codigo=codigo).exists():
+                    continue
+            except Exception:
+                # Se a tabela não existe, não podemos verificar, então continuar para criar
+                pass
             
             location = Location.objects.create(
                 empresa=empresa,
@@ -172,9 +177,13 @@ class Command(BaseCommand):
             tipo = random.choice(TIPOS_LOCATION)[0]
             codigo = f"{schema_name[:3].upper()}-{empresa.id:02d}-EMP-LOC{i+1:02d}"
             
-            # Verificar se já existe
-            if Location.objects.filter(codigo=codigo).exists():
-                continue
+            # Verificar se já existe (com tratamento de erro caso tabela não exista)
+            try:
+                if Location.objects.filter(codigo=codigo).exists():
+                    continue
+            except Exception:
+                # Se a tabela não existe, não podemos verificar, então continuar para criar
+                pass
             
             location = Location.objects.create(
                 empresa=empresa,
