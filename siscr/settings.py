@@ -75,6 +75,7 @@ SHARED_APPS = [
 TENANT_APPS = [
     # Apps que pertencem aos tenants (cada tenant tem seu próprio schema)
     'django.contrib.contenttypes',
+    'tenants',  # App de tenants (Empresa e Filial devem estar nos schemas dos tenants)
     'core',  # App core (views gerais, dashboard, etc.)
     'cadastros',  # App de cadastros (Pessoa, Produto, Servico)
     'estoque',  # App de estoque (Location, Estoque, Movimentações)
