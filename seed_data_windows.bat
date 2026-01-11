@@ -78,6 +78,13 @@ if %errorlevel% neq 0 (
     echo ✅ Migrações dos tenants verificadas/aplicadas!
 )
 
+REM Criar tabelas tenants_empresa e tenants_filial se não existirem
+echo Criando tabelas tenants_empresa e tenants_filial nos schemas dos tenants...
+docker-compose exec web python manage.py create_tenant_tables
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas ao criar tabelas dos tenants
+)
+
 REM Verificar e corrigir colunas faltantes nos tenants
 echo Verificando e corrigindo colunas faltantes nos tenants...
 docker-compose exec web python manage.py fix_tenant_migrations
