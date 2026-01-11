@@ -89,6 +89,15 @@ class Command(BaseCommand):
                     continue
                 
                 for empresa in empresas:
+                    # Verificar se a empresa realmente existe no banco antes de usar
+                    try:
+                        if not Empresa.objects.filter(id=empresa.id).exists():
+                            self.stdout.write(self.style.WARNING(f"  ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe no banco. Pulando..."))
+                            continue
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao verificar empresa {empresa.nome}: {e}. Pulando..."))
+                        continue
+                    
                     # Mesma lógica para Filial
                     try:
                         filiais = Filial.objects.filter(empresa=empresa, is_active=True).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
@@ -153,6 +162,21 @@ class Command(BaseCommand):
 
     def criar_locations_para_filial(self, empresa, filial, schema_name, num_locations=1):
         """Cria locations para uma filial específica"""
+        # Verificar se empresa e filial realmente existem no banco antes de usar
+        try:
+            if not Empresa.objects.filter(id=empresa.id).exists():
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe no banco. Pulando..."))
+                return []
+        except Exception:
+            return []
+        
+        try:
+            if not Filial.objects.filter(id=filial.id, empresa=empresa).exists():
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} (ID: {filial.id}) não existe no banco. Pulando..."))
+                return []
+        except Exception:
+            return []
+        
         cidade, estado = random.choice(CIDADES)
         locations = []
         
@@ -168,9 +192,10 @@ class Command(BaseCommand):
                 # Se a tabela não existe, não podemos verificar, então continuar para criar
                 pass
             
-            location = Location.objects.create(
-                empresa=empresa,
-                filial=filial,
+            try:
+                location = Location.objects.create(
+                    empresa=empresa,
+                    filial=filial,
                 nome=f"{filial.nome} - {self.get_tipo_nome(tipo)}",
                 codigo=codigo,
                 tipo=tipo,
@@ -184,14 +209,26 @@ class Command(BaseCommand):
                 cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                 permite_entrada=True,
                 permite_saida=True,
-                is_active=True,
-            )
-            locations.append(location)
+                    is_active=True,
+                )
+                locations.append(location)
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar location: {e}. Pulando..."))
+                continue
         
         return locations
 
     def criar_locations_para_empresa(self, empresa, schema_name, num_locations=3):
         """Cria locations para uma empresa sem filiais"""
+        # Verificar se a empresa realmente existe no banco antes de usar
+        try:
+            if not Empresa.objects.filter(id=empresa.id).exists():
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe no banco. Pulando criação de locations..."))
+                return []
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao verificar empresa: {e}. Pulando criação de locations..."))
+            return []
+        
         cidade, estado = random.choice(CIDADES)
         locations = []
         
@@ -207,25 +244,29 @@ class Command(BaseCommand):
                 # Se a tabela não existe, não podemos verificar, então continuar para criar
                 pass
             
-            location = Location.objects.create(
-                empresa=empresa,
-                filial=None,  # Sem filial
-                nome=f"{empresa.nome} - {self.get_tipo_nome(tipo)}",
-                codigo=codigo,
-                tipo=tipo,
-                logradouro=f"Rua {random.choice(['das Flores', 'Principal', 'Comercial', 'do Comércio', 'Industrial'])}",
-                numero=str(random.randint(100, 9999)),
-                letra=random.choice([None, 'A', 'B', 'C']),
-                complemento=random.choice([None, 'Galpão 1', 'Sala 101', 'Bloco A']),
-                bairro=random.choice(['Centro', 'Comercial', 'Industrial', 'Norte', 'Sul']),
-                cidade=cidade,
-                estado=estado,
-                cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
-                permite_entrada=True,
-                permite_saida=True,
-                is_active=True,
-            )
-            locations.append(location)
+            try:
+                location = Location.objects.create(
+                    empresa=empresa,
+                    filial=None,  # Sem filial
+                    nome=f"{empresa.nome} - {self.get_tipo_nome(tipo)}",
+                    codigo=codigo,
+                    tipo=tipo,
+                    logradouro=f"Rua {random.choice(['das Flores', 'Principal', 'Comercial', 'do Comércio', 'Industrial'])}",
+                    numero=str(random.randint(100, 9999)),
+                    letra=random.choice([None, 'A', 'B', 'C']),
+                    complemento=random.choice([None, 'Galpão 1', 'Sala 101', 'Bloco A']),
+                    bairro=random.choice(['Centro', 'Comercial', 'Industrial', 'Norte', 'Sul']),
+                    cidade=cidade,
+                    estado=estado,
+                    cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
+                    permite_entrada=True,
+                    permite_saida=True,
+                    is_active=True,
+                )
+                locations.append(location)
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar location: {e}. Pulando..."))
+                continue
         
         return locations
 
