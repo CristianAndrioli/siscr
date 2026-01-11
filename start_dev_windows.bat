@@ -115,37 +115,42 @@ echo ✅ Porta 8000 (Django) está disponível
 :create_override
 REM Criar arquivo docker-compose.override.yml se as portas forem diferentes
 set NEEDS_RECREATE=0
-if "!PORT_CHANGED!"=="1" (
-    echo.
-    echo 📝 Criando docker-compose.override.yml com portas alternativas...
-    
-    REM Verificar se containers já estão rodando
-    docker-compose ps | findstr "siscr_web" >nul 2>&1
-    if %errorlevel% equ 0 (
-        echo ⚠️  Containers já estão rodando. Será necessário recriá-los para aplicar novas portas.
-        set NEEDS_RECREATE=1
-    )
-    
-    (
-        echo services:
-        echo   db:
-        echo     ports:
-        echo       - "!DB_PORT!:5432"
-        echo   redis:
-        echo     ports:
-        echo       - "!REDIS_PORT!:6379"
-        echo   web:
-        echo     ports:
-        echo       - "!WEB_PORT!:8000"
-    ) > docker-compose.override.yml
-    echo ✅ Arquivo docker-compose.override.yml criado
-    echo    PostgreSQL (externo): localhost:!DB_PORT!
-    echo    Redis (externo): localhost:!REDIS_PORT!
-    echo    Django: http://localhost:!WEB_PORT!
-    echo.
-    echo ℹ️  Nota: A aplicação Django dentro do container sempre usa a porta interna 5432
-    echo    A porta externa !DB_PORT! é apenas para conexões de fora do Docker (ex: DBeaver)
-)
+if not "!PORT_CHANGED!"=="1" goto :skip_override
+echo.
+echo 📝 Criando docker-compose.override.yml com portas alternativas...
+
+REM Verificar se containers já estão rodando
+docker-compose ps | findstr "siscr_web" >nul 2>&1
+if errorlevel 1 goto :no_containers
+echo ⚠️  Containers já estão rodando. Será necessário recriá-los para aplicar novas portas.
+set NEEDS_RECREATE=1
+goto :create_override_file
+
+:no_containers
+echo ℹ️  Containers não estão rodando. Serão criados com as novas portas.
+
+:create_override_file
+(
+    echo services:
+    echo   db:
+    echo     ports:
+    echo       - "!DB_PORT!:5432"
+    echo   redis:
+    echo     ports:
+    echo       - "!REDIS_PORT!:6379"
+    echo   web:
+    echo     ports:
+    echo       - "!WEB_PORT!:8000"
+) > docker-compose.override.yml
+echo ✅ Arquivo docker-compose.override.yml criado
+echo    PostgreSQL (externo): localhost:!DB_PORT!
+echo    Redis (externo): localhost:!REDIS_PORT!
+echo    Django: http://localhost:!WEB_PORT!
+echo.
+echo ℹ️  Nota: A aplicação Django dentro do container sempre usa a porta interna 5432
+echo    A porta externa !DB_PORT! é apenas para conexões de fora do Docker (ex: DBeaver)
+
+:skip_override
 
 REM ========================================
 REM Passo 3: Subir ou iniciar containers
@@ -153,61 +158,74 @@ REM ========================================
 echo.
 echo [3/10] Verificando containers...
 docker-compose ps | findstr "siscr_web" >nul 2>&1
-if %errorlevel% equ 0 (
-    if "!NEEDS_RECREATE!"=="1" (
-        echo ⚠️  Recriando containers para aplicar novas portas...
-        docker-compose down
-        docker-compose up -d
-        if %errorlevel% neq 0 (
-            echo ❌ Erro ao recriar containers!
-            pause
-            exit /b 1
-        )
-        echo ✅ Containers recriados com novas portas!
-    ) else (
-        echo Containers existem. Verificando se estão rodando...
-        docker-compose ps | findstr "Up" >nul 2>&1
-        if %errorlevel% equ 0 (
-            echo ✅ Containers já estão rodando!
-        ) else (
-            echo Iniciando containers existentes...
-            docker-compose start
-            if %errorlevel% neq 0 (
-                echo ❌ Erro ao iniciar containers!
-                pause
-                exit /b 1
-            )
-            echo ✅ Containers iniciados!
-        )
-    )
-) else (
-    echo Construindo imagens e subindo containers pela primeira vez...
-    echo (Isso pode levar alguns minutos na primeira execução)
-    docker-compose build
-    if %errorlevel% neq 0 (
-        echo.
-        echo ⚠️  Build com cache falhou. Tentando sem cache...
-        echo (Isso pode levar mais tempo, mas resolve problemas de cache corrompido)
-        docker-compose build --no-cache
-        if %errorlevel% neq 0 (
-            echo.
-            echo ❌ Erro ao construir imagens mesmo sem cache!
-            echo.
-            echo 💡 Tente executar manualmente:
-            echo    docker system prune -a
-            echo    docker-compose build --no-cache
-            pause
-            exit /b 1
-        )
-    )
-    docker-compose up -d
-    if %errorlevel% neq 0 (
-        echo ❌ Erro ao subir containers!
-        pause
-        exit /b 1
-    )
-    echo ✅ Containers criados e iniciados!
+if errorlevel 1 goto :create_containers
+
+REM Containers existem
+if not "!NEEDS_RECREATE!"=="1" goto :check_running
+
+REM Precisa recriar
+echo ⚠️  Recriando containers para aplicar novas portas...
+docker-compose down
+docker-compose up -d
+if errorlevel 1 (
+    echo ❌ Erro ao recriar containers!
+    pause
+    exit /b 1
 )
+echo ✅ Containers recriados com novas portas!
+goto :containers_ready
+
+:check_running
+echo Containers existem. Verificando se estão rodando...
+docker-compose ps | findstr "Up" >nul 2>&1
+if errorlevel 1 goto :start_containers
+echo ✅ Containers já estão rodando!
+goto :containers_ready
+
+:start_containers
+echo Iniciando containers existentes...
+docker-compose start
+if errorlevel 1 (
+    echo ❌ Erro ao iniciar containers!
+    pause
+    exit /b 1
+)
+echo ✅ Containers iniciados!
+goto :containers_ready
+
+:create_containers
+echo Construindo imagens e subindo containers pela primeira vez...
+echo (Isso pode levar alguns minutos na primeira execução)
+docker-compose build
+if errorlevel 1 goto :build_no_cache
+goto :start_containers_up
+
+:build_no_cache
+echo.
+echo ⚠️  Build com cache falhou. Tentando sem cache...
+echo (Isso pode levar mais tempo, mas resolve problemas de cache corrompido)
+docker-compose build --no-cache
+if errorlevel 1 (
+    echo.
+    echo ❌ Erro ao construir imagens mesmo sem cache!
+    echo.
+    echo 💡 Tente executar manualmente:
+    echo    docker system prune -a
+    echo    docker-compose build --no-cache
+    pause
+    exit /b 1
+)
+
+:start_containers_up
+docker-compose up -d
+if errorlevel 1 (
+    echo ❌ Erro ao subir containers!
+    pause
+    exit /b 1
+)
+echo ✅ Containers criados e iniciados!
+
+:containers_ready
 
 REM Aguardar containers ficarem prontos
 echo Aguardando containers ficarem prontos...
