@@ -112,9 +112,12 @@ if %errorlevel% neq 0 (
     echo ✅ Migrações compartilhadas verificadas/aplicadas!
 )
 
-REM Forçar aplicação das migrações do subscriptions caso não tenham sido aplicadas
+REM Verificar e corrigir migrações do subscriptions se necessário
 echo Verificando migrações do app subscriptions...
-docker-compose exec web python manage.py migrate subscriptions --database=default --noinput >nul 2>&1
+docker-compose exec web python scripts/database/fix_subscriptions_migrations.py
+if %errorlevel% neq 0 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações do subscriptions
+)
 
 REM ========================================
 REM Passo 5: Seed de dados compartilhados (Subscriptions)
