@@ -54,75 +54,79 @@ echo [2.5/10] Verificando portas disponíveis...
 set DB_PORT=5432
 set REDIS_PORT=6379
 set WEB_PORT=8000
+set PORT_CHANGED=0
 
 REM Verificar porta do PostgreSQL
-netstat -an | findstr ":%DB_PORT%" >nul 2>&1
+netstat -an | findstr ":5432" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo ⚠️  Porta %DB_PORT% (PostgreSQL) está em uso. Procurando porta alternativa...
+    echo ⚠️  Porta 5432 (PostgreSQL) está em uso. Procurando porta alternativa...
     set DB_PORT=5433
     :check_db_port
-    netstat -an | findstr ":%DB_PORT%" >nul 2>&1
-    if %errorlevel% equ 0 (
+    netstat -an | findstr ":!DB_PORT!" >nul 2>&1
+    if !errorlevel! equ 0 (
         set /a DB_PORT+=1
         goto check_db_port
     )
-    echo ✅ Usando porta %DB_PORT% para PostgreSQL
+    echo ✅ Usando porta !DB_PORT! para PostgreSQL
+    set PORT_CHANGED=1
 ) else (
-    echo ✅ Porta %DB_PORT% (PostgreSQL) está disponível
+    echo ✅ Porta 5432 (PostgreSQL) está disponível
 )
 
 REM Verificar porta do Redis
-netstat -an | findstr ":%REDIS_PORT%" >nul 2>&1
+netstat -an | findstr ":6379" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo ⚠️  Porta %REDIS_PORT% (Redis) está em uso. Procurando porta alternativa...
+    echo ⚠️  Porta 6379 (Redis) está em uso. Procurando porta alternativa...
     set REDIS_PORT=6380
     :check_redis_port
-    netstat -an | findstr ":%REDIS_PORT%" >nul 2>&1
-    if %errorlevel% equ 0 (
+    netstat -an | findstr ":!REDIS_PORT!" >nul 2>&1
+    if !errorlevel! equ 0 (
         set /a REDIS_PORT+=1
         goto check_redis_port
     )
-    echo ✅ Usando porta %REDIS_PORT% para Redis
+    echo ✅ Usando porta !REDIS_PORT! para Redis
+    set PORT_CHANGED=1
 ) else (
-    echo ✅ Porta %REDIS_PORT% (Redis) está disponível
+    echo ✅ Porta 6379 (Redis) está disponível
 )
 
 REM Verificar porta do Django
-netstat -an | findstr ":%WEB_PORT%" >nul 2>&1
+netstat -an | findstr ":8000" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo ⚠️  Porta %WEB_PORT% (Django) está em uso. Procurando porta alternativa...
+    echo ⚠️  Porta 8000 (Django) está em uso. Procurando porta alternativa...
     set WEB_PORT=8001
     :check_web_port
-    netstat -an | findstr ":%WEB_PORT%" >nul 2>&1
-    if %errorlevel% equ 0 (
+    netstat -an | findstr ":!WEB_PORT!" >nul 2>&1
+    if !errorlevel! equ 0 (
         set /a WEB_PORT+=1
         goto check_web_port
     )
-    echo ✅ Usando porta %WEB_PORT% para Django
+    echo ✅ Usando porta !WEB_PORT! para Django
+    set PORT_CHANGED=1
 ) else (
-    echo ✅ Porta %WEB_PORT% (Django) está disponível
+    echo ✅ Porta 8000 (Django) está disponível
 )
 
 REM Criar arquivo docker-compose.override.yml se as portas forem diferentes
-if not %DB_PORT%==5432 (
+if "!PORT_CHANGED!"=="1" (
     echo.
     echo 📝 Criando docker-compose.override.yml com portas alternativas...
     (
         echo services:
         echo   db:
         echo     ports:
-        echo       - "%DB_PORT%:5432"
+        echo       - "!DB_PORT!:5432"
         echo   redis:
         echo     ports:
-        echo       - "%REDIS_PORT%:6379"
+        echo       - "!REDIS_PORT!:6379"
         echo   web:
         echo     ports:
-        echo       - "%WEB_PORT%:8000"
+        echo       - "!WEB_PORT!:8000"
     ) > docker-compose.override.yml
     echo ✅ Arquivo docker-compose.override.yml criado
-    echo    PostgreSQL: localhost:%DB_PORT%
-    echo    Redis: localhost:%REDIS_PORT%
-    echo    Django: http://localhost:%WEB_PORT%
+    echo    PostgreSQL: localhost:!DB_PORT!
+    echo    Redis: localhost:!REDIS_PORT!
+    echo    Django: http://localhost:!WEB_PORT!
 )
 
 REM ========================================
