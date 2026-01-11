@@ -24,6 +24,21 @@ class Command(BaseCommand):
             'estoque_location': ['created_at', 'updated_at', 'created_by_id', 'updated_by_id', 'owner_id', 'is_deleted', 'deleted_at', 'deleted_by_id'],
         }
         
+        def check_table_exists(table_name, schema_name='public'):
+            """Verifica se uma tabela existe"""
+            with connection.cursor() as cursor:
+                if schema_name != 'public':
+                    cursor.execute(f"SET search_path TO {schema_name}")
+                cursor.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = %s AND table_name = %s
+                """, [schema_name, table_name])
+                result = cursor.fetchone()
+                if schema_name != 'public':
+                    cursor.execute("SET search_path TO public")
+                return result is not None
+        
         def check_column_exists(table_name, column_name, schema_name='public'):
             """Verifica se uma coluna existe em uma tabela"""
             with connection.cursor() as cursor:
@@ -76,6 +91,26 @@ class Command(BaseCommand):
             with schema_context(tenant.schema_name):
                 tenant_ok = True
                 for table, required_cols in tables_to_check.items():
+                    # Primeiro verificar se a tabela existe
+                    if not check_table_exists(table, tenant.schema_name):
+                        self.stdout.write(self.style.WARNING(f"  ⚠️  Tabela {table} não existe. Aplicando migrações..."))
+                        from django.core.management import call_command
+                        try:
+                            call_command('migrate_schemas', schema_name=tenant.schema_name, verbosity=0)
+                            self.stdout.write(self.style.SUCCESS(f"     ✅ Migrações aplicadas"))
+                            # Verificar novamente se a tabela existe
+                            if not check_table_exists(table, tenant.schema_name):
+                                self.stdout.write(self.style.ERROR(f"  ❌ Tabela {table} ainda não existe após aplicar migrações"))
+                                tenant_ok = False
+                                all_ok = False
+                                continue
+                        except Exception as e:
+                            self.stdout.write(self.style.ERROR(f"  ❌ Erro ao aplicar migrações: {e}"))
+                            tenant_ok = False
+                            all_ok = False
+                            continue
+                    
+                    # Se a tabela existe, verificar colunas
                     missing = []
                     for col in required_cols:
                         if not check_column_exists(table, col, tenant.schema_name):

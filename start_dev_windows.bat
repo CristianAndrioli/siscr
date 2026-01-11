@@ -169,7 +169,7 @@ if %errorlevel% equ 0 (
 )
 
 REM ========================================
-REM Passo 6.5: Aplicar migrações nos tenants
+REM Passo 6.5: Aplicar migrações nos tenants e corrigir colunas
 REM ========================================
 echo.
 echo [6.5/9] Aplicando migrações nos schemas dos tenants...
@@ -181,7 +181,7 @@ if %errorlevel% neq 0 (
     echo ✅ Migrações dos tenants verificadas/aplicadas!
 )
 
-REM Verificar e corrigir colunas faltantes nos tenants
+REM Verificar e corrigir colunas faltantes nos tenants (aplica migrações se necessário)
 echo Verificando e corrigindo colunas faltantes nos tenants...
 docker-compose exec web python manage.py fix_tenant_migrations
 if %errorlevel% neq 0 (
