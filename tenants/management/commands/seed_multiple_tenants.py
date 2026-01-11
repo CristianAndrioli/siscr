@@ -217,11 +217,30 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.SUCCESS(f"✅ Tenant encontrado no banco: {tenant_name}"))
                     else:
                         # Criar tenant via SQL direto
+                        # Primeiro verificar se as colunas created_at/updated_at existem
                         cursor.execute("""
-                            INSERT INTO tenants_tenant (schema_name, name, is_active, created_at, updated_at)
-                            VALUES (%s, %s, %s, NOW(), NOW())
-                            RETURNING id
-                        """, [schema_name, tenant_name, True])
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_schema = 'public' 
+                            AND table_name = 'tenants_tenant' 
+                            AND column_name IN ('created_at', 'updated_at')
+                        """)
+                        has_timestamp_cols = len(cursor.fetchall()) == 2
+                        
+                        if has_timestamp_cols:
+                            cursor.execute("""
+                                INSERT INTO tenants_tenant (schema_name, name, is_active, created_at, updated_at)
+                                VALUES (%s, %s, %s, NOW(), NOW())
+                                RETURNING id
+                            """, [schema_name, tenant_name, True])
+                        else:
+                            # Se não tiver as colunas, inserir sem elas
+                            cursor.execute("""
+                                INSERT INTO tenants_tenant (schema_name, name, is_active)
+                                VALUES (%s, %s, %s)
+                                RETURNING id
+                            """, [schema_name, tenant_name, True])
+                        
                         tenant_id = cursor.fetchone()[0]
                         tenant = Tenant(id=tenant_id, schema_name=schema_name, name=tenant_name, is_active=True)
                         tenant._state.adding = False
@@ -308,6 +327,11 @@ class Command(BaseCommand):
                 # IMPORTANTE: Filtrar por tenant também para garantir isolamento correto
                 cidade, estado = random.choice(CIDADES)
                 try:
+                    # Desabilitar signals temporariamente para evitar problemas com colunas faltantes
+                    from django.db.models.signals import post_save
+                    from subscriptions.signals import update_empresa_quota_on_create
+                    post_save.disconnect(update_empresa_quota_on_create, sender=Empresa)
+                    
                     empresa, created = Empresa.objects.get_or_create(
                         cnpj=emp_config['cnpj'],
                         tenant=tenant,  # Adicionar tenant na busca para garantir isolamento
@@ -321,11 +345,19 @@ class Command(BaseCommand):
                             'is_active': True,
                         }
                     )
+                    
+                    # Reabilitar signal
+                    post_save.connect(update_empresa_quota_on_create, sender=Empresa)
                 except Exception as e:
                     # Se falhar, pode ser que as colunas não existam - tentar usar all_objects
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao buscar/criar empresa: {e}"))
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Tentando usar fallback..."))
                     try:
+                        # Desabilitar signals também no fallback
+                        from django.db.models.signals import post_save
+                        from subscriptions.signals import update_empresa_quota_on_create
+                        post_save.disconnect(update_empresa_quota_on_create, sender=Empresa)
+                        
                         empresa = Empresa.all_objects.filter(cnpj=emp_config['cnpj'], tenant=tenant).first()
                         if not empresa:
                             # Criar usando apenas campos básicos que sabemos que existem
@@ -343,6 +375,9 @@ class Command(BaseCommand):
                             created = True
                         else:
                             created = False
+                        
+                        # Reabilitar signal
+                        post_save.connect(update_empresa_quota_on_create, sender=Empresa)
                     except Exception as e2:
                         self.stdout.write(self.style.ERROR(f"  ❌ Erro ao criar empresa: {e2}"))
                         self.stdout.write(self.style.ERROR(f"  ❌ As migrações podem não estar aplicadas corretamente."))
