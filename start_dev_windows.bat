@@ -112,6 +112,10 @@ if %errorlevel% neq 0 (
     echo ✅ Migrações compartilhadas verificadas/aplicadas!
 )
 
+REM Forçar aplicação das migrações do subscriptions caso não tenham sido aplicadas
+echo Verificando migrações do app subscriptions...
+docker-compose exec web python manage.py migrate subscriptions --database=default --noinput >nul 2>&1
+
 REM ========================================
 REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
@@ -166,8 +170,8 @@ REM Passo 6.5: Aplicar migrações nos tenants
 REM ========================================
 echo.
 echo [6.5/9] Aplicando migrações nos schemas dos tenants...
-REM Aplicar migrações apenas nos tenants existentes usando script Python
-docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from tenants.models import Tenant; from django.core.management import call_command; tenants = Tenant.objects.filter(is_active=True); [call_command('migrate_schemas', schema_name=t.schema_name, verbosity=0) for t in tenants]"
+REM Aplicar migrações apenas nos tenants existentes e válidos usando script Python
+docker-compose exec web python scripts/database/apply_tenant_migrations.py
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
 ) else (

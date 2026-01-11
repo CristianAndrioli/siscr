@@ -87,7 +87,13 @@ class Command(BaseCommand):
                     self.stdout.write(f"\n  📍 Empresa: {empresa.nome}")
                     
                     # Verificar quantas locations já existem para esta empresa
-                    locations_existentes = Location.objects.filter(empresa=empresa).count()
+                    # Usar try/except para lidar com tabela que não existe
+                    try:
+                        locations_existentes = Location.objects.filter(empresa=empresa).count()
+                    except Exception:
+                        # Se a tabela não existe, assumir 0 e tentar criar
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Tabela de locations não existe. Tentando criar..."))
+                        locations_existentes = 0
                     if locations_existentes >= 3:
                         self.stdout.write(f"    ✅ Já existem {locations_existentes} locations para esta empresa (pulando)")
                         continue

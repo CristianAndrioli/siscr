@@ -194,16 +194,41 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("✅ Migrações aplicadas"))
         
         # Criar plano básico se não existir
-        plan, _ = Plan.objects.get_or_create(
-            slug='basico',
-            defaults={
-                'name': 'Plano Básico',
-                'price_monthly': Decimal('99.00'),
-                'max_users': 10,
-                'max_empresas': 5,
-                'max_filiais': 10,
-            }
-        )
+        # Usar only() para buscar apenas campos básicos caso migrações não estejam aplicadas
+        try:
+            plan, _ = Plan.objects.get_or_create(
+                slug='basico',
+                defaults={
+                    'name': 'Plano Básico',
+                    'price_monthly': Decimal('99.00'),
+                    'max_users': 10,
+                    'max_empresas': 5,
+                    'max_filiais': 10,
+                }
+            )
+        except Exception as e:
+            # Se falhar, tentar usar all_objects e apenas campos básicos
+            self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao buscar plano: {e}"))
+            self.stdout.write(self.style.WARNING(f"  ⚠️  Tentando criar plano com campos básicos..."))
+            try:
+                # Tentar buscar apenas com campos básicos
+                plan = Plan.all_objects.filter(slug='basico').only('id', 'slug', 'name', 'price_monthly', 'max_users', 'max_empresas', 'max_filiais', 'is_active').first()
+                if not plan:
+                    # Criar usando apenas campos básicos
+                    plan = Plan.all_objects.create(
+                        slug='basico',
+                        name='Plano Básico',
+                        price_monthly=Decimal('99.00'),
+                        max_users=10,
+                        max_empresas=5,
+                        max_filiais=10,
+                        is_active=True,
+                    )
+            except Exception as e2:
+                self.stdout.write(self.style.ERROR(f"  ❌ Erro ao criar plano: {e2}"))
+                self.stdout.write(self.style.ERROR(f"  ❌ As migrações do app subscriptions podem não estar aplicadas corretamente."))
+                self.stdout.write(self.style.ERROR(f"  ❌ Execute: docker-compose exec web python manage.py migrate_schemas --shared"))
+                raise
         
         # Criar assinatura
         subscription, _ = Subscription.objects.get_or_create(
