@@ -89,23 +89,34 @@ if %errorlevel% equ 0 (
 
 REM Remover todos os schemas de tenants
 echo    Removendo schemas de tenants...
-REM Criar arquivo SQL temporário
-echo DO $$ > %TEMP%\drop_tenants.sql
-echo DECLARE r RECORD; >> %TEMP%\drop_tenants.sql
-echo BEGIN >> %TEMP%\drop_tenants.sql
-echo   FOR r IN (SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'pg_temp_1', 'pg_toast_temp_1', 'public') AND schema_name NOT LIKE 'pg_%%') >> %TEMP%\drop_tenants.sql
-echo   LOOP >> %TEMP%\drop_tenants.sql
-echo     EXECUTE 'DROP SCHEMA IF EXISTS ' || quote_ident(r.schema_name) || ' CASCADE'; >> %TEMP%\drop_tenants.sql
-echo   END LOOP; >> %TEMP%\drop_tenants.sql
-echo END $$; >> %TEMP%\drop_tenants.sql
+REM Buscar lista de schemas e remover um por um
+docker-compose exec -T db psql -U postgres -d siscr_db -t -A -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'pg_temp_1', 'pg_toast_temp_1', 'public') AND schema_name NOT LIKE 'pg_%%';" > %TEMP%\schemas_list.txt 2>nul
 
-docker-compose exec -T db psql -U postgres -d siscr_db -f %TEMP%\drop_tenants.sql 2>nul
-if %errorlevel% equ 0 (
-    echo ✅ Schemas de tenants removidos!
-    del %TEMP%\drop_tenants.sql 2>nul
+set schemas_found=0
+if exist %TEMP%\schemas_list.txt (
+    for /f "usebackq delims=" %%s in ("%TEMP%\schemas_list.txt") do (
+        set "schema_name=%%s"
+        set "schema_name=!schema_name: =!"
+        if not "!schema_name!"=="" (
+            set /a schemas_found+=1
+            echo      Removendo schema: !schema_name!
+            docker-compose exec -T db psql -U postgres -d siscr_db -c "DROP SCHEMA IF EXISTS \"!schema_name!\" CASCADE;" >nul 2>&1
+            if !errorlevel! equ 0 (
+                echo      ✅ Schema !schema_name! removido
+            ) else (
+                echo      ⚠️  Erro ao remover schema !schema_name!
+            )
+        )
+    )
+    del %TEMP%\schemas_list.txt 2>nul
 ) else (
-    echo ⚠️  Aviso: Não foi possível remover schemas de tenants (pode não haver tenants)
-    del %TEMP%\drop_tenants.sql 2>nul
+    echo    ℹ️  Não foi possível buscar lista de schemas (banco pode estar vazio)
+)
+
+if %schemas_found% equ 0 (
+    echo    ℹ️  Nenhum schema de tenant encontrado
+) else (
+    echo    ✅ %schemas_found% schema(s) de tenant(s) removido(s)!
 )
 
 REM ========================================

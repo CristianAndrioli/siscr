@@ -11,7 +11,7 @@ echo.
 REM ========================================
 REM Passo 1: Verificar se Docker está instalado
 REM ========================================
-echo [1/9] Verificando se Docker está instalado...
+echo [1/10] Verificando se Docker está instalado...
 docker --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
@@ -30,7 +30,7 @@ REM ========================================
 REM Passo 2: Verificar se Docker está rodando
 REM ========================================
 echo.
-echo [2/9] Verificando se Docker está rodando...
+echo [2/10] Verificando se Docker está rodando...
 docker ps >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
@@ -47,10 +47,89 @@ if %errorlevel% neq 0 (
 echo ✅ Docker está rodando!
 
 REM ========================================
+REM Passo 2.5: Verificar portas disponíveis
+REM ========================================
+echo.
+echo [2.5/10] Verificando portas disponíveis...
+set DB_PORT=5432
+set REDIS_PORT=6379
+set WEB_PORT=8000
+
+REM Verificar porta do PostgreSQL
+netstat -an | findstr ":%DB_PORT%" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ⚠️  Porta %DB_PORT% (PostgreSQL) está em uso. Procurando porta alternativa...
+    set DB_PORT=5433
+    :check_db_port
+    netstat -an | findstr ":%DB_PORT%" >nul 2>&1
+    if %errorlevel% equ 0 (
+        set /a DB_PORT+=1
+        goto check_db_port
+    )
+    echo ✅ Usando porta %DB_PORT% para PostgreSQL
+) else (
+    echo ✅ Porta %DB_PORT% (PostgreSQL) está disponível
+)
+
+REM Verificar porta do Redis
+netstat -an | findstr ":%REDIS_PORT%" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ⚠️  Porta %REDIS_PORT% (Redis) está em uso. Procurando porta alternativa...
+    set REDIS_PORT=6380
+    :check_redis_port
+    netstat -an | findstr ":%REDIS_PORT%" >nul 2>&1
+    if %errorlevel% equ 0 (
+        set /a REDIS_PORT+=1
+        goto check_redis_port
+    )
+    echo ✅ Usando porta %REDIS_PORT% para Redis
+) else (
+    echo ✅ Porta %REDIS_PORT% (Redis) está disponível
+)
+
+REM Verificar porta do Django
+netstat -an | findstr ":%WEB_PORT%" >nul 2>&1
+if %errorlevel% equ 0 (
+    echo ⚠️  Porta %WEB_PORT% (Django) está em uso. Procurando porta alternativa...
+    set WEB_PORT=8001
+    :check_web_port
+    netstat -an | findstr ":%WEB_PORT%" >nul 2>&1
+    if %errorlevel% equ 0 (
+        set /a WEB_PORT+=1
+        goto check_web_port
+    )
+    echo ✅ Usando porta %WEB_PORT% para Django
+) else (
+    echo ✅ Porta %WEB_PORT% (Django) está disponível
+)
+
+REM Criar arquivo docker-compose.override.yml se as portas forem diferentes
+if not %DB_PORT%==5432 (
+    echo.
+    echo 📝 Criando docker-compose.override.yml com portas alternativas...
+    (
+        echo services:
+        echo   db:
+        echo     ports:
+        echo       - "%DB_PORT%:5432"
+        echo   redis:
+        echo     ports:
+        echo       - "%REDIS_PORT%:6379"
+        echo   web:
+        echo     ports:
+        echo       - "%WEB_PORT%:8000"
+    ) > docker-compose.override.yml
+    echo ✅ Arquivo docker-compose.override.yml criado
+    echo    PostgreSQL: localhost:%DB_PORT%
+    echo    Redis: localhost:%REDIS_PORT%
+    echo    Django: http://localhost:%WEB_PORT%
+)
+
+REM ========================================
 REM Passo 3: Subir ou iniciar containers
 REM ========================================
 echo.
-echo [3/9] Verificando containers...
+echo [3/10] Verificando containers...
 docker-compose ps | findstr "siscr_web" >nul 2>&1
 if %errorlevel% equ 0 (
     echo Containers existem. Verificando se estão rodando...
@@ -104,7 +183,7 @@ REM ========================================
 REM Passo 4: Aplicar migrações compartilhadas
 REM ========================================
 echo.
-echo [4/9] Aplicando migrações no schema compartilhado...
+echo [4/10] Aplicando migrações no schema compartilhado...
 docker-compose exec web python manage.py migrate_schemas --shared --noinput
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
@@ -130,7 +209,7 @@ REM ========================================
 REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
 echo.
-echo [5/9] Verificando dados compartilhados (Planos, Features, Subscriptions)...
+echo [5/10] Verificando dados compartilhados (Planos, Features, Subscriptions)...
 docker-compose exec web python database/scripts/check_subscriptions_data.py >nul 2>&1
 if %errorlevel% equ 0 (
     echo ✅ Dados compartilhados já existem!
@@ -150,7 +229,7 @@ REM ========================================
 REM Passo 6: Aplicar migrações nos tenants e corrigir colunas (ANTES de criar dados)
 REM ========================================
 echo.
-echo [6/9] Aplicando migrações nos schemas dos tenants...
+echo [6/10] Aplicando migrações nos schemas dos tenants...
 REM Aplicar migrações apenas nos tenants existentes e válidos usando comando Django
 docker-compose exec web python manage.py apply_tenant_migrations
 if %errorlevel% neq 0 (
@@ -177,7 +256,7 @@ REM ========================================
 REM Passo 6.5: Criar tenants com dados realistas
 REM ========================================
 echo.
-echo [6.5/9] Criando tenants com dados realistas...
+echo [7/10] Criando tenants com dados realistas...
 echo.
 echo Este processo criará 3 tenants completos:
 echo   • Comércio Simples (1 empresa, 1 filial)
@@ -206,7 +285,7 @@ REM ========================================
 REM Passo 6.6: Criar locations de estoque
 REM ========================================
 echo.
-echo [6.6/9] Criando locations de estoque para os tenants...
+echo [8/10] Criando locations de estoque para os tenants...
 docker-compose exec web python manage.py seed_locations
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Seed de locations pode ter falhado
@@ -218,7 +297,7 @@ REM ========================================
 REM Passo 7: Verificar Node.js e instalar dependencias do frontend
 REM ========================================
 echo.
-echo [7/10] Verificando Node.js e dependencias do frontend...
+echo [9/10] Verificando Node.js e dependencias do frontend...
 node --version >nul 2>&1
 if errorlevel 1 goto :nodejs_not_found
 echo OK: Node.js encontrado!
@@ -262,7 +341,7 @@ REM ========================================
 REM Passo 8: Iniciar servidor de desenvolvimento do frontend
 REM ========================================
 echo.
-echo [8/10] Iniciando servidor de desenvolvimento do frontend...
+echo [10/10] Iniciando servidor de desenvolvimento do frontend...
 node --version >nul 2>&1
 if errorlevel 1 goto :skip_frontend_start
 if not exist "frontend" goto :skip_frontend_start
