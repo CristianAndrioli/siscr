@@ -114,9 +114,18 @@ echo ✅ Porta 8000 (Django) está disponível
 
 :create_override
 REM Criar arquivo docker-compose.override.yml se as portas forem diferentes
+set NEEDS_RECREATE=0
 if "!PORT_CHANGED!"=="1" (
     echo.
     echo 📝 Criando docker-compose.override.yml com portas alternativas...
+    
+    REM Verificar se containers já estão rodando
+    docker-compose ps | findstr "siscr_web" >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo ⚠️  Containers já estão rodando. Será necessário recriá-los para aplicar novas portas.
+        set NEEDS_RECREATE=1
+    )
+    
     (
         echo services:
         echo   db:
@@ -130,9 +139,12 @@ if "!PORT_CHANGED!"=="1" (
         echo       - "!WEB_PORT!:8000"
     ) > docker-compose.override.yml
     echo ✅ Arquivo docker-compose.override.yml criado
-    echo    PostgreSQL: localhost:!DB_PORT!
-    echo    Redis: localhost:!REDIS_PORT!
+    echo    PostgreSQL (externo): localhost:!DB_PORT!
+    echo    Redis (externo): localhost:!REDIS_PORT!
     echo    Django: http://localhost:!WEB_PORT!
+    echo.
+    echo ℹ️  Nota: A aplicação Django dentro do container sempre usa a porta interna 5432
+    echo    A porta externa !DB_PORT! é apenas para conexões de fora do Docker (ex: DBeaver)
 )
 
 REM ========================================
@@ -142,19 +154,31 @@ echo.
 echo [3/10] Verificando containers...
 docker-compose ps | findstr "siscr_web" >nul 2>&1
 if %errorlevel% equ 0 (
-    echo Containers existem. Verificando se estão rodando...
-    docker-compose ps | findstr "Up" >nul 2>&1
-    if %errorlevel% equ 0 (
-        echo ✅ Containers já estão rodando!
-    ) else (
-        echo Iniciando containers existentes...
-        docker-compose start
+    if "!NEEDS_RECREATE!"=="1" (
+        echo ⚠️  Recriando containers para aplicar novas portas...
+        docker-compose down
+        docker-compose up -d
         if %errorlevel% neq 0 (
-            echo ❌ Erro ao iniciar containers!
+            echo ❌ Erro ao recriar containers!
             pause
             exit /b 1
         )
-        echo ✅ Containers iniciados!
+        echo ✅ Containers recriados com novas portas!
+    ) else (
+        echo Containers existem. Verificando se estão rodando...
+        docker-compose ps | findstr "Up" >nul 2>&1
+        if %errorlevel% equ 0 (
+            echo ✅ Containers já estão rodando!
+        ) else (
+            echo Iniciando containers existentes...
+            docker-compose start
+            if %errorlevel% neq 0 (
+                echo ❌ Erro ao iniciar containers!
+                pause
+                exit /b 1
+            )
+            echo ✅ Containers iniciados!
+        )
     )
 ) else (
     echo Construindo imagens e subindo containers pela primeira vez...
