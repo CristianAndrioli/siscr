@@ -351,58 +351,99 @@ class Command(BaseCommand):
             # Criar pessoas (clientes, fornecedores, funcionários)
             self.stdout.write("\n👥 Criando pessoas...")
             pessoas_criadas = []
-            codigo = 1
+            
+            # Buscar o próximo código disponível
+            from django.db.models import Max
+            try:
+                max_codigo = Pessoa.objects.all().aggregate(max_codigo=Max('codigo_cadastro'))['max_codigo']
+                codigo = (max_codigo or 0) + 1
+            except Exception:
+                codigo = 1
             
             for empresa in empresas_criadas:
                 # 3 clientes por empresa
                 for i in range(3):
                     nome = random.choice(NOMES_PESSOAS)
                     cidade, estado = random.choice(CIDADES)
-                    pessoa = Pessoa.objects.create(
-                        codigo_cadastro=codigo,
-                        tipo='PJ',
-                        cpf_cnpj=gerar_cnpj(),
-                        razao_social=f"{nome} Comércio LTDA",
-                        nome_fantasia=f"{nome} Comércio",
-                        empresa=empresa,
-                        filial=None,  # Compartilhado na empresa
-                        logradouro=f"Rua {random.choice(['das Flores', 'Principal', 'Comercial', 'do Comércio'])}",
-                        numero=str(random.randint(100, 9999)),
-                        bairro=random.choice(['Centro', 'Comercial', 'Industrial', 'Norte', 'Sul']),
-                        cidade=cidade,
-                        estado=estado,
-                        cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
-                        telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                        email=f"contato@{nome.lower().replace(' ', '')}.com.br",
-                        contribuinte=True,
-                    )
-                    pessoas_criadas.append(pessoa)
-                    codigo += 1
+                    cnpj = gerar_cnpj()
+                    
+                    # Verificar se já existe pessoa com este CPF/CNPJ
+                    pessoa_existente = Pessoa.objects.filter(cpf_cnpj=cnpj).first()
+                    if pessoa_existente:
+                        self.stdout.write(f"    ⚠️  Pessoa com CNPJ {cnpj} já existe. Pulando...")
+                        continue
+                    
+                    # Buscar próximo código disponível se necessário
+                    while Pessoa.objects.filter(codigo_cadastro=codigo).exists():
+                        codigo += 1
+                    
+                    try:
+                        pessoa = Pessoa.objects.create(
+                            codigo_cadastro=codigo,
+                            tipo='PJ',
+                            cpf_cnpj=cnpj,
+                            razao_social=f"{nome} Comércio LTDA",
+                            nome_fantasia=f"{nome} Comércio",
+                            empresa=empresa,
+                            filial=None,  # Compartilhado na empresa
+                            logradouro=f"Rua {random.choice(['das Flores', 'Principal', 'Comercial', 'do Comércio'])}",
+                            numero=str(random.randint(100, 9999)),
+                            bairro=random.choice(['Centro', 'Comercial', 'Industrial', 'Norte', 'Sul']),
+                            cidade=cidade,
+                            estado=estado,
+                            cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
+                            telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
+                            email=f"contato@{nome.lower().replace(' ', '')}.com.br",
+                            contribuinte=True,
+                        )
+                        pessoas_criadas.append(pessoa)
+                        codigo += 1
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar pessoa: {e}. Pulando..."))
+                        codigo += 1
+                        continue
                 
                 # 2 fornecedores por empresa
                 for i in range(2):
                     nome = random.choice(NOMES_PESSOAS)
                     cidade, estado = random.choice(CIDADES)
-                    pessoa = Pessoa.objects.create(
-                        codigo_cadastro=codigo,
-                        tipo='PJ',
-                        cpf_cnpj=gerar_cnpj(),
-                        razao_social=f"{nome} Fornecimentos LTDA",
-                        nome_fantasia=f"{nome} Fornecimentos",
-                        empresa=empresa,
-                        filial=None,
-                        logradouro=f"Av. {random.choice(['Industrial', 'Comercial', 'Principal'])}",
-                        numero=str(random.randint(100, 9999)),
-                        bairro=random.choice(['Industrial', 'Comercial', 'Centro']),
-                        cidade=cidade,
-                        estado=estado,
-                        cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
-                        telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                        email=f"vendas@{nome.lower().replace(' ', '')}.com.br",
-                        contribuinte=True,
-                    )
-                    pessoas_criadas.append(pessoa)
-                    codigo += 1
+                    cnpj = gerar_cnpj()
+                    
+                    # Verificar se já existe pessoa com este CPF/CNPJ
+                    pessoa_existente = Pessoa.objects.filter(cpf_cnpj=cnpj).first()
+                    if pessoa_existente:
+                        self.stdout.write(f"    ⚠️  Pessoa com CNPJ {cnpj} já existe. Pulando...")
+                        continue
+                    
+                    # Buscar próximo código disponível se necessário
+                    while Pessoa.objects.filter(codigo_cadastro=codigo).exists():
+                        codigo += 1
+                    
+                    try:
+                        pessoa = Pessoa.objects.create(
+                            codigo_cadastro=codigo,
+                            tipo='PJ',
+                            cpf_cnpj=cnpj,
+                            razao_social=f"{nome} Fornecimentos LTDA",
+                            nome_fantasia=f"{nome} Fornecimentos",
+                            empresa=empresa,
+                            filial=None,
+                            logradouro=f"Av. {random.choice(['Industrial', 'Comercial', 'Principal'])}",
+                            numero=str(random.randint(100, 9999)),
+                            bairro=random.choice(['Industrial', 'Comercial', 'Centro']),
+                            cidade=cidade,
+                            estado=estado,
+                            cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
+                            telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
+                            email=f"vendas@{nome.lower().replace(' ', '')}.com.br",
+                            contribuinte=True,
+                        )
+                        pessoas_criadas.append(pessoa)
+                        codigo += 1
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar pessoa: {e}. Pulando..."))
+                        codigo += 1
+                        continue
             
             # Criar funcionários (2 por filial)
             # Primeiro, criar funcionários para empresas que NÃO têm filiais
@@ -414,13 +455,69 @@ class Command(BaseCommand):
                     for i in range(2):
                         nome = random.choice(NOMES_PESSOAS)
                         cidade, estado = random.choice(CIDADES)
+                        cpf = gerar_cpf()
+                        
+                        # Verificar se já existe pessoa com este CPF/CNPJ
+                        pessoa_existente = Pessoa.objects.filter(cpf_cnpj=cpf).first()
+                        if pessoa_existente:
+                            self.stdout.write(f"    ⚠️  Pessoa com CPF {cpf} já existe. Pulando...")
+                            continue
+                        
+                        # Buscar próximo código disponível se necessário
+                        while Pessoa.objects.filter(codigo_cadastro=codigo).exists():
+                            codigo += 1
+                        
+                        try:
+                            pessoa = Pessoa.objects.create(
+                                codigo_cadastro=codigo,
+                                tipo='PF',
+                                cpf_cnpj=cpf,
+                                nome_completo=nome,
+                                empresa=empresa,
+                                filial=None,  # Sem filial
+                                logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
+                                numero=str(random.randint(100, 999)),
+                                bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
+                                cidade=cidade,
+                                estado=estado,
+                                cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
+                                telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
+                                email=f"{nome.lower().replace(' ', '.')}@{empresa.nome.lower().replace(' ', '')}.com.br",
+                                cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
+                                comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
+                            )
+                            pessoas_criadas.append(pessoa)
+                            codigo += 1
+                        except Exception as e:
+                            self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar pessoa: {e}. Pulando..."))
+                            codigo += 1
+                            continue
+            
+            # Depois, criar funcionários para filiais
+            for filial in filiais_criadas:
+                for i in range(2):
+                    nome = random.choice(NOMES_PESSOAS)
+                    cidade, estado = random.choice(CIDADES)
+                    cpf = gerar_cpf()
+                    
+                    # Verificar se já existe pessoa com este CPF/CNPJ
+                    pessoa_existente = Pessoa.objects.filter(cpf_cnpj=cpf).first()
+                    if pessoa_existente:
+                        self.stdout.write(f"    ⚠️  Pessoa com CPF {cpf} já existe. Pulando...")
+                        continue
+                    
+                    # Buscar próximo código disponível se necessário
+                    while Pessoa.objects.filter(codigo_cadastro=codigo).exists():
+                        codigo += 1
+                    
+                    try:
                         pessoa = Pessoa.objects.create(
                             codigo_cadastro=codigo,
                             tipo='PF',
-                            cpf_cnpj=gerar_cpf(),
+                            cpf_cnpj=cpf,
                             nome_completo=nome,
-                            empresa=empresa,
-                            filial=None,  # Sem filial
+                            empresa=filial.empresa,
+                            filial=filial,
                             logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
                             numero=str(random.randint(100, 999)),
                             bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
@@ -428,38 +525,16 @@ class Command(BaseCommand):
                             estado=estado,
                             cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                             telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                            email=f"{nome.lower().replace(' ', '.')}@{empresa.nome.lower().replace(' ', '')}.com.br",
+                            email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br",
                             cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
                             comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
                         )
                         pessoas_criadas.append(pessoa)
                         codigo += 1
-            
-            # Depois, criar funcionários para filiais
-            for filial in filiais_criadas:
-                for i in range(2):
-                    nome = random.choice(NOMES_PESSOAS)
-                    cidade, estado = random.choice(CIDADES)
-                    pessoa = Pessoa.objects.create(
-                        codigo_cadastro=codigo,
-                        tipo='PF',
-                        cpf_cnpj=gerar_cpf(),
-                        nome_completo=nome,
-                        empresa=filial.empresa,
-                        filial=filial,
-                        logradouro=f"Rua {random.choice(['das Acácias', 'dos Lírios', 'Principal'])}",
-                        numero=str(random.randint(100, 999)),
-                        bairro=random.choice(['Centro', 'Residencial', 'Jardim']),
-                        cidade=cidade,
-                        estado=estado,
-                        cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
-                        telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                        email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br",
-                        cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
-                        comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
-                    )
-                    pessoas_criadas.append(pessoa)
-                    codigo += 1
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar pessoa: {e}. Pulando..."))
+                        codigo += 1
+                        continue
             
             self.stdout.write(f"  ✅ {len(pessoas_criadas)} pessoas criadas")
             
