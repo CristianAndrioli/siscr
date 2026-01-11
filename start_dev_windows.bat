@@ -57,56 +57,62 @@ set WEB_PORT=8000
 set PORT_CHANGED=0
 
 REM Verificar porta do PostgreSQL
+echo Verificando porta PostgreSQL...
 netstat -an | findstr ":5432" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ⚠️  Porta 5432 (PostgreSQL) está em uso. Procurando porta alternativa...
-    set DB_PORT=5433
-    :check_db_port
-    netstat -an | findstr ":!DB_PORT!" >nul 2>&1
-    if !errorlevel! equ 0 (
-        set /a DB_PORT+=1
-        goto check_db_port
-    )
-    echo ✅ Usando porta !DB_PORT! para PostgreSQL
-    set PORT_CHANGED=1
-) else (
-    echo ✅ Porta 5432 (PostgreSQL) está disponível
-)
+if errorlevel 1 goto :db_port_ok
+echo ⚠️  Porta 5432 (PostgreSQL) está em uso. Procurando porta alternativa...
+set DB_PORT=5433
+:check_db_port
+netstat -an | findstr ":!DB_PORT!" >nul 2>&1
+if errorlevel 1 goto :db_port_found
+set /a DB_PORT+=1
+goto check_db_port
+:db_port_found
+echo ✅ Usando porta !DB_PORT! para PostgreSQL
+set PORT_CHANGED=1
+goto :redis_check
+:db_port_ok
+echo ✅ Porta 5432 (PostgreSQL) está disponível
 
+:redis_check
 REM Verificar porta do Redis
+echo Verificando porta Redis...
 netstat -an | findstr ":6379" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ⚠️  Porta 6379 (Redis) está em uso. Procurando porta alternativa...
-    set REDIS_PORT=6380
-    :check_redis_port
-    netstat -an | findstr ":!REDIS_PORT!" >nul 2>&1
-    if !errorlevel! equ 0 (
-        set /a REDIS_PORT+=1
-        goto check_redis_port
-    )
-    echo ✅ Usando porta !REDIS_PORT! para Redis
-    set PORT_CHANGED=1
-) else (
-    echo ✅ Porta 6379 (Redis) está disponível
-)
+if errorlevel 1 goto :redis_port_ok
+echo ⚠️  Porta 6379 (Redis) está em uso. Procurando porta alternativa...
+set REDIS_PORT=6380
+:check_redis_port
+netstat -an | findstr ":!REDIS_PORT!" >nul 2>&1
+if errorlevel 1 goto :redis_port_found
+set /a REDIS_PORT+=1
+goto check_redis_port
+:redis_port_found
+echo ✅ Usando porta !REDIS_PORT! para Redis
+set PORT_CHANGED=1
+goto :web_check
+:redis_port_ok
+echo ✅ Porta 6379 (Redis) está disponível
 
+:web_check
 REM Verificar porta do Django
+echo Verificando porta Django...
 netstat -an | findstr ":8000" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ⚠️  Porta 8000 (Django) está em uso. Procurando porta alternativa...
-    set WEB_PORT=8001
-    :check_web_port
-    netstat -an | findstr ":!WEB_PORT!" >nul 2>&1
-    if !errorlevel! equ 0 (
-        set /a WEB_PORT+=1
-        goto check_web_port
-    )
-    echo ✅ Usando porta !WEB_PORT! para Django
-    set PORT_CHANGED=1
-) else (
-    echo ✅ Porta 8000 (Django) está disponível
-)
+if errorlevel 1 goto :web_port_ok
+echo ⚠️  Porta 8000 (Django) está em uso. Procurando porta alternativa...
+set WEB_PORT=8001
+:check_web_port
+netstat -an | findstr ":!WEB_PORT!" >nul 2>&1
+if errorlevel 1 goto :web_port_found
+set /a WEB_PORT+=1
+goto check_web_port
+:web_port_found
+echo ✅ Usando porta !WEB_PORT! para Django
+set PORT_CHANGED=1
+goto :create_override
+:web_port_ok
+echo ✅ Porta 8000 (Django) está disponível
 
+:create_override
 REM Criar arquivo docker-compose.override.yml se as portas forem diferentes
 if "!PORT_CHANGED!"=="1" (
     echo.
