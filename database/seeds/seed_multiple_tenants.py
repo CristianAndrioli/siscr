@@ -22,7 +22,8 @@ from django_tenants.utils import schema_context
 from django.contrib.auth import get_user_model
 from tenants.models import Tenant, Domain, Empresa, Filial
 from accounts.models import UserProfile, TenantMembership
-from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.models import Pessoa, Produto, Servico
+from financeiro.models import ContaReceber, ContaPagar
 from subscriptions.models import Plan, Subscription, QuotaUsage
 from django.utils import timezone
 

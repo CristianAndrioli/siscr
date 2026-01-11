@@ -2,7 +2,7 @@
 # Admin para modelos do app cadastros
 
 from django.contrib import admin
-from .models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from .models import Pessoa, Produto, Servico
 
 
 @admin.register(Pessoa)
@@ -29,19 +29,5 @@ class ServicoAdmin(admin.ModelAdmin):
     readonly_fields = ('codigo_servico',)
 
 
-@admin.register(ContaReceber)
-class ContaReceberAdmin(admin.ModelAdmin):
-    list_display = ('codigo_conta', 'numero_documento', 'cliente', 'empresa', 'filial', 'valor_total', 'valor_recebido', 'valor_pendente', 'data_vencimento', 'status')
-    list_filter = ('status', 'forma_pagamento', 'data_vencimento', 'empresa', 'filial')
-    search_fields = ('codigo_conta', 'numero_documento', 'cliente__razao_social', 'cliente__nome_fantasia', 'descricao')
-    readonly_fields = ('codigo_conta', 'valor_pendente', 'created_at', 'updated_at')
-    date_hierarchy = 'data_vencimento'
-
-
-@admin.register(ContaPagar)
-class ContaPagarAdmin(admin.ModelAdmin):
-    list_display = ('codigo_conta', 'numero_documento', 'fornecedor', 'empresa', 'filial', 'valor_total', 'valor_pago', 'valor_pendente', 'data_vencimento', 'status')
-    list_filter = ('status', 'forma_pagamento', 'data_vencimento', 'empresa', 'filial')
-    search_fields = ('codigo_conta', 'numero_documento', 'fornecedor__razao_social', 'fornecedor__nome_fantasia', 'descricao')
-    readonly_fields = ('codigo_conta', 'valor_pendente', 'created_at', 'updated_at')
-    date_hierarchy = 'data_vencimento'
+# Nota: ContaReceber e ContaPagar foram movidos para o app 'financeiro'
+# Veja financeiro/admin.py para o registro desses modelos
