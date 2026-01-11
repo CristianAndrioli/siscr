@@ -11,6 +11,18 @@ from tenants.models import Tenant
 class Command(BaseCommand):
     help = 'Verifica e corrige migrações nos schemas dos tenants'
 
+    def check_schema_exists(self, schema_name):
+        """Verifica se o schema existe no PostgreSQL"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.schemata
+                    WHERE schema_name = %s
+                );
+            """, [schema_name])
+            return cursor.fetchone()[0]
+
     def handle(self, *args, **options):
         self.stdout.write("🔍 Verificando migrações nos schemas dos tenants...")
         
@@ -85,8 +97,16 @@ class Command(BaseCommand):
                     cursor.execute("SET search_path TO public")
         
         all_ok = True
+        skipped = 0
         
         for tenant in tenants:
+            # Verificar se o schema existe antes de tentar processar
+            if not self.check_schema_exists(tenant.schema_name):
+                skipped += 1
+                self.stdout.write(self.style.WARNING(f"⚠️  Schema '{tenant.schema_name}' não existe. Pulando tenant '{tenant.name}'..."))
+                self.stdout.write("")
+                continue
+            
             self.stdout.write(f"Processando tenant: {tenant.schema_name}")
             with schema_context(tenant.schema_name):
                 tenant_ok = True
@@ -131,8 +151,11 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.WARNING(f"  ⚠️  Tenant {tenant.schema_name} teve correções aplicadas\n"))
         
+        if skipped > 0:
+            self.stdout.write(self.style.WARNING(f"⚠️  {skipped} tenant(s) pulado(s) porque o schema não existe."))
+        
         if all_ok:
-            self.stdout.write(self.style.SUCCESS("✅ Todos os tenants estão com as colunas corretas!"))
+            self.stdout.write(self.style.SUCCESS("✅ Todos os tenants processados estão com as colunas corretas!"))
         else:
             self.stdout.write(self.style.WARNING("⚠️  Alguns tenants tiveram correções aplicadas."))
 

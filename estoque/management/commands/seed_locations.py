@@ -3,6 +3,7 @@ Comando para criar locations de estoque para os tenants existentes
 Uso: python manage.py seed_locations
 """
 from django.core.management.base import BaseCommand
+from django.db import connection
 from django_tenants.utils import schema_context
 from tenants.models import Tenant, Empresa, Filial
 from estoque.models import Location
@@ -25,6 +26,18 @@ TIPOS_LOCATION = [
 class Command(BaseCommand):
     help = 'Cria locations de estoque para todos os tenants existentes'
 
+    def check_schema_exists(self, schema_name):
+        """Verifica se o schema existe no PostgreSQL"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.schemata
+                    WHERE schema_name = %s
+                );
+            """, [schema_name])
+            return cursor.fetchone()[0]
+
     def handle(self, *args, **options):
         self.stdout.write("🚀 Iniciando criação de locations de estoque...")
         
@@ -36,8 +49,15 @@ class Command(BaseCommand):
             return
         
         total_locations = 0
+        skipped = 0
         
         for tenant in tenants:
+            # Verificar se o schema existe antes de tentar processar
+            if not self.check_schema_exists(tenant.schema_name):
+                skipped += 1
+                self.stdout.write(self.style.WARNING(f"⚠️  Schema '{tenant.schema_name}' não existe. Pulando tenant '{tenant.name}'..."))
+                continue
+            
             self.stdout.write(f"\n{'='*60}")
             self.stdout.write(f"Processando Tenant: {tenant.name} ({tenant.schema_name})")
             self.stdout.write(f"{'='*60}")
@@ -127,6 +147,8 @@ class Command(BaseCommand):
         
         self.stdout.write(f"\n{'='*60}")
         self.stdout.write(self.style.SUCCESS(f"✅ Total de {total_locations} locations criadas!"))
+        if skipped > 0:
+            self.stdout.write(self.style.WARNING(f"⚠️  {skipped} tenant(s) pulado(s) porque o schema não existe."))
         self.stdout.write(f"{'='*60}")
 
     def criar_locations_para_filial(self, empresa, filial, schema_name, num_locations=1):
