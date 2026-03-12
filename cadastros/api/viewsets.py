@@ -12,7 +12,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import DjangoModelPermissions
 from django.db.models import Max
-from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.models import Pessoa, Produto, Servico
+from financeiro.models import ContaReceber, ContaPagar
 from cadastros.utils import filter_by_empresa_filial, get_current_empresa_filial
 from accounts.permissions import HasProdutoPermission
 from .serializers import (

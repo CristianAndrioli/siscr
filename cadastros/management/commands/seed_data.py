@@ -7,7 +7,8 @@ from django.core.management import call_command
 from django.db import transaction, connection
 from decimal import Decimal
 from datetime import date, timedelta
-from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.models import Pessoa, Produto, Servico
+from financeiro.models import ContaReceber, ContaPagar
 from tenants.models import Empresa, Filial
 
 

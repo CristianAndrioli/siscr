@@ -4,7 +4,8 @@
 
 from django.http import JsonResponse
 from django.db.models import Q
-from cadastros.models import Pessoa, ContaReceber, ContaPagar
+from cadastros.models import Pessoa
+from financeiro.models import ContaReceber, ContaPagar
 
 
 # ----------------------------

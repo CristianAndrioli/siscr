@@ -2,7 +2,8 @@
 # Serializers movidos de core/api/serializers.py
 
 from rest_framework import serializers
-from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.models import Pessoa, Produto, Servico
+from financeiro.models import ContaReceber, ContaPagar
 from cadastros.utils import get_current_empresa_filial
 
 

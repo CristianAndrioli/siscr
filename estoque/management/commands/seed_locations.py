@@ -3,6 +3,7 @@ Comando para criar locations de estoque para os tenants existentes
 Uso: python manage.py seed_locations
 """
 from django.core.management.base import BaseCommand
+from django.db import connection
 from django_tenants.utils import schema_context
 from tenants.models import Tenant, Empresa, Filial
 from estoque.models import Location
@@ -25,6 +26,18 @@ TIPOS_LOCATION = [
 class Command(BaseCommand):
     help = 'Cria locations de estoque para todos os tenants existentes'
 
+    def check_schema_exists(self, schema_name):
+        """Verifica se o schema existe no PostgreSQL"""
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.schemata
+                    WHERE schema_name = %s
+                );
+            """, [schema_name])
+            return cursor.fetchone()[0]
+
     def handle(self, *args, **options):
         self.stdout.write("🚀 Iniciando criação de locations de estoque...")
         
@@ -36,27 +49,81 @@ class Command(BaseCommand):
             return
         
         total_locations = 0
+        skipped = 0
         
         for tenant in tenants:
+            # Verificar se o schema existe antes de tentar processar
+            if not self.check_schema_exists(tenant.schema_name):
+                skipped += 1
+                self.stdout.write(self.style.WARNING(f"⚠️  Schema '{tenant.schema_name}' não existe. Pulando tenant '{tenant.name}'..."))
+                continue
+            
             self.stdout.write(f"\n{'='*60}")
             self.stdout.write(f"Processando Tenant: {tenant.name} ({tenant.schema_name})")
             self.stdout.write(f"{'='*60}")
             
             with schema_context(tenant.schema_name):
-                empresas = Empresa.objects.filter(is_active=True)
+                # Tentar usar o manager padrão (com filtro de is_deleted)
+                # Se falhar (coluna não existe), usar all_objects e apenas campos básicos
+                try:
+                    empresas = Empresa.objects.filter(is_active=True).only('id', 'nome', 'tenant_id', 'is_active')
+                    # Testar se a query funciona fazendo um exists()
+                    _ = empresas.exists()
+                except Exception:
+                    # Se falhar, usar all_objects e apenas campos básicos que sabemos que existem
+                    self.stdout.write(self.style.WARNING(f"  ⚠️  Migrações podem não estar aplicadas. Usando fallback..."))
+                    try:
+                        # Tentar buscar apenas campos básicos que sempre existem
+                        empresas = Empresa.all_objects.filter(is_active=True).only('id', 'nome', 'tenant_id', 'is_active')
+                    except Exception:
+                        # Se ainda falhar, usar values() para buscar apenas campos específicos
+                        empresas_ids = list(Empresa.all_objects.filter(is_active=True).values_list('id', flat=True))
+                        if not empresas_ids:
+                            self.stdout.write(self.style.WARNING(f"  ⚠️  Nenhuma empresa encontrada para {tenant.name}"))
+                            continue
+                        # Criar queryset mínimo apenas com IDs
+                        empresas = Empresa.all_objects.filter(id__in=empresas_ids).only('id', 'nome', 'tenant_id', 'is_active')
                 
                 if not empresas.exists():
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Nenhuma empresa encontrada para {tenant.name}"))
                     continue
                 
                 for empresa in empresas:
-                    filiais = Filial.objects.filter(empresa=empresa, is_active=True)
+                    # Verificar se a empresa realmente existe no banco antes de usar
+                    try:
+                        if not Empresa.objects.filter(id=empresa.id).exists():
+                            self.stdout.write(self.style.WARNING(f"  ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe no banco. Pulando..."))
+                            continue
+                    except Exception as e:
+                        self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao verificar empresa {empresa.nome}: {e}. Pulando..."))
+                        continue
+                    
+                    # Mesma lógica para Filial
+                    try:
+                        filiais = Filial.objects.filter(empresa=empresa, is_active=True).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
+                        _ = filiais.exists()
+                    except Exception:
+                        try:
+                            filiais = Filial.all_objects.filter(empresa=empresa, is_active=True).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
+                        except Exception:
+                            filiais_ids = list(Filial.all_objects.filter(empresa=empresa, is_active=True).values_list('id', flat=True))
+                            if filiais_ids:
+                                filiais = Filial.all_objects.filter(id__in=filiais_ids).only('id', 'nome', 'codigo_filial', 'empresa_id', 'is_active')
+                            else:
+                                filiais = Filial.all_objects.none()
                     
                     # Sempre criar exatamente 3 locations por empresa
                     self.stdout.write(f"\n  📍 Empresa: {empresa.nome}")
                     
                     # Verificar quantas locations já existem para esta empresa
-                    locations_existentes = Location.objects.filter(empresa=empresa).count()
+                    # Usar try/except para lidar com tabela que não existe
+                    try:
+                        locations_existentes = Location.objects.filter(empresa=empresa).count()
+                    except Exception as e:
+                        # Se a tabela não existe, pular este tenant
+                        self.stdout.write(self.style.WARNING(f"    ⚠️  Tabela de locations não existe neste tenant. Pulando..."))
+                        self.stdout.write(self.style.WARNING(f"    Execute migrações: docker-compose exec web python manage.py migrate_schemas --schema={tenant.schema_name}"))
+                        continue
                     if locations_existentes >= 3:
                         self.stdout.write(f"    ✅ Já existem {locations_existentes} locations para esta empresa (pulando)")
                         continue
@@ -89,10 +156,27 @@ class Command(BaseCommand):
         
         self.stdout.write(f"\n{'='*60}")
         self.stdout.write(self.style.SUCCESS(f"✅ Total de {total_locations} locations criadas!"))
+        if skipped > 0:
+            self.stdout.write(self.style.WARNING(f"⚠️  {skipped} tenant(s) pulado(s) porque o schema não existe."))
         self.stdout.write(f"{'='*60}")
 
     def criar_locations_para_filial(self, empresa, filial, schema_name, num_locations=1):
         """Cria locations para uma filial específica"""
+        # Verificar se empresa e filial realmente existem no banco antes de usar
+        try:
+            if not Empresa.objects.filter(id=empresa.id).exists():
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe no banco. Pulando..."))
+                return []
+        except Exception:
+            return []
+        
+        try:
+            if not Filial.objects.filter(id=filial.id, empresa=empresa).exists():
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} (ID: {filial.id}) não existe no banco. Pulando..."))
+                return []
+        except Exception:
+            return []
+        
         cidade, estado = random.choice(CIDADES)
         locations = []
         
@@ -100,13 +184,18 @@ class Command(BaseCommand):
             tipo = random.choice(TIPOS_LOCATION)[0]
             codigo = f"{schema_name[:3].upper()}-{empresa.id:02d}-{filial.codigo_filial}-LOC{i+1:02d}"
             
-            # Verificar se já existe
-            if Location.objects.filter(codigo=codigo).exists():
-                continue
+            # Verificar se já existe (com tratamento de erro caso tabela não exista)
+            try:
+                if Location.objects.filter(codigo=codigo).exists():
+                    continue
+            except Exception:
+                # Se a tabela não existe, não podemos verificar, então continuar para criar
+                pass
             
-            location = Location.objects.create(
-                empresa=empresa,
-                filial=filial,
+            try:
+                location = Location.objects.create(
+                    empresa=empresa,
+                    filial=filial,
                 nome=f"{filial.nome} - {self.get_tipo_nome(tipo)}",
                 codigo=codigo,
                 tipo=tipo,
@@ -120,14 +209,26 @@ class Command(BaseCommand):
                 cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                 permite_entrada=True,
                 permite_saida=True,
-                is_active=True,
-            )
-            locations.append(location)
+                    is_active=True,
+                )
+                locations.append(location)
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar location: {e}. Pulando..."))
+                continue
         
         return locations
 
     def criar_locations_para_empresa(self, empresa, schema_name, num_locations=3):
         """Cria locations para uma empresa sem filiais"""
+        # Verificar se a empresa realmente existe no banco antes de usar
+        try:
+            if not Empresa.objects.filter(id=empresa.id).exists():
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe no banco. Pulando criação de locations..."))
+                return []
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao verificar empresa: {e}. Pulando criação de locations..."))
+            return []
+        
         cidade, estado = random.choice(CIDADES)
         locations = []
         
@@ -135,29 +236,37 @@ class Command(BaseCommand):
             tipo = random.choice(TIPOS_LOCATION)[0]
             codigo = f"{schema_name[:3].upper()}-{empresa.id:02d}-EMP-LOC{i+1:02d}"
             
-            # Verificar se já existe
-            if Location.objects.filter(codigo=codigo).exists():
-                continue
+            # Verificar se já existe (com tratamento de erro caso tabela não exista)
+            try:
+                if Location.objects.filter(codigo=codigo).exists():
+                    continue
+            except Exception:
+                # Se a tabela não existe, não podemos verificar, então continuar para criar
+                pass
             
-            location = Location.objects.create(
-                empresa=empresa,
-                filial=None,  # Sem filial
-                nome=f"{empresa.nome} - {self.get_tipo_nome(tipo)}",
-                codigo=codigo,
-                tipo=tipo,
-                logradouro=f"Rua {random.choice(['das Flores', 'Principal', 'Comercial', 'do Comércio', 'Industrial'])}",
-                numero=str(random.randint(100, 9999)),
-                letra=random.choice([None, 'A', 'B', 'C']),
-                complemento=random.choice([None, 'Galpão 1', 'Sala 101', 'Bloco A']),
-                bairro=random.choice(['Centro', 'Comercial', 'Industrial', 'Norte', 'Sul']),
-                cidade=cidade,
-                estado=estado,
-                cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
-                permite_entrada=True,
-                permite_saida=True,
-                is_active=True,
-            )
-            locations.append(location)
+            try:
+                location = Location.objects.create(
+                    empresa=empresa,
+                    filial=None,  # Sem filial
+                    nome=f"{empresa.nome} - {self.get_tipo_nome(tipo)}",
+                    codigo=codigo,
+                    tipo=tipo,
+                    logradouro=f"Rua {random.choice(['das Flores', 'Principal', 'Comercial', 'do Comércio', 'Industrial'])}",
+                    numero=str(random.randint(100, 9999)),
+                    letra=random.choice([None, 'A', 'B', 'C']),
+                    complemento=random.choice([None, 'Galpão 1', 'Sala 101', 'Bloco A']),
+                    bairro=random.choice(['Centro', 'Comercial', 'Industrial', 'Norte', 'Sul']),
+                    cidade=cidade,
+                    estado=estado,
+                    cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
+                    permite_entrada=True,
+                    permite_saida=True,
+                    is_active=True,
+                )
+                locations.append(location)
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao criar location: {e}. Pulando..."))
+                continue
         
         return locations
 

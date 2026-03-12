@@ -5,7 +5,8 @@ Uso: python manage.py migrate_empresa_filial [--schema=SCHEMA_NAME] [--associate
 from django.core.management.base import BaseCommand
 from django_tenants.utils import schema_context
 from tenants.models import Tenant, Empresa, Filial
-from cadastros.models import Pessoa, Produto, Servico, ContaReceber, ContaPagar
+from cadastros.models import Pessoa, Produto, Servico
+from financeiro.models import ContaReceber, ContaPagar
 
 
 class Command(BaseCommand):

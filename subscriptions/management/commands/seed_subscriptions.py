@@ -4,10 +4,13 @@ Uso: python manage.py seed_subscriptions [--clear]
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from datetime import timedelta
 from decimal import Decimal
 from subscriptions.models import Plan, Feature, Subscription, QuotaUsage
 from tenants.models import Tenant
+
+User = get_user_model()
 
 
 class Command(BaseCommand):
@@ -42,6 +45,10 @@ class Command(BaseCommand):
         
         self.stdout.write('Criando assinaturas para tenants existentes...')
         self._create_subscriptions(plans)
+        
+        # Criar superusuário se não existir
+        self.stdout.write('Verificando superusuário...')
+        self._create_superuser()
         
         self.stdout.write(self.style.SUCCESS('\n✅ Seed de assinaturas concluído com sucesso!'))
         self.stdout.write(f'  - {Feature.objects.count()} funcionalidades criadas')
@@ -269,4 +276,27 @@ class Command(BaseCommand):
                 f'  ✓ Assinatura criada: {tenant.name} -> {plan.name} '
                 f'({status}, expira em {days} dias)'
             )
+    
+    def _create_superuser(self):
+        """Cria um superusuário se não existir"""
+        username = 'admin'
+        email = 'admin@siscr.com'
+        password = 'admin123'
+        
+        if User.objects.filter(username=username).exists():
+            self.stdout.write(f'  ℹ️  Superusuário {username} já existe')
+            return
+        
+        try:
+            User.objects.create_superuser(
+                username=username,
+                email=email,
+                password=password,
+                first_name='Admin',
+                last_name='SISCR',
+            )
+            self.stdout.write(self.style.SUCCESS(f'  ✅ Superusuário criado: {username} / {password}'))
+            self.stdout.write(self.style.WARNING('  ⚠️  IMPORTANTE: Altere a senha do superusuário em produção!'))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'  ⚠️  Erro ao criar superusuário: {e}'))
 
