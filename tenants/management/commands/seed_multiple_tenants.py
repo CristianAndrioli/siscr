@@ -151,7 +151,11 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write("🚀 Iniciando criação de tenants com dados realistas...")
-        
+        # Garantir que public.tenants_tenant tem created_at/updated_at/last_backup_at (evita erro ao usar Tenant no app)
+        try:
+            call_command('fix_tenants_tenant_migrations', verbosity=0)
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"⚠️  Aviso ao corrigir tenants_tenant: {e}"))
         # Configuração dos 3 tenants
         tenants_config = [
             {

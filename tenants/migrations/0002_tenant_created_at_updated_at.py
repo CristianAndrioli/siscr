@@ -5,35 +5,31 @@ from django.db import migrations, models, connection
 
 
 def add_fields_if_not_exist(apps, schema_editor):
-    """Adiciona campos apenas se eles não existirem"""
+    """Adiciona created_at e updated_at em public.tenants_tenant (schema compartilhado)."""
     with connection.cursor() as cursor:
-        # Verificar se created_at já existe
+        # Sempre verificar e alterar apenas public.tenants_tenant (tabela compartilhada)
         cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='tenants_tenant' AND column_name='created_at'
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'tenants_tenant' AND column_name = 'created_at'
         """)
         created_at_exists = cursor.fetchone() is not None
-        
-        # Verificar se updated_at já existe
+
         cursor.execute("""
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='tenants_tenant' AND column_name='updated_at'
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'tenants_tenant' AND column_name = 'updated_at'
         """)
         updated_at_exists = cursor.fetchone() is not None
-        
-        # Adicionar created_at se não existir
+
         if not created_at_exists:
             cursor.execute("""
-                ALTER TABLE tenants_tenant 
+                ALTER TABLE public.tenants_tenant
                 ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
             """)
-        
-        # Adicionar updated_at se não existir
         if not updated_at_exists:
             cursor.execute("""
-                ALTER TABLE tenants_tenant 
+                ALTER TABLE public.tenants_tenant
                 ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
             """)
 
