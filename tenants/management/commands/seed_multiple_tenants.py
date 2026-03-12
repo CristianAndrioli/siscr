@@ -96,6 +96,33 @@ class Command(BaseCommand):
             """, [schema_name])
             return cursor.fetchone()[0]
     
+    def _fix_tenant_empresa_fk(self, schema_name):
+        """Corrige FK tenants_empresa.tenant_id para apontar para public.tenants_tenant."""
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.tables
+                    WHERE table_schema = %s AND table_name = 'tenants_empresa'
+                );
+            """, [schema_name])
+            if not cursor.fetchone()[0]:
+                return
+            cursor.execute("SET search_path TO public, pg_catalog;")
+            cursor.execute(f"""
+                ALTER TABLE "{schema_name}".tenants_empresa
+                DROP CONSTRAINT IF EXISTS tenants_empresa_tenant_id_80759698_fk_tenants_tenant_id;
+            """)
+            cursor.execute(f"""
+                ALTER TABLE "{schema_name}".tenants_empresa
+                ADD CONSTRAINT tenants_empresa_tenant_id_80759698_fk_tenants_tenant_id
+                FOREIGN KEY (tenant_id)
+                REFERENCES public.tenants_tenant(id)
+                ON DELETE CASCADE;
+            """)
+            cursor.execute("RESET search_path;")
+    
     def _create_tenant_via_sql(self, cursor, schema_name, tenant_name):
         """Cria tenant via SQL direto, verificando colunas disponíveis"""
         # Verificar se as colunas created_at/updated_at existem
@@ -279,6 +306,9 @@ class Command(BaseCommand):
                     tenant._state.adding = False
                     self.stdout.write(self.style.SUCCESS(f"✅ Tenant criado via SQL: {tenant_name}"))
             
+            from django.db import connection
+            connection.commit()
+            
             # Criar domínio apenas se o tenant foi criado agora
             try:
                 Domain.objects.get_or_create(
@@ -346,6 +376,13 @@ class Command(BaseCommand):
             except Exception as e2:
                 self.stdout.write(self.style.ERROR(f"❌ Erro ao aplicar migrações: {e2}"))
                 raise
+        
+        # Corrigir FK tenants_empresa.tenant_id -> public.tenants_tenant (evita IntegrityError ao criar Empresa)
+        try:
+            self._fix_tenant_empresa_fk(schema_name)
+            self.stdout.write(self.style.SUCCESS("✅ FK tenants_empresa ajustada para public.tenants_tenant"))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"⚠️  Aviso ao ajustar FK tenants_empresa: {e}"))
         
         # Criar plano básico se não existir
         # Usar only() para buscar apenas campos básicos caso migrações não estejam aplicadas
