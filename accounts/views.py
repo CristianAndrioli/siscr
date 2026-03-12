@@ -17,7 +17,7 @@ from django.conf import settings
 from django.db import transaction
 from .models import UserProfile, TenantMembership
 from .decorators import rate_limit_login, rate_limit_password_reset
-from tenants.models import Empresa, Filial
+from tenants.models import Empresa, Filial, Tenant
 
 User = get_user_model()
 
@@ -263,6 +263,10 @@ def login(request):
                     if user_in_tenant:
                         if user_in_tenant.has_usable_password():
                             logger.info(f'[LOGIN] ✅ Usuário "{username}" tem senha definida no schema do tenant')
+                            # Verificar senha manualmente antes de autenticar
+                            password_check = user_in_tenant.check_password(password)
+                            logger.info(f'[LOGIN] 🔍 Verificação manual de senha: {password_check}')
+                            logger.info(f'[LOGIN] 🔍 User is_active: {user_in_tenant.is_active}')
                             # Tentar autenticar
                             user_tenant = authenticate(username=username, password=password)
                             if user_tenant:
@@ -272,21 +276,26 @@ def login(request):
                                 # Verificar se a senha do schema público funciona
                                 with schema_context('public'):
                                     user_public_check = User.objects.filter(username=username).first()
-                                    if user_public_check and user_public_check.check_password(password):
-                                        logger.warning(f'[LOGIN] ⚠️ Senha do schema público está correta, mas senha do schema do tenant está diferente!')
-                                        logger.warning(f'[LOGIN] ⚠️ Atualizando senha do schema do tenant para corresponder ao schema público...')
-                                        # Atualizar senha no schema do tenant
-                                        with schema_context(tenant.schema_name):
-                                            user_in_tenant.set_password(password)
-                                            user_in_tenant.save()
-                                            logger.info(f'[LOGIN] ✅ Senha do schema do tenant atualizada! Tentando autenticar novamente...')
-                                            user_tenant = authenticate(username=username, password=password)
-                                            if user_tenant:
-                                                logger.info(f'[LOGIN] ✅ Autenticação bem-sucedida após atualização da senha!')
-                                            else:
-                                                logger.error(f'[LOGIN] ❌ Autenticação ainda falha após atualização da senha!')
+                                    if user_public_check:
+                                        public_password_check = user_public_check.check_password(password)
+                                        logger.info(f'[LOGIN] 🔍 Verificação de senha no schema público: {public_password_check}')
+                                        if public_password_check:
+                                            logger.warning(f'[LOGIN] ⚠️ Senha do schema público está correta, mas senha do schema do tenant está diferente!')
+                                            logger.warning(f'[LOGIN] ⚠️ Atualizando senha do schema do tenant para corresponder ao schema público...')
+                                            # Atualizar senha no schema do tenant
+                                            with schema_context(tenant.schema_name):
+                                                user_in_tenant.set_password(password)
+                                                user_in_tenant.save()
+                                                logger.info(f'[LOGIN] ✅ Senha do schema do tenant atualizada! Tentando autenticar novamente...')
+                                                user_tenant = authenticate(username=username, password=password)
+                                                if user_tenant:
+                                                    logger.info(f'[LOGIN] ✅ Autenticação bem-sucedida após atualização da senha!')
+                                                else:
+                                                    logger.error(f'[LOGIN] ❌ Autenticação ainda falha após atualização da senha!')
+                                        else:
+                                            logger.warning(f'[LOGIN] ⚠️ Senha incorreta também no schema público')
                                     else:
-                                        logger.warning(f'[LOGIN] ⚠️ Senha incorreta também no schema público')
+                                        logger.warning(f'[LOGIN] ⚠️ Usuário não encontrado no schema público')
                         else:
                             logger.warning(f'[LOGIN] ⚠️ Usuário "{username}" NÃO tem senha definida no schema do tenant! Definindo senha...')
                             # Definir senha usando a senha fornecida
@@ -434,7 +443,9 @@ def login(request):
         with schema_context(tenant.schema_name):
             filiais = list(Filial.objects.filter(empresa=empresa, is_active=True))
         
-        profile.current_empresa = empresa
+        # Salvar empresa e filial usando os setters (que armazenam apenas os IDs)
+        profile.current_tenant = tenant
+        profile.current_empresa = empresa  # Usa o setter que armazena apenas o ID
         response_data['empresa'] = {
             'id': empresa.id,
             'nome': empresa.nome,
@@ -444,7 +455,7 @@ def login(request):
         if len(filiais) == 1:
             # Se apenas uma filial, definir como atual
             filial = filiais[0]
-            profile.current_filial = filial
+            profile.current_filial = filial  # Usa o setter que armazena apenas o ID
             response_data['filial'] = {
                 'id': filial.id,
                 'nome': filial.nome,
@@ -460,6 +471,7 @@ def login(request):
         else:
             response_data['requires_selection'] = False
         
+        # Salvar o perfil com tenant, empresa_id e filial_id
         profile.save()
     
     return Response(response_data, status=status.HTTP_200_OK)
@@ -494,12 +506,14 @@ def select_empresa_filial(request):
         with schema_context(tenant.schema_name):
             empresa = Empresa.objects.get(id=empresa_id, tenant=tenant, is_active=True)
         
-        profile.current_empresa = empresa
+        # Salvar empresa e filial usando os setters (que armazenam apenas os IDs)
+        profile.current_tenant = tenant
+        profile.current_empresa = empresa  # Usa o setter que armazena apenas o ID
         
         if filial_id:
             with schema_context(tenant.schema_name):
                 filial = Filial.objects.get(id=filial_id, empresa=empresa, is_active=True)
-            profile.current_filial = filial
+            profile.current_filial = filial  # Usa o setter que armazena apenas o ID
         else:
             profile.current_filial = None
         
@@ -600,17 +614,51 @@ def current_user(request):
         },
     }
     
-    if profile.current_tenant:
+    # Buscar tenant usando only() para evitar buscar colunas que podem não existir
+    tenant = None
+    if profile.current_tenant_id:
+        try:
+            with schema_context('public'):
+                # Usar only() para buscar apenas colunas que sabemos que existem
+                # Evitar buscar created_at/updated_at que podem causar problemas
+                tenant = Tenant.objects.only('id', 'name', 'schema_name', 'is_active').get(id=profile.current_tenant_id)
+        except Tenant.DoesNotExist:
+            tenant = None
+        except Exception as e:
+            # Se houver erro ao buscar tenant (ex: colunas faltantes), tentar buscar sem only()
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Erro ao buscar tenant {profile.current_tenant_id} com only(): {e}. Tentando sem only()...")
+            try:
+                with schema_context('public'):
+                    # Tentar buscar usando SQL direto para evitar problemas com colunas
+                    from django.db import connection as db_connection
+                    with db_connection.cursor() as cursor:
+                        cursor.execute("""
+                            SELECT id, name, schema_name, is_active 
+                            FROM tenants_tenant 
+                            WHERE id = %s
+                        """, [profile.current_tenant_id])
+                        row = cursor.fetchone()
+                        if row:
+                            # Criar objeto Tenant mínimo
+                            tenant = Tenant(id=row[0], name=row[1], schema_name=row[2], is_active=row[3])
+                            tenant._state.adding = False
+            except Exception as e2:
+                logger.error(f"Erro ao buscar tenant {profile.current_tenant_id} via SQL: {e2}")
+                tenant = None
+    
+    if tenant:
         membership = TenantMembership.objects.filter(
             user=request.user,
-            tenant=profile.current_tenant,
+            tenant=tenant,
             is_active=True
         ).first()
         
         response_data['tenant'] = {
-            'id': profile.current_tenant.id,
-            'name': profile.current_tenant.name,
-            'schema_name': profile.current_tenant.schema_name,
+            'id': tenant.id,
+            'name': tenant.name,
+            'schema_name': tenant.schema_name,
         }
         
         if membership:
@@ -623,7 +671,7 @@ def current_user(request):
             if membership.role not in system_roles:
                 try:
                     custom_role = CustomRole.objects.get(
-                        tenant=profile.current_tenant,
+                        tenant=tenant,
                         code=membership.role,
                         is_active=True
                     )
@@ -632,18 +680,21 @@ def current_user(request):
                 except CustomRole.DoesNotExist:
                     response_data['user']['is_custom_role'] = False
         
-        if profile.current_empresa:
+        # Buscar empresa e filial usando os métodos helper
+        empresa = profile.get_current_empresa()
+        if empresa:
             response_data['empresa'] = {
-                'id': profile.current_empresa.id,
-                'nome': profile.current_empresa.nome,
-                'razao_social': profile.current_empresa.razao_social if hasattr(profile.current_empresa, 'razao_social') else None,
+                'id': empresa.id,
+                'nome': empresa.nome,
+                'razao_social': empresa.razao_social if hasattr(empresa, 'razao_social') else None,
             }
             
-            if profile.current_filial:
+            filial = profile.get_current_filial()
+            if filial:
                 response_data['filial'] = {
-                    'id': profile.current_filial.id,
-                    'nome': profile.current_filial.nome,
-                    'codigo_filial': profile.current_filial.codigo_filial if hasattr(profile.current_filial, 'codigo_filial') else None,
+                    'id': filial.id,
+                    'nome': filial.nome,
+                    'codigo_filial': filial.codigo_filial if hasattr(filial, 'codigo_filial') else None,
                 }
     
     return Response(response_data, status=status.HTTP_200_OK)

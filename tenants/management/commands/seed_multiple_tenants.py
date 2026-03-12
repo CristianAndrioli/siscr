@@ -83,6 +83,19 @@ def gerar_cpf():
 class Command(BaseCommand):
     help = 'Cria 3 tenants com dados realistas e completos'
     
+    def _check_schema_exists(self, schema_name):
+        """Verifica se o schema existe no PostgreSQL"""
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.schemata
+                    WHERE schema_name = %s
+                );
+            """, [schema_name])
+            return cursor.fetchone()[0]
+    
     def _create_tenant_via_sql(self, cursor, schema_name, tenant_name):
         """Cria tenant via SQL direto, verificando colunas disponíveis"""
         # Verificar se as colunas created_at/updated_at existem
@@ -184,7 +197,7 @@ class Command(BaseCommand):
         self.stdout.write("  3. Holding Diversificada: 2 empresas")
         self.stdout.write("     - Tech Solutions Brasil: 2 filiais")
         self.stdout.write("     - Comércio & Serviços Premium: 0 filiais (sem filial)")
-        self.stdout.write("\n🔐 Senha padrão para todos os usuários: senha123")
+        self.stdout.write("\n🔐 Senha padrão para todos os usuários: admin123")
 
     def criar_tenant_completo(self, tenant_name, schema_name, empresas_config):
         """
@@ -214,7 +227,13 @@ class Command(BaseCommand):
                     if cursor.fetchone():
                         tenant = Tenant(id=tenant_id, name=row[1], schema_name=row[2], is_active=row[3])
                         tenant._state.adding = False
-                        self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} já existe. Pulando..."))
+                        # Verificar se o schema existe
+                        schema_exists = self._check_schema_exists(schema_name)
+                        if schema_exists:
+                            self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} já existe. Verificando schema..."))
+                        else:
+                            self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} existe mas schema não. Criando schema..."))
+                            tenant = None  # Forçar criação do schema
                     else:
                         # ID não existe na tabela, precisa criar
                         self.stdout.write(self.style.WARNING(f"⚠️  Tenant {schema_name} encontrado mas ID não existe na tabela. Recriando..."))
@@ -223,6 +242,12 @@ class Command(BaseCommand):
             # Se falhar, pode ser que a tabela não exista ou tenha estrutura diferente
             self.stdout.write(self.style.WARNING(f"⚠️  Erro ao buscar tenant: {e}"))
             tenant = None
+        
+        # Verificar se o schema existe mesmo que o tenant exista
+        schema_exists = self._check_schema_exists(schema_name)
+        if tenant and not schema_exists:
+            self.stdout.write(self.style.WARNING(f"⚠️  Tenant existe mas schema '{schema_name}' não existe. Criando schema..."))
+            tenant = None  # Forçar recriação do processo
         
         if tenant is None:
             # Tenant não existe, criar
@@ -265,13 +290,62 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f"⚠️  Erro ao criar domínio: {e}"))
             
+            # Verificar se o schema existe e criar se necessário
+            schema_exists = self._check_schema_exists(schema_name)
+            if not schema_exists:
+                self.stdout.write(f"📦 Schema '{schema_name}' não existe. Criando...")
+                try:
+                    # Criar schema usando django-tenants
+                    # O django-tenants cria o schema automaticamente quando salva o tenant
+                    # Mas como já temos o tenant, precisamos criar manualmente
+                    with connection.cursor() as cursor:
+                        cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"')
+                        self.stdout.write(self.style.SUCCESS(f"✅ Schema '{schema_name}' criado"))
+                except Exception as e:
+                    self.stdout.write(self.style.ERROR(f"❌ Erro ao criar schema: {e}"))
+                    raise
+            
             # Migrar schema
-            self.stdout.write("📦 Aplicando migrações...")
+            self.stdout.write("📦 Aplicando migrações no schema...")
             try:
                 call_command('migrate_schemas', schema_name=schema_name, verbosity=0)
                 self.stdout.write(self.style.SUCCESS("✅ Migrações aplicadas"))
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f"⚠️  Erro ao aplicar migrações: {e}"))
+                # Tentar novamente após um pequeno delay
+                import time
+                time.sleep(2)
+                try:
+                    call_command('migrate_schemas', schema_name=schema_name, verbosity=1)
+                    self.stdout.write(self.style.SUCCESS("✅ Migrações aplicadas na segunda tentativa"))
+                except Exception as e2:
+                    self.stdout.write(self.style.ERROR(f"❌ Erro persistente ao aplicar migrações: {e2}"))
+                    raise
+        
+        # Garantir que o schema existe e que as migrações estão aplicadas (tenant já existia no banco mas schema vazio ou ausente)
+        schema_exists = self._check_schema_exists(schema_name)
+        if not schema_exists:
+            self.stdout.write(f"📦 Schema '{schema_name}' não existe. Criando...")
+            try:
+                from django.db import connection
+                with connection.cursor() as cursor:
+                    cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"')
+                self.stdout.write(self.style.SUCCESS(f"✅ Schema '{schema_name}' criado"))
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f"❌ Erro ao criar schema: {e}"))
+                raise
+        self.stdout.write("📦 Garantindo migrações no schema do tenant...")
+        try:
+            call_command('migrate_schemas', schema_name=schema_name, verbosity=0, noinput=True)
+            self.stdout.write(self.style.SUCCESS("✅ Migrações do tenant verificadas/aplicadas"))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"⚠️  Erro ao aplicar migrações no tenant: {e}"))
+            try:
+                call_command('migrate_schemas', schema_name=schema_name, verbosity=1, noinput=True)
+                self.stdout.write(self.style.SUCCESS("✅ Migrações aplicadas na segunda tentativa"))
+            except Exception as e2:
+                self.stdout.write(self.style.ERROR(f"❌ Erro ao aplicar migrações: {e2}"))
+                raise
         
         # Criar plano básico se não existir
         # Usar only() para buscar apenas campos básicos caso migrações não estejam aplicadas
@@ -508,12 +582,18 @@ class Command(BaseCommand):
             
             for empresa in empresas_validas:
                 # Verificar se a empresa realmente existe no banco antes de usar
+                empresa_verificada = None
                 try:
-                    if not Empresa.objects.filter(id=empresa.id, tenant=tenant).exists():
+                    if Empresa.objects.filter(id=empresa.id, tenant=tenant).exists():
+                        empresa_verificada = empresa
+                    else:
                         self.stdout.write(self.style.WARNING(f"  ⚠️  Empresa {empresa.nome} (ID: {empresa.id}) não existe. Pulando criação de pessoas..."))
                         continue
                 except Exception:
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao verificar empresa {empresa.nome}. Pulando..."))
+                    continue
+                
+                if not empresa_verificada:
                     continue
                 
                 # 3 clientes por empresa
@@ -652,14 +732,24 @@ class Command(BaseCommand):
             for filial in filiais_validas:
                 # Verificar se a empresa da filial existe antes de usar
                 empresa_filial = None
+                filial_verificada = None
                 try:
                     if Empresa.objects.filter(id=filial.empresa.id, tenant=tenant).exists():
                         empresa_filial = filial.empresa
+                        # Verificar se a filial existe
+                        if Filial.objects.filter(id=filial.id, empresa=empresa_filial).exists():
+                            filial_verificada = filial
+                        else:
+                            self.stdout.write(self.style.WARNING(f"  ⚠️  Filial {filial.nome} não existe. Pulando..."))
+                            continue
                     else:
                         self.stdout.write(self.style.WARNING(f"  ⚠️  Empresa da filial {filial.nome} não existe. Pulando..."))
                         continue
                 except Exception:
                     self.stdout.write(self.style.WARNING(f"  ⚠️  Erro ao verificar empresa da filial {filial.nome}. Pulando..."))
+                    continue
+                
+                if not empresa_filial or not filial_verificada:
                     continue
                 
                 for i in range(2):
@@ -678,25 +768,24 @@ class Command(BaseCommand):
                         codigo += 1
                     
                     # Verificar novamente se empresa e filial existem ANTES de criar pessoa
-                    empresa_final = None
-                    filial_final = None
+                    empresa_final = empresa_filial
+                    filial_final = filial_verificada
                     
                     try:
                         # Verificar empresa novamente
-                        if Empresa.objects.filter(id=empresa_filial.id, tenant=tenant).exists():
-                            empresa_final = empresa_filial
-                        else:
+                        if not Empresa.objects.filter(id=empresa_filial.id, tenant=tenant).exists():
                             self.stdout.write(self.style.WARNING(f"    ⚠️  Empresa {empresa_filial.nome} (ID: {empresa_filial.id}) não existe. Criando pessoa sem empresa..."))
+                            empresa_final = None
                     except Exception as e:
                         self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao verificar empresa: {e}. Criando pessoa sem empresa..."))
+                        empresa_final = None
                     
                     if empresa_final:
                         try:
                             # Verificar filial novamente
-                            if Filial.objects.filter(id=filial.id, empresa=empresa_final).exists():
-                                filial_final = filial
-                            else:
+                            if not Filial.objects.filter(id=filial.id, empresa=empresa_final).exists():
                                 self.stdout.write(self.style.WARNING(f"    ⚠️  Filial {filial.nome} (ID: {filial.id}) não existe. Criando pessoa sem filial..."))
+                                filial_final = None
                         except Exception as e:
                             self.stdout.write(self.style.WARNING(f"    ⚠️  Erro ao verificar filial: {e}. Criando pessoa sem filial..."))
                     
@@ -720,7 +809,7 @@ class Command(BaseCommand):
                             estado=estado,
                             cep=f"{random.randint(80000, 89999)}-{random.randint(100, 999)}",
                             telefone_celular=f"({random.randint(11, 99)}) 9{random.randint(1000, 9999)}-{random.randint(1000, 9999)}",
-                            email=f"{nome.lower().replace(' ', '.')}@{filial.empresa.nome.lower().replace(' ', '')}.com.br" if filial_verificada else f"{nome.lower().replace(' ', '.')}@empresa.com.br",
+                            email=f"{nome.lower().replace(' ', '.')}@{empresa_filial.nome.lower().replace(' ', '')}.com.br" if empresa_filial else f"{nome.lower().replace(' ', '.')}@empresa.com.br",
                             cargo=random.choice(['Vendedor', 'Gerente', 'Analista', 'Assistente']),
                             comissoes=Decimal(str(random.choice([0, 2, 3, 5]))),
                         )
@@ -969,9 +1058,16 @@ class Command(BaseCommand):
                         'last_name': tenant_name,
                     }
                 )
-                if created:
-                    user_admin.set_password('senha123')
+                # Sempre definir senha para garantir que está correta
+                if not user_admin.has_usable_password():
+                    user_admin.set_password('admin123')
                     user_admin.save()
+                elif created:
+                    user_admin.set_password('admin123')
+                    user_admin.save()
+                
+                # Log para debug
+                self.stdout.write(f"    🔍 Usuário admin criado/encontrado no schema público: {admin_username} (criado={created})")
                 
                 # Criar perfil - verificar se empresa e filial existem ANTES de atribuir
                 current_empresa = None
@@ -1040,7 +1136,7 @@ class Command(BaseCommand):
                     }
                 )
                 if not user_admin_tenant.has_usable_password():
-                    user_admin_tenant.set_password('senha123')
+                    user_admin_tenant.set_password('admin123')
                     user_admin_tenant.save()
                 usuarios_criados.append(user_admin_tenant)
                 self.stdout.write(f"    ✅ Admin: {admin_username} (role: admin)")
@@ -1082,7 +1178,7 @@ class Command(BaseCommand):
                                 }
                             )
                             if created:
-                                user_public.set_password('senha123')
+                                user_public.set_password('admin123')
                                 user_public.save()
                             
                             # Verificar novamente se empresa existe antes de criar perfil
@@ -1131,7 +1227,7 @@ class Command(BaseCommand):
                                 }
                             )
                             if not user_tenant.has_usable_password():
-                                user_tenant.set_password('senha123')
+                                user_tenant.set_password('admin123')
                                 user_tenant.save()
                             usuarios_criados.append(user_tenant)
                             self.stdout.write(f"    ✅ Usuário: {username} ({empresa.nome} - sem filial)")
@@ -1262,5 +1358,5 @@ class Command(BaseCommand):
             self.stdout.write(f"  Contas a Pagar: {len(contas_pagar)}")
             self.stdout.write(f"  Usuários: {len(usuarios_criados)}")
             self.stdout.write(f"\n  🌐 Acesse: http://{schema_name}.localhost:8000")
-            self.stdout.write(f"  👤 Usuários: {', '.join([u.username for u in usuarios_criados[:5]])}... (senha: senha123)")
+            self.stdout.write(f"  👤 Usuários: {', '.join([u.username for u in usuarios_criados[:5]])}... (senha: admin123)")
 

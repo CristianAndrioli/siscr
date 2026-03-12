@@ -33,6 +33,43 @@ def _tabela_existe(nome_tabela):
         return False
 
 
+def _get_active_tenants():
+    """
+    Busca todos os tenants ativos no schema público.
+    Retorna uma lista vazia se a tabela não existir ou houver erro.
+    """
+    try:
+        # Verificar se a tabela tenants_tenant existe antes de tentar acessá-la
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'tenants_tenant'
+                    );
+                """)
+                tabela_existe = cursor.fetchone()[0]
+        except Exception as e:
+            logger.warning(f"[CELERY] Erro ao verificar existência da tabela tenants_tenant: {e}")
+            return []
+        
+        if not tabela_existe:
+            logger.warning("[CELERY] Tabela tenants_tenant não existe ainda. Retornando lista vazia...")
+            return []
+        
+        # Buscar todos os tenants ativos no schema público
+        try:
+            with schema_context('public'):
+                return list(Tenant.objects.filter(is_active=True))
+        except Exception as e:
+            logger.error(f"[CELERY] Erro ao buscar tenants: {e}")
+            return []
+    except Exception as e:
+        logger.error(f"[CELERY] Erro inesperado ao buscar tenants: {e}")
+        return []
+
+
 @shared_task
 def expirar_soft_reservations():
     """
@@ -47,8 +84,10 @@ def expirar_soft_reservations():
     
     try:
         # Buscar todos os tenants ativos no schema público
-        with schema_context('public'):
-            tenants = Tenant.objects.filter(is_active=True)
+        tenants = _get_active_tenants()
+        if not tenants:
+            logger.warning("[CELERY] Nenhum tenant ativo encontrado ou tabela não existe. Pulando execução...")
+            return
         
         agora = timezone.now()
         
@@ -128,8 +167,11 @@ def reconciliar_estoque_disponivel():
     
     try:
         # Buscar todos os tenants ativos no schema público
-        with schema_context('public'):
-            tenants = Tenant.objects.filter(is_active=True)
+        # Buscar todos os tenants ativos no schema público
+        tenants = _get_active_tenants()
+        if not tenants:
+            logger.warning("[CELERY] Nenhum tenant ativo encontrado ou tabela não existe. Pulando execução...")
+            return
         
         # Processar cada tenant
         for tenant in tenants:
@@ -319,8 +361,11 @@ def atualizar_estoque_consolidado_grupos():
     
     try:
         # Buscar todos os tenants ativos no schema público
-        with schema_context('public'):
-            tenants = Tenant.objects.filter(is_active=True)
+        # Buscar todos os tenants ativos no schema público
+        tenants = _get_active_tenants()
+        if not tenants:
+            logger.warning("[CELERY] Nenhum tenant ativo encontrado ou tabela não existe. Pulando execução...")
+            return
         
         # Processar cada tenant
         for tenant in tenants:
@@ -401,8 +446,11 @@ def verificar_estoque_minimo():
     
     try:
         # Buscar todos os tenants ativos no schema público
-        with schema_context('public'):
-            tenants = Tenant.objects.filter(is_active=True)
+        # Buscar todos os tenants ativos no schema público
+        tenants = _get_active_tenants()
+        if not tenants:
+            logger.warning("[CELERY] Nenhum tenant ativo encontrado ou tabela não existe. Pulando execução...")
+            return
         
         # Processar cada tenant
         for tenant in tenants:

@@ -40,7 +40,8 @@ class CustomUserAdmin(BaseUserAdmin):
     def get_queryset(self, request):
         """Otimizar queries com select_related"""
         qs = super().get_queryset(request)
-        return qs.select_related('profile__current_tenant', 'profile__current_empresa', 'profile__current_filial')
+        # current_empresa e current_filial são IntegerFields, não ForeignKeys, então não podem ser usados em select_related
+        return qs.select_related('profile__current_tenant')
     
     def tenant_display(self, obj):
         """Exibe o tenant atual do usuário"""
@@ -117,21 +118,21 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = [
         'user_link',
         'current_tenant_link',
-        'current_empresa',
-        'current_filial',
+        'current_empresa_display',
+        'current_filial_display',
         'phone',
         'created_at',
     ]
     list_filter = ['current_tenant', 'created_at']
     search_fields = ['user__username', 'user__email', 'phone']
-    readonly_fields = ['created_at', 'updated_at', 'tenants_list']
+    readonly_fields = ['created_at', 'updated_at', 'tenants_list', 'current_empresa_display', 'current_filial_display']
     
     fieldsets = (
         ('Usuário', {
             'fields': ('user',)
         }),
         ('Contexto Atual', {
-            'fields': ('current_tenant', 'current_empresa', 'current_filial')
+            'fields': ('current_tenant', 'current_empresa_id', 'current_filial_id', 'current_empresa_display', 'current_filial_display')
         }),
         ('Informações', {
             'fields': ('phone',)  # avatar temporariamente desabilitado
@@ -158,6 +159,22 @@ class UserProfileAdmin(admin.ModelAdmin):
             return format_html('<a href="{}">{}</a>', url, obj.current_tenant.name)
         return '-'
     current_tenant_link.short_description = 'Tenant Atual'
+    
+    def current_empresa_display(self, obj):
+        """Exibe a empresa atual do usuário"""
+        empresa = obj.get_current_empresa()
+        if empresa:
+            return empresa.nome
+        return '-'
+    current_empresa_display.short_description = 'Empresa Atual'
+    
+    def current_filial_display(self, obj):
+        """Exibe a filial atual do usuário"""
+        filial = obj.get_current_filial()
+        if filial:
+            return filial.nome
+        return '-'
+    current_filial_display.short_description = 'Filial Atual'
     
     def tenants_list(self, obj):
         """Lista todos os tenants que o usuário tem acesso"""

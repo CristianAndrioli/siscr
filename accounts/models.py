@@ -49,22 +49,21 @@ class UserProfile(SiscrModelBase):
     )
     
     # Empresa e Filial atuais
-    current_empresa = models.ForeignKey(
-        Empresa, 
-        on_delete=models.SET_NULL, 
+    # IMPORTANTE: Usamos IntegerField ao invés de ForeignKey porque Empresa e Filial
+    # estão nos schemas dos tenants, não no schema público. Não podemos ter foreign keys
+    # entre schemas diferentes. Armazenamos apenas os IDs e buscamos usando schema_context.
+    current_empresa_id = models.IntegerField(
         null=True, 
         blank=True,
-        related_name='user_profiles',
-        verbose_name='Empresa Atual'
+        verbose_name='ID da Empresa Atual',
+        help_text='ID da empresa no schema do tenant'
     )
     
-    current_filial = models.ForeignKey(
-        Filial, 
-        on_delete=models.SET_NULL, 
+    current_filial_id = models.IntegerField(
         null=True, 
         blank=True,
-        related_name='user_profiles',
-        verbose_name='Filial Atual'
+        verbose_name='ID da Filial Atual',
+        help_text='ID da filial no schema do tenant'
     )
     
     # Informações adicionais
@@ -98,6 +97,108 @@ class UserProfile(SiscrModelBase):
             members__user=self.user,
             members__is_active=True
         ).distinct()
+    
+    def get_current_empresa(self):
+        """
+        Retorna a empresa atual do usuário.
+        Busca no schema do tenant usando current_empresa_id.
+        """
+        if not self.current_tenant_id or not self.current_empresa_id:
+            return None
+        
+        from django_tenants.utils import schema_context
+        
+        # Buscar schema_name do tenant usando SQL direto para evitar problemas com colunas faltantes
+        try:
+            from django.db import connection as db_connection
+            with db_connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT schema_name 
+                    FROM tenants_tenant 
+                    WHERE id = %s
+                """, [self.current_tenant_id])
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                schema_name = row[0]
+        except Exception:
+            return None
+        
+        try:
+            with schema_context(schema_name):
+                return Empresa.objects.get(id=self.current_empresa_id, is_active=True)
+        except Empresa.DoesNotExist:
+            return None
+    
+    def get_current_filial(self):
+        """
+        Retorna a filial atual do usuário.
+        Busca no schema do tenant usando current_filial_id.
+        """
+        if not self.current_tenant_id or not self.current_filial_id:
+            return None
+        
+        from django_tenants.utils import schema_context
+        
+        # Buscar schema_name do tenant usando SQL direto para evitar problemas com colunas faltantes
+        try:
+            from django.db import connection as db_connection
+            with db_connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT schema_name 
+                    FROM tenants_tenant 
+                    WHERE id = %s
+                """, [self.current_tenant_id])
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                schema_name = row[0]
+        except Exception:
+            return None
+        
+        try:
+            with schema_context(schema_name):
+                return Filial.objects.get(id=self.current_filial_id, is_active=True)
+        except Filial.DoesNotExist:
+            return None
+    
+    @property
+    def current_empresa(self):
+        """
+        Property para compatibilidade com código existente.
+        Retorna a empresa atual usando get_current_empresa().
+        """
+        return self.get_current_empresa()
+    
+    @current_empresa.setter
+    def current_empresa(self, value):
+        """
+        Setter para compatibilidade com código existente.
+        Armazena apenas o ID da empresa.
+        """
+        if value is None:
+            self.current_empresa_id = None
+        else:
+            self.current_empresa_id = value.id
+    
+    @property
+    def current_filial(self):
+        """
+        Property para compatibilidade com código existente.
+        Retorna a filial atual usando get_current_filial().
+        """
+        return self.get_current_filial()
+    
+    @current_filial.setter
+    def current_filial(self, value):
+        """
+        Setter para compatibilidade com código existente.
+        Armazena apenas o ID da filial.
+        """
+        if value is None:
+            self.current_filial_id = None
+        else:
+            self.current_filial_id = value.id
 
 
 class TenantMembership(SiscrModelBase):

@@ -2,9 +2,22 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+REM ========================================
+REM Verificar parâmetros de seed
+REM ========================================
+set SEED_MODE=
+if "%1"=="--seed-dev" set SEED_MODE=dev
+if "%1"=="-s" set SEED_MODE=dev
+if "%1"=="seed-dev" set SEED_MODE=dev
+if "%1"=="--seed-prod" set SEED_MODE=prod
+if "%1"=="seed-prod" set SEED_MODE=prod
+
 echo ========================================
 echo   SISCR - Script de Inicialização
 echo   Ambiente de Desenvolvimento
+if not "!SEED_MODE!"=="" (
+    echo   Modo de Seed: !SEED_MODE!
+)
 echo ========================================
 echo.
 
@@ -13,7 +26,7 @@ REM Passo 1: Verificar se Docker está instalado
 REM ========================================
 echo [1/10] Verificando se Docker está instalado...
 docker --version >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo ❌ Docker não está instalado ou não está no PATH!
     echo.
@@ -32,7 +45,7 @@ REM ========================================
 echo.
 echo [2/10] Verificando se Docker está rodando...
 docker ps >nul 2>&1
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
     echo ❌ Docker não está rodando!
     echo.
@@ -250,9 +263,36 @@ REM Passo 4: Aplicar migrações compartilhadas
 REM ========================================
 echo.
 echo [4/10] Aplicando migrações no schema compartilhado...
-docker-compose exec web python manage.py migrate_schemas --shared --noinput
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas
+
+REM Primeiro, corrigir migrações do guardian se necessário (antes de aplicar)
+echo Verificando e corrigindo migrações do app guardian...
+docker-compose exec web python manage.py fix_guardian_migrations
+if errorlevel 1 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações do guardian
+)
+
+REM Marcar todas as migrações do guardian como aplicadas antes de tentar aplicar outras migrações
+echo Marcando migrações do guardian como aplicadas (se necessário)...
+docker-compose exec web python manage.py migrate guardian --fake --noinput
+if errorlevel 1 (
+    echo ⚠️  Aviso: Pode haver problemas ao marcar migrações do guardian como aplicadas
+)
+
+REM Usar --fake-initial para evitar erros de tabelas que já existem
+docker-compose exec web python manage.py migrate_schemas --shared --fake-initial --noinput
+if errorlevel 1 (
+    echo ⚠️  Aviso: Erro ao aplicar migrações com --fake-initial
+    echo    Tentando corrigir migrações do guardian novamente...
+    docker-compose exec web python manage.py fix_guardian_migrations
+    echo    Marcando migrações do guardian como aplicadas novamente...
+    docker-compose exec web python manage.py migrate guardian --fake --noinput
+    echo    Tentando aplicar migrações sem --fake-initial...
+    docker-compose exec web python manage.py migrate_schemas --shared --noinput
+    if errorlevel 1 (
+        echo ⚠️  Aviso: Erro ao aplicar migrações (pode ser normal se já estiverem aplicadas)
+    ) else (
+        echo ✅ Migrações compartilhadas aplicadas!
+    )
 ) else (
     echo ✅ Migrações compartilhadas verificadas/aplicadas!
 )
@@ -260,49 +300,54 @@ if %errorlevel% neq 0 (
 REM Verificar e corrigir migrações do subscriptions se necessário
 echo Verificando e corrigindo migrações do app subscriptions...
 docker-compose exec web python manage.py fix_subscriptions_migrations
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do subscriptions
 )
 
 REM Verificar e corrigir migrações do accounts se necessário
 echo Verificando e corrigindo migrações do app accounts...
 docker-compose exec web python manage.py fix_accounts_migrations
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações do accounts
 )
 
 REM Verificar e corrigir migrações da tabela tenants_tenant se necessário
 echo Verificando e corrigindo migrações da tabela tenants_tenant...
 docker-compose exec web python manage.py fix_tenants_tenant_migrations
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações da tabela tenants_tenant
 )
 
 REM Sincronizar tenants dos schemas para a tabela tenants_tenant
 echo Sincronizando tenants dos schemas para a tabela tenants_tenant...
 docker-compose exec web python manage.py sync_tenants_to_public
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Pode haver problemas ao sincronizar tenants
 )
 
 REM ========================================
 REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
-echo.
-echo [5/10] Verificando dados compartilhados (Planos, Features, Subscriptions)...
-docker-compose exec web python database/scripts/check_subscriptions_data.py >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ✅ Dados compartilhados já existem!
-) else (
-    echo Criando dados de exemplo compartilhados...
-    docker-compose exec web python manage.py seed_subscriptions
-    if %errorlevel% neq 0 (
-        echo ⚠️  Aviso: Seed de subscriptions pode ter falhado
-        echo     Isso pode acontecer se as migrações não foram aplicadas corretamente.
-        echo     Tente executar manualmente: docker-compose exec web python manage.py migrate_schemas --shared
+if not "!SEED_MODE!"=="" (
+    echo.
+    echo [5/10] Verificando dados compartilhados (Planos, Features, Subscriptions)...
+    docker-compose exec web python database/scripts/check_subscriptions_data.py >nul 2>&1
+    if errorlevel 1 (
+        echo Criando dados de exemplo compartilhados...
+        docker-compose exec web python manage.py seed_subscriptions
+        if errorlevel 1 (
+            echo ⚠️  Aviso: Seed de subscriptions pode ter falhado
+            echo     Isso pode acontecer se as migrações não foram aplicadas corretamente.
+            echo     Tente executar manualmente: docker-compose exec web python manage.py migrate_schemas --shared
+        ) else (
+            echo ✅ Dados compartilhados criados!
+        )
     ) else (
-        echo ✅ Dados compartilhados criados!
+        echo ✅ Dados compartilhados já existem!
     )
+) else (
+    echo.
+    echo [5/10] Pulando seed de dados compartilhados (use --seed-dev para executar)
 )
 
 REM ========================================
@@ -310,9 +355,18 @@ REM Passo 6: Aplicar migrações nos tenants e corrigir colunas (ANTES de criar 
 REM ========================================
 echo.
 echo [6/10] Aplicando migrações nos schemas dos tenants...
+
+REM Primeiro, corrigir migrações do guardian em todos os schemas (incluindo tenants)
+echo Corrigindo migrações do guardian em todos os schemas...
+docker-compose exec web python manage.py fix_guardian_migrations
+if errorlevel 1 (
+    echo ⚠️  Aviso: Pode haver problemas com as migrações do guardian
+)
+
 REM Aplicar migrações apenas nos tenants existentes e válidos usando comando Django
+echo Aplicando migrações nos tenants...
 docker-compose exec web python manage.py apply_tenant_migrations
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Algumas migrações podem já estar aplicadas ou houve erro
 ) else (
     echo ✅ Migrações dos tenants verificadas/aplicadas!
@@ -321,66 +375,81 @@ if %errorlevel% neq 0 (
 REM Criar tabelas tenants_empresa e tenants_filial se não existirem
 echo Criando tabelas tenants_empresa e tenants_filial nos schemas dos tenants...
 docker-compose exec web python manage.py create_tenant_tables
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Pode haver problemas ao criar tabelas dos tenants
 )
 
 REM Verificar e corrigir colunas faltantes nos tenants (aplica migrações se necessário)
 echo Verificando e corrigindo colunas faltantes nos tenants...
 docker-compose exec web python manage.py fix_tenant_migrations
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo ⚠️  Aviso: Pode haver problemas com as migrações dos tenants
+)
+
+echo.
+echo [8/10] Corrigindo foreign keys dos tenants...
+docker-compose exec web python manage.py fix_tenant_foreign_keys
+if errorlevel 1 (
+    echo ⚠️  Aviso: Pode haver problemas com as foreign keys dos tenants
 )
 
 REM ========================================
 REM Passo 6.5: Garantir que tenants_tenant está sincronizado ANTES do seed
 REM ========================================
-echo.
-echo [6.5/10] Garantindo sincronização de tenants antes do seed...
-docker-compose exec web python manage.py sync_tenants_to_public
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Pode haver problemas ao sincronizar tenants
+if not "!SEED_MODE!"=="" (
+    echo.
+    echo [6.5/10] Garantindo sincronização de tenants antes do seed...
+    docker-compose exec web python manage.py sync_tenants_to_public
+    if errorlevel 1 (
+        echo ⚠️  Aviso: Pode haver problemas ao sincronizar tenants
+    )
 )
 
 REM ========================================
 REM Passo 7: Criar tenants com dados realistas
 REM ========================================
-echo.
-echo [7/10] Criando tenants com dados realistas...
-echo.
-echo Este processo criará 3 tenants completos:
-echo   • Comércio Simples (1 empresa, 1 filial)
-echo   • Grupo Expansão (1 empresa, 2 filiais)
-echo   • Holding Diversificada (2 empresas, 2 filiais cada)
-echo.
-echo Verificando se tenants já existem...
-docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from django.db import connection; cursor = connection.cursor(); cursor.execute('SELECT COUNT(*) FROM tenants_tenant WHERE schema_name IN (%s, %s, %s)', ['comercio_simples', 'grupo_expansao', 'holding_diversificada']); count = cursor.fetchone()[0]; exit(0 if count >= 3 else 1)" >nul 2>&1
-if %errorlevel% equ 0 (
-    echo ✅ Tenants já existem! Pulando criação...
+if not "!SEED_MODE!"=="" (
     echo.
-    echo Se quiser recriar os tenants, execute manualmente:
-    echo   docker-compose exec web python manage.py seed_multiple_tenants
-) else (
-    echo Executando seed de múltiplos tenants...
-    echo (Isso pode levar alguns minutos...)
-    docker-compose exec web python manage.py seed_multiple_tenants
-    if %errorlevel% neq 0 (
-        echo ⚠️  Aviso: Seed de múltiplos tenants pode ter falhado
+    echo [7/10] Criando tenants com dados realistas...
+    echo.
+    echo Este processo criará 3 tenants completos:
+    echo   • Comércio Simples (1 empresa, 1 filial)
+    echo   • Grupo Expansão (1 empresa, 2 filiais)
+    echo   • Holding Diversificada (2 empresas, 2 filiais cada)
+    echo.
+    echo Verificando se tenants já existem...
+    docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from django.db import connection; c = connection.cursor(); c.execute('SELECT COUNT(*) FROM tenants_tenant WHERE schema_name IN (%%s, %%s, %%s)', ['comercio_simples', 'grupo_expansao', 'holding_diversificada']); n = c.fetchone()[0]; exit(0 if n >= 3 else 1)" >nul 2>&1
+    if errorlevel 1 (
+        echo Executando seed de múltiplos tenants...
+        echo (Isso pode levar alguns minutos...)
+        docker-compose exec web python manage.py seed_multiple_tenants
+        if errorlevel 1 (
+            echo ⚠️  Aviso: Seed de múltiplos tenants pode ter falhado
+        ) else (
+            echo ✅ Tenants criados com sucesso!
+        )
     ) else (
-        echo ✅ Tenants criados com sucesso!
+        echo ✅ Tenants já existem! Pulando criação...
+        echo.
+        echo Se quiser recriar os tenants, execute manualmente:
+        echo   docker-compose exec web python manage.py seed_multiple_tenants
     )
-)
-
-REM ========================================
-REM Passo 6.6: Criar locations de estoque
-REM ========================================
-echo.
-echo [8/10] Criando locations de estoque para os tenants...
-docker-compose exec web python manage.py seed_locations
-if %errorlevel% neq 0 (
-    echo ⚠️  Aviso: Seed de locations pode ter falhado
+    
+    REM ========================================
+    REM Passo 6.6: Criar locations de estoque
+    REM ========================================
+    echo.
+    echo [8/10] Criando locations de estoque para os tenants...
+    docker-compose exec web python manage.py seed_locations
+    if errorlevel 1 (
+        echo ⚠️  Aviso: Seed de locations pode ter falhado
+    ) else (
+        echo ✅ Locations criadas com sucesso!
+    )
 ) else (
-    echo ✅ Locations criadas com sucesso!
+    echo.
+    echo [7/10] Pulando seed de tenants (use --seed-dev para executar)
+    echo [8/10] Pulando seed de locations (use --seed-dev para executar)
 )
 
 REM ========================================
@@ -472,6 +541,10 @@ echo ========================================
 echo   ✅ Inicialização concluída!
 echo ========================================
 echo.
+if "!SEED_MODE!"=="" (
+    echo 💡 Dica: Use 'start_dev_windows.bat --seed-dev' para executar seed de dados
+    echo.
+)
 echo 📋 Serviços disponíveis:
 echo    • Backend (Django): http://localhost:8000
 echo    • Admin Django:     http://localhost:8000/admin/
@@ -479,9 +552,11 @@ echo    • Swagger/API Docs:    http://localhost:8000/api/docs/
 echo    • Dashboard Observabilidade: http://localhost:8000/api/observability/
 echo    • Frontend (React): http://localhost:5173
 echo.
-echo 🔐 Credenciais de teste:
-echo    • Username: (varia por tenant, formato: nome.sobrenome.codigo)
-echo    • Password: senha123
+if not "!SEED_MODE!"=="" (
+    echo 🔐 Credenciais de teste (após seed):
+    echo    • Username: (varia por tenant, formato: nome.sobrenome.codigo)
+    echo    • Password: admin123
+)
 echo    • Tenants disponíveis:
 echo      - Comércio Simples: http://comercio_simples.localhost:8000
 echo      - Grupo Expansão: http://grupo_expansao.localhost:8000
