@@ -289,7 +289,7 @@ if errorlevel 1 (
     echo    Tentando aplicar migrações sem --fake-initial...
     docker-compose exec web python manage.py migrate_schemas --shared --noinput
     if errorlevel 1 (
-        echo ⚠️  Aviso: Erro ao aplicar migrações (pode ser normal se já estiverem aplicadas)
+        echo ⚠️  Aviso: Erro ao aplicar migrações ^(pode ser normal se já estiverem aplicadas^)
     ) else (
         echo ✅ Migrações compartilhadas aplicadas!
     )
@@ -330,7 +330,7 @@ REM Passo 5: Seed de dados compartilhados (Subscriptions)
 REM ========================================
 if not "!SEED_MODE!"=="" (
     echo.
-    echo [5/10] Verificando dados compartilhados (Planos, Features, Subscriptions)...
+    echo [5/10] Verificando dados compartilhados ^(Planos, Features, Subscriptions^)...
     docker-compose exec web python database/scripts/check_subscriptions_data.py >nul 2>&1
     if errorlevel 1 (
         echo Criando dados de exemplo compartilhados...
@@ -347,7 +347,7 @@ if not "!SEED_MODE!"=="" (
     )
 ) else (
     echo.
-    echo [5/10] Pulando seed de dados compartilhados (use --seed-dev para executar)
+    echo [5/10] Pulando seed de dados compartilhados ^(use --seed-dev para executar^)
 )
 
 REM ========================================
@@ -413,15 +413,15 @@ if not "!SEED_MODE!"=="" (
     echo [7/10] Criando tenants com dados realistas...
     echo.
     echo Este processo criará 3 tenants completos:
-    echo   • Comércio Simples (1 empresa, 1 filial)
-    echo   • Grupo Expansão (1 empresa, 2 filiais)
-    echo   • Holding Diversificada (2 empresas, 2 filiais cada)
+    echo   • Comércio Simples ^(1 empresa, 1 filial^)
+    echo   • Grupo Expansão ^(1 empresa, 2 filiais^)
+    echo   • Holding Diversificada ^(2 empresas, 2 filiais cada^)
     echo.
     echo Verificando se tenants já existem...
-    docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from django.db import connection; c = connection.cursor(); c.execute('SELECT COUNT(*) FROM tenants_tenant WHERE schema_name IN (%%s, %%s, %%s)', ['comercio_simples', 'grupo_expansao', 'holding_diversificada']); n = c.fetchone()[0]; exit(0 if n >= 3 else 1)" >nul 2>&1
+    docker-compose exec web python -c "import os, django; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'siscr.settings'); django.setup(); from django.db import connection; c = connection.cursor(); c.execute('SELECT COUNT(*) FROM tenants_tenant WHERE schema_name IN (%%s, %%s, %%s^)', ['comercio_simples', 'grupo_expansao', 'holding_diversificada']); n = c.fetchone()[0]; exit^(0 if n >= 3 else 1^)" >nul 2>&1
     if errorlevel 1 (
         echo Executando seed de múltiplos tenants...
-        echo (Isso pode levar alguns minutos...)
+        echo ^(Isso pode levar alguns minutos...^)
         docker-compose exec web python manage.py seed_multiple_tenants
         if errorlevel 1 (
             echo ⚠️  Aviso: Seed de múltiplos tenants pode ter falhado
@@ -448,8 +448,8 @@ if not "!SEED_MODE!"=="" (
     )
 ) else (
     echo.
-    echo [7/10] Pulando seed de tenants (use --seed-dev para executar)
-    echo [8/10] Pulando seed de locations (use --seed-dev para executar)
+    echo [7/10] Pulando seed de tenants ^(use --seed-dev para executar^)
+    echo [8/10] Pulando seed de locations ^(use --seed-dev para executar^)
 )
 
 REM ========================================
@@ -546,15 +546,15 @@ if "!SEED_MODE!"=="" (
     echo.
 )
 echo 📋 Serviços disponíveis:
-echo    • Backend (Django): http://localhost:8000
+echo    • Backend ^(Django^): http://localhost:8000
 echo    • Admin Django:     http://localhost:8000/admin/
 echo    • Swagger/API Docs:    http://localhost:8000/api/docs/
 echo    • Dashboard Observabilidade: http://localhost:8000/api/observability/
-echo    • Frontend (React): http://localhost:5173
+echo    • Frontend ^(React^): http://localhost:5173
 echo.
 if not "!SEED_MODE!"=="" (
-    echo 🔐 Credenciais de teste (após seed):
-    echo    • Username: (varia por tenant, formato: nome.sobrenome.codigo)
+    echo 🔐 Credenciais de teste ^(após seed^):
+    echo    • Username: ^(varia por tenant, formato: nome.sobrenome.codigo^)
     echo    • Password: admin123
 )
 echo    • Tenants disponíveis:
