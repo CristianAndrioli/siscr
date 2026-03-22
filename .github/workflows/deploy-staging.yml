@@ -50,7 +50,17 @@ jobs:
         env:
           VITE_API_URL: https://siscr-api-staging.lucaspercisi.workers.dev
 
-      # ─── Etapa 4: Deploy do frontend no Cloudflare Pages ────────
+      # ─── Etapa 4: Criar projeto Pages se não existir ────────────
+      - name: Create Cloudflare Pages Project (if not exists)
+        uses: cloudflare/wrangler-action@v3
+        continue-on-error: true
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: pages project create siscr-web --production-branch=main
+
+      # ─── Etapa 5: Deploy do frontend no Cloudflare Pages ────────
       - name: Deploy Frontend to Cloudflare Pages (staging)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -61,7 +71,7 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## Deploy Staging Concluído! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "## Deploy Staging Concluido!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **API (Worker):** https://siscr-api-staging.lucaspercisi.workers.dev" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend (Pages):** https://staging.siscr-web.pages.dev" >> $GITHUB_STEP_SUMMARY
