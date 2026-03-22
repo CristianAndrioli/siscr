@@ -37,6 +37,8 @@ export type Env = {
   BETTER_AUTH_SECRET: string
   STRIPE_SECRET_KEY: string
   STRIPE_WEBHOOK_SECRET: string
+  STRIPE_PRICE_STARTER: string
+  STRIPE_PRICE_BUSINESS: string
 }
 
 const app = new Hono<{ Bindings: Env }>()

@@ -1,671 +1,292 @@
-import { useState, useEffect, FormEvent, useCallback } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { publicService, type Plan, type SignupData } from '../services/public';
-import { formatCNPJ } from '../utils/formatters';
-import { validateCNPJ, validateEmail } from '../utils/validators';
+import { useState, FormEvent } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
-function Signup() {
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+
+const PLAN_LABELS: Record<string, string> = {
+  free:     'Free',
+  starter:  'Starter — R$ 97/mês',
+  business: 'Business — R$ 297/mês',
+};
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+export default function Signup() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<Plan[]>([]);
+
+  const plan = searchParams.get('plan') || 'free';
+  const planLabel = PLAN_LABELS[plan] || plan;
+
+  const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
-  const [loadingPlans, setLoadingPlans] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [domainAvailable, setDomainAvailable] = useState<boolean | null>(null);
-  const [checkingDomain, setCheckingDomain] = useState(false);
-  
-  // Validações em tempo real
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [passwordStrength, setPasswordStrength] = useState<{
-    score: number;
-    label: string;
-    color: string;
-  }>({ score: 0, label: '', color: '' });
-  const [emailValid, setEmailValid] = useState<boolean | null>(null);
-  const [cnpjValid, setCnpjValid] = useState<boolean | null>(null);
 
-  // Form data
-  const [formData, setFormData] = useState<SignupData>({
-    tenant_name: '',
-    domain: '',
-    plan_id: parseInt(searchParams.get('plan') || '0') || 0,
-    admin_username: '',
-    admin_email: '',
-    admin_password: '',
-    admin_first_name: '',
-    admin_last_name: '',
-    empresa_nome: '',
-    empresa_cnpj: '',
-    empresa_razao_social: '',
-  });
+  // Dados da empresa (step 1)
+  const [empresaNome, setEmpresaNome] = useState('');
+  const [tenantSlug, setTenantSlug] = useState('');
+  const [slugEdited, setSlugEdited] = useState(false);
 
-  // Função para calcular força da senha
-  const calculatePasswordStrength = useCallback((password: string) => {
-    if (!password) {
-      return { score: 0, label: '', color: '' };
-    }
+  // Dados do usuário (step 2)
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-    let score = 0;
-    if (password.length >= 8) score += 1;
-    if (password.length >= 12) score += 1;
-    if (/[a-z]/.test(password)) score += 1;
-    if (/[A-Z]/.test(password)) score += 1;
-    if (/[0-9]/.test(password)) score += 1;
-    if (/[^a-zA-Z0-9]/.test(password)) score += 1;
-
-    const labels = ['Muito fraca', 'Fraca', 'Razoável', 'Boa', 'Forte', 'Muito forte'];
-    const colors = ['red', 'orange', 'yellow', 'yellow', 'green', 'green'];
-    
-    return {
-      score: Math.min(score, 5),
-      label: labels[Math.min(score, 5)],
-      color: colors[Math.min(score, 5)],
-    };
-  }, []);
-
-  // Validação de domínio com debounce
-  useEffect(() => {
-    if (!formData.domain || formData.domain.length < 3) {
-      setDomainAvailable(null);
-      return;
-    }
-
-    const timeoutId = setTimeout(async () => {
-      setCheckingDomain(true);
-      try {
-        const result = await publicService.checkDomain(formData.domain);
-        setDomainAvailable(result.available);
-        if (!result.available) {
-          setFieldErrors((prev) => ({ ...prev, domain: 'Domínio já está em uso' }));
-        } else {
-          setFieldErrors((prev) => {
-            const newErrors = { ...prev };
-            delete newErrors.domain;
-            return newErrors;
-          });
-        }
-      } catch (err) {
-        setDomainAvailable(false);
-        setFieldErrors((prev) => ({ ...prev, domain: 'Erro ao verificar domínio' }));
-      } finally {
-        setCheckingDomain(false);
-      }
-    }, 800); // Debounce de 800ms
-
-    return () => clearTimeout(timeoutId);
-  }, [formData.domain]);
-
-  // Validação de senha em tempo real
-  useEffect(() => {
-    if (formData.admin_password) {
-      const strength = calculatePasswordStrength(formData.admin_password);
-      setPasswordStrength(strength);
-      
-      if (formData.admin_password.length < 8) {
-        setFieldErrors((prev) => ({ ...prev, admin_password: 'Senha deve ter no mínimo 8 caracteres' }));
-      } else {
-        setFieldErrors((prev) => {
-          const newErrors = { ...prev };
-          delete newErrors.admin_password;
-          return newErrors;
-        });
-      }
-    } else {
-      setPasswordStrength({ score: 0, label: '', color: '' });
-    }
-  }, [formData.admin_password, calculatePasswordStrength]);
-
-  // Validação de email em tempo real
-  useEffect(() => {
-    if (formData.admin_email) {
-      const isValid = validateEmail(formData.admin_email);
-      setEmailValid(isValid);
-      if (!isValid) {
-        setFieldErrors((prev) => ({ ...prev, admin_email: 'Email inválido' }));
-      } else {
-        setFieldErrors((prev) => {
-          const newErrors = { ...prev };
-          delete newErrors.admin_email;
-          return newErrors;
-        });
-      }
-    } else {
-      setEmailValid(null);
-    }
-  }, [formData.admin_email]);
-
-  // Validação de CNPJ em tempo real
-  useEffect(() => {
-    if (formData.empresa_cnpj) {
-      const cleaned = formData.empresa_cnpj.replace(/\D/g, '');
-      if (cleaned.length === 14) {
-        const isValid = validateCNPJ(formData.empresa_cnpj);
-        setCnpjValid(isValid);
-        if (!isValid) {
-          setFieldErrors((prev) => ({ ...prev, empresa_cnpj: 'CNPJ inválido' }));
-        } else {
-          setFieldErrors((prev) => {
-            const newErrors = { ...prev };
-            delete newErrors.empresa_cnpj;
-            return newErrors;
-          });
-        }
-      } else {
-        setCnpjValid(null);
-      }
-    } else {
-      setCnpjValid(null);
-    }
-  }, [formData.empresa_cnpj]);
-
-  useEffect(() => {
-    const loadPlans = async () => {
-      try {
-        const data = await publicService.getPlans();
-        setPlans(data);
-        if (!formData.plan_id && data.length > 0) {
-          setFormData((prev) => ({ ...prev, plan_id: data[0].id }));
-        }
-      } catch (err) {
-        setError('Erro ao carregar planos.');
-      } finally {
-        setLoadingPlans(false);
-      }
-    };
-
-    loadPlans();
-  }, []);
-
-  const handleDomainCheck = async () => {
-    if (!formData.domain) return;
-
-    setCheckingDomain(true);
-    try {
-      const result = await publicService.checkDomain(formData.domain);
-      setDomainAvailable(result.available);
-      if (!result.available) {
-        setFieldErrors((prev) => ({ ...prev, domain: result.message || 'Domínio já está em uso' }));
-      } else {
-        setFieldErrors((prev) => {
-          const newErrors = { ...prev };
-          delete newErrors.domain;
-          return newErrors;
-        });
-      }
-    } catch (err) {
-      setDomainAvailable(false);
-      setFieldErrors((prev) => ({ ...prev, domain: 'Erro ao verificar domínio' }));
-    } finally {
-      setCheckingDomain(false);
+  const handleEmpresaChange = (value: string) => {
+    setEmpresaNome(value);
+    if (!slugEdited) {
+      setTenantSlug(slugify(value));
     }
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSlugChange = (value: string) => {
+    setTenantSlug(slugify(value));
+    setSlugEdited(true);
+  };
+
+  const nextStep = (e: FormEvent) => {
+    e.preventDefault();
+    if (!empresaNome.trim() || !tenantSlug.trim()) return;
+    setStep(2);
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
+    if (password !== confirmPassword) {
+      setError('As senhas não conferem.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('A senha deve ter pelo menos 8 caracteres.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const result = await publicService.signup(formData);
-      
-      // Verificar se o plano é trial
-      const isTrial = result.subscription?.is_trial || false;
-      
-      // Se não for trial, fazer login automático e redirecionar para checkout
-      if (!isTrial) {
-        try {
-          // Fazer login automático
-          const { authService } = await import('../services/auth');
-          await authService.login(formData.admin_username, formData.admin_password, result.tenant.domain);
-          
-          // Redirecionar para checkout
-          navigate(`/checkout?plan_id=${result.subscription.plan_id}`);
-          return;
-        } catch (loginErr) {
-          // Se login automático falhar, redirecionar para login manual
-          console.error('Erro no login automático:', loginErr);
-          navigate(`/login?domain=${result.tenant.domain}&redirect=/checkout?plan_id=${result.subscription.plan_id}`);
-          return;
+      if (plan === 'free') {
+        // Plano free: criar direto e redirecionar para login
+        await axios.post(`${API_BASE_URL}/api/auth/signup`, {
+          nome,
+          email,
+          password,
+          tenantNome: empresaNome,
+          tenantSlug,
+          plan,
+        });
+        navigate(`/checkout/success?tenant=${tenantSlug}&free=1`);
+      } else {
+        // Planos pagos: criar sessão e ir para Stripe Checkout
+        const { data } = await axios.post(`${API_BASE_URL}/api/subscriptions/checkout`, {
+          nome,
+          email,
+          password,
+          tenantNome: empresaNome,
+          tenantSlug,
+          plan,
+        });
+        // Redirecionar para URL do Stripe
+        if (data.url) {
+          window.location.href = data.url;
         }
       }
-      
-      // Se for trial, mostrar sucesso e redirecionar para login
-      setSuccess(true);
-      setTimeout(() => {
-        navigate(`/login?domain=${result.tenant.domain}`);
-      }, 2000);
-    } catch (err: any) {
-      const errorMessage =
-        err.response?.data?.error ||
-        err.response?.data?.detail ||
-        'Erro ao criar conta. Tente novamente.';
-      setError(errorMessage);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Erro ao criar conta. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (success) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
-          <div className="text-6xl mb-4">✅</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Conta Criada com Sucesso!
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Redirecionando para a página de login...
+  return (
+    <div className="min-h-screen bg-surface flex items-center justify-center px-6 py-12">
+      <div className="w-full max-w-lg animate-fade-in">
+
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2 mb-10">
+          <div className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-sm">S</div>
+          <span className="font-display font-bold text-lg text-white">SISCR</span>
+        </Link>
+
+        {/* Header */}
+        <div className="mb-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-600/15 border border-brand-600/20 text-brand-300 text-xs font-semibold mb-4">
+            Plano: {planLabel}
+          </div>
+          <h1 className="font-display text-3xl font-bold text-white mb-2">Criar conta</h1>
+          <p className="text-slate-400">
+            {step === 1 ? 'Vamos começar com sua empresa.' : 'Agora crie seu acesso de administrador.'}
           </p>
         </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gray-100 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <Link to="/" className="text-3xl font-bold text-indigo-600">
-            SISCR
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mt-4">
-            Criar Nova Conta
-          </h1>
-          <p className="text-gray-600 mt-2">
-            Preencha os dados abaixo para criar sua conta
-          </p>
+        {/* Indicador de etapas */}
+        <div className="flex items-center gap-3 mb-8">
+          {[1, 2].map((s) => (
+            <div key={s} className="flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                s === step ? 'bg-brand-600 text-white' :
+                s < step ? 'bg-brand-600/30 text-brand-400' :
+                'bg-surface-card border border-surface-border text-slate-600'
+              }`}>
+                {s < step ? '✓' : s}
+              </div>
+              <span className={`text-sm ${s === step ? 'text-white font-semibold' : 'text-slate-500'}`}>
+                {s === 1 ? 'Empresa' : 'Acesso'}
+              </span>
+              {s < 2 && <div className="w-8 h-px bg-surface-border mx-1" />}
+            </div>
+          ))}
         </div>
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
+          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <span>⚠️</span>
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-lg space-y-6">
-          {/* Plano */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Plano *
-            </label>
-            {loadingPlans ? (
-              <div className="text-gray-500">Carregando planos...</div>
-            ) : (
-              <select
-                name="plan_id"
-                id="plan_id"
-                value={formData.plan_id}
-                onChange={(e) =>
-                  setFormData({ ...formData, plan_id: parseInt(e.target.value) })
-                }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+        {/* Step 1 — Empresa */}
+        {step === 1 && (
+          <form onSubmit={nextStep} className="space-y-5">
+            <div>
+              <label className="input-label text-slate-300">Nome da empresa</label>
+              <input
+                type="text"
+                value={empresaNome}
+                onChange={(e) => handleEmpresaChange(e.target.value)}
+                placeholder="Minha Empresa Ltda"
                 required
-              >
-                <option value="">Selecione um plano</option>
-                {plans.map((plan) => (
-                  <option key={plan.id} value={plan.id}>
-                    {plan.name} - {plan.is_trial ? 'Grátis' : `R$ ${plan.price_monthly}/mês`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* Dados do Tenant */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Dados da Empresa
-            </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome da Empresa *
-                </label>
-                <input
-                  type="text"
-                  name="tenant_name"
-                  id="tenant_name"
-                  value={formData.tenant_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, tenant_name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Nome da sua empresa"
-                  autoComplete="organization"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Domínio/Subdomínio *
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name="domain"
-                    id="domain"
-                    value={formData.domain}
-                    onChange={(e) => {
-                      const domain = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-                      setFormData({ ...formData, domain });
-                      setDomainAvailable(null);
-                    }}
-                    className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
-                      domainAvailable === false
-                        ? 'border-red-500'
-                        : domainAvailable === true
-                        ? 'border-green-500'
-                        : 'border-gray-300'
-                    }`}
-                    placeholder="minha-empresa"
-                    autoComplete="username"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={handleDomainCheck}
-                    disabled={checkingDomain || !formData.domain}
-                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {checkingDomain ? (
-                      <span className="flex items-center gap-2">
-                        <span className="animate-spin">⏳</span>
-                        Verificando...
-                      </span>
-                    ) : (
-                      'Verificar'
-                    )}
-                  </button>
-                </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  Seu acesso será: <span className="font-medium">{formData.domain || 'seu-dominio'}.localhost</span>
-                </p>
-                {checkingDomain && (
-                  <p className="text-sm text-blue-600 mt-1">⏳ Verificando disponibilidade...</p>
-                )}
-                {!checkingDomain && domainAvailable === true && (
-                  <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
-                    <span>✓</span> Domínio disponível
-                  </p>
-                )}
-                {!checkingDomain && domainAvailable === false && (
-                  <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
-                    <span>✗</span> {fieldErrors.domain || 'Domínio já está em uso'}
-                  </p>
-                )}
-              </div>
+                className="input bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+              />
             </div>
-          </div>
 
-          {/* Dados do Usuário Admin */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Dados do Administrador
-            </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Username *
-                </label>
+            <div>
+              <label className="input-label text-slate-300">Identificador único <span className="text-slate-500 font-normal">(usado para login)</span></label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm select-none">@</span>
                 <input
                   type="text"
-                  name="admin_username"
-                  id="admin_username"
-                  value={formData.admin_username}
-                  onChange={(e) =>
-                    setFormData({ ...formData, admin_username: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="usuario123"
-                  autoComplete="username"
+                  value={tenantSlug}
+                  onChange={(e) => handleSlugChange(e.target.value)}
+                  placeholder="minha-empresa"
                   required
+                  pattern="[a-z0-9\-]+"
+                  minLength={3}
+                  maxLength={30}
+                  className="input pl-8 bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  name="admin_email"
-                  id="admin_email"
-                  value={formData.admin_email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, admin_email: e.target.value })
-                  }
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
-                    emailValid === false
-                      ? 'border-red-500'
-                      : emailValid === true
-                      ? 'border-green-500'
-                      : 'border-gray-300'
-                  }`}
-                  placeholder="seu@email.com"
-                  autoComplete="email"
-                  required
-                />
-                {emailValid === false && (
-                  <p className="text-sm text-red-600 mt-1">{fieldErrors.admin_email}</p>
-                )}
-                {emailValid === true && (
-                  <p className="text-sm text-green-600 mt-1">✓ Email válido</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Senha *
-                </label>
-                <input
-                  type="password"
-                  name="admin_password"
-                  id="admin_password"
-                  value={formData.admin_password}
-                  onChange={(e) =>
-                    setFormData({ ...formData, admin_password: e.target.value })
-                  }
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
-                    fieldErrors.admin_password
-                      ? 'border-red-500'
-                      : formData.admin_password && passwordStrength.score >= 3
-                      ? 'border-green-500'
-                      : 'border-gray-300'
-                  }`}
-                  placeholder="Mínimo 8 caracteres"
-                  autoComplete="new-password"
-                  minLength={8}
-                  required
-                />
-                {formData.admin_password && (
-                  <div className="mt-2">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="flex-1 bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all ${
-                            passwordStrength.color === 'red'
-                              ? 'bg-red-500'
-                              : passwordStrength.color === 'orange'
-                              ? 'bg-orange-500'
-                              : passwordStrength.color === 'yellow'
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                          }`}
-                          style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
-                        />
-                      </div>
-                      <span className={`text-sm font-medium ${
-                        passwordStrength.color === 'red'
-                          ? 'text-red-600'
-                          : passwordStrength.color === 'orange'
-                          ? 'text-orange-600'
-                          : passwordStrength.color === 'yellow'
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                      }`}>
-                        {passwordStrength.label}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      Use letras maiúsculas, minúsculas, números e caracteres especiais para uma senha mais forte
-                    </p>
-                  </div>
-                )}
-                {fieldErrors.admin_password && (
-                  <p className="text-sm text-red-600 mt-1">{fieldErrors.admin_password}</p>
-                )}
-                {!formData.admin_password && (
-                  <p className="text-sm text-gray-500 mt-1">Mínimo de 8 caracteres</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome
-                </label>
-                <input
-                  type="text"
-                  name="admin_first_name"
-                  id="admin_first_name"
-                  value={formData.admin_first_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, admin_first_name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="João"
-                  autoComplete="given-name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sobrenome
-                </label>
-                <input
-                  type="text"
-                  name="admin_last_name"
-                  id="admin_last_name"
-                  value={formData.admin_last_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, admin_last_name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Silva"
-                  autoComplete="family-name"
-                />
-              </div>
+              <p className="mt-1.5 text-xs text-slate-600">
+                Somente letras minúsculas, números e hífens. Ex: <span className="text-slate-400">minha-empresa</span>
+              </p>
             </div>
-          </div>
 
-          {/* Dados da Empresa */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Dados da Primeira Empresa
-            </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nome da Empresa *
-                </label>
-                <input
-                  type="text"
-                  name="empresa_nome"
-                  id="empresa_nome"
-                  value={formData.empresa_nome}
-                  onChange={(e) =>
-                    setFormData({ ...formData, empresa_nome: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Nome da Empresa"
-                  autoComplete="organization"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CNPJ
-                </label>
-                <input
-                  type="text"
-                  name="empresa_cnpj"
-                  id="empresa_cnpj"
-                  value={formData.empresa_cnpj}
-                  onChange={(e) => {
-                    const formatted = formatCNPJ(e.target.value);
-                    setFormData({ ...formData, empresa_cnpj: formatted });
-                  }}
-                  maxLength={18}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 ${
-                    cnpjValid === false
-                      ? 'border-red-500'
-                      : cnpjValid === true
-                      ? 'border-green-500'
-                      : 'border-gray-300'
-                  }`}
-                  placeholder="12.345.678/0001-90"
-                  autoComplete="off"
-                />
-                {cnpjValid === false && (
-                  <p className="text-sm text-red-600 mt-1">{fieldErrors.empresa_cnpj}</p>
-                )}
-                {cnpjValid === true && (
-                  <p className="text-sm text-green-600 mt-1">✓ CNPJ válido</p>
-                )}
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Razão Social
-                </label>
-                <input
-                  type="text"
-                  name="empresa_razao_social"
-                  id="empresa_razao_social"
-                  value={formData.empresa_razao_social}
-                  onChange={(e) =>
-                    setFormData({ ...formData, empresa_razao_social: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Razão Social da Empresa"
-                  autoComplete="organization"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Submit */}
-          <div className="border-t pt-6">
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                domainAvailable === false ||
-                Object.keys(fieldErrors).length > 0 ||
-                (formData.admin_password && passwordStrength.score < 2) ||
-                emailValid === false ||
-                cnpjValid === false
-              }
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="animate-spin">⏳</span>
-                  Criando conta...
-                </span>
-              ) : (
-                'Criar Conta'
-              )}
+            <button type="submit" className="btn-primary w-full py-3.5 text-base">
+              Continuar →
             </button>
-            <p className="text-center text-sm text-gray-600 mt-4">
-              Já tem uma conta?{' '}
-              <Link to="/login" className="text-indigo-600 hover:underline">
-                Fazer login
-              </Link>
-            </p>
-          </div>
-        </form>
+          </form>
+        )}
+
+        {/* Step 2 — Usuário */}
+        {step === 2 && (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="input-label text-slate-300">Seu nome completo</label>
+              <input
+                type="text"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                placeholder="João da Silva"
+                required
+                className="input bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+              />
+            </div>
+
+            <div>
+              <label className="input-label text-slate-300">E-mail</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="joao@empresa.com"
+                required
+                className="input bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+              />
+            </div>
+
+            <div>
+              <label className="input-label text-slate-300">Senha</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+                required
+                minLength={8}
+                className="input bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+              />
+            </div>
+
+            <div>
+              <label className="input-label text-slate-300">Confirmar senha</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repita a senha"
+                required
+                className="input bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="btn-ghost text-slate-400 border border-surface-border px-5 py-3.5"
+              >
+                ← Voltar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-primary flex-1 py-3.5 text-base"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    {plan === 'free' ? 'Criando conta...' : 'Indo para pagamento...'}
+                  </span>
+                ) : plan === 'free' ? 'Criar conta grátis' : 'Ir para pagamento →'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <p className="mt-6 text-center text-sm text-slate-600">
+          Já tem conta?{' '}
+          <Link to="/login" className="text-brand-400 hover:text-brand-300 font-semibold transition-colors">
+            Entrar
+          </Link>
+        </p>
+
+        <p className="mt-4 text-center text-xs text-slate-700 leading-relaxed">
+          Ao criar sua conta você concorda com nossos Termos de Uso e Política de Privacidade.
+        </p>
       </div>
     </div>
   );
 }
-
-export default Signup;
-
-
