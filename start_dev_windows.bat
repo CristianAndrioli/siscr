@@ -60,124 +60,21 @@ if errorlevel 1 (
 echo ✅ Docker está rodando!
 
 REM ========================================
-REM Passo 2.5: Verificar portas disponíveis
+REM Passo 2.5: Garantir portas fixas (5432, 6379, 8000)
 REM ========================================
 echo.
-echo [2.5/10] Verificando portas disponíveis...
-set DB_PORT=5432
-set REDIS_PORT=6379
-set WEB_PORT=8000
-set PORT_CHANGED=0
+echo [2.5/10] Garantindo portas fixas (PostgreSQL 5432, Redis 6379, Django 8000)...
 
-REM Verificar porta do PostgreSQL
-echo Verificando porta PostgreSQL...
-netstat -an | findstr ":5432" >nul 2>&1
-if errorlevel 1 goto :db_port_ok
-echo ⚠️  Porta 5432 (PostgreSQL) está em uso. Procurando porta alternativa...
-set DB_PORT=5433
-:check_db_port
-netstat -an | findstr ":!DB_PORT!" >nul 2>&1
-if errorlevel 1 goto :db_port_found
-set /a DB_PORT+=1
-goto check_db_port
-:db_port_found
-echo ✅ Usando porta !DB_PORT! para PostgreSQL
-set PORT_CHANGED=1
-goto :redis_check
-:db_port_ok
-echo ✅ Porta 5432 (PostgreSQL) está disponível
-
-:redis_check
-REM Verificar porta do Redis
-echo Verificando porta Redis...
-netstat -an | findstr ":6379" >nul 2>&1
-if errorlevel 1 goto :redis_port_ok
-echo ⚠️  Porta 6379 (Redis) está em uso. Procurando porta alternativa...
-set REDIS_PORT=6380
-:check_redis_port
-netstat -an | findstr ":!REDIS_PORT!" >nul 2>&1
-if errorlevel 1 goto :redis_port_found
-set /a REDIS_PORT+=1
-goto check_redis_port
-:redis_port_found
-echo ✅ Usando porta !REDIS_PORT! para Redis
-set PORT_CHANGED=1
-goto :web_check
-:redis_port_ok
-echo ✅ Porta 6379 (Redis) está disponível
-
-:web_check
-REM Verificar porta do Django
-echo Verificando porta Django...
-netstat -an | findstr ":8000" >nul 2>&1
-if errorlevel 1 goto :web_port_ok
-echo ⚠️  Porta 8000 (Django) está em uso. Procurando porta alternativa...
-set WEB_PORT=8001
-:check_web_port
-netstat -an | findstr ":!WEB_PORT!" >nul 2>&1
-if errorlevel 1 goto :web_port_found
-set /a WEB_PORT+=1
-goto check_web_port
-:web_port_found
-echo ✅ Usando porta !WEB_PORT! para Django
-set PORT_CHANGED=1
-goto :create_override
-:web_port_ok
-echo ✅ Porta 8000 (Django) está disponível
-
-:create_override
-REM Criar arquivo docker-compose.override.yml se as portas forem diferentes
-set NEEDS_RECREATE=0
-if not "!PORT_CHANGED!"=="1" goto :skip_override
-echo.
-echo 📝 Criando docker-compose.override.yml com portas alternativas...
-
-REM Verificar se containers já estão rodando
-docker-compose ps | findstr "siscr_web" >nul 2>&1
-if errorlevel 1 goto :no_containers
-
-REM Containers estão rodando - verificar se já existe override com portas diferentes
+REM Remover override de portas se existir (para sempre usar docker-compose.yml com 5432)
+set RECREATE_FOR_5432=0
 if exist docker-compose.override.yml (
-    echo ⚠️  Arquivo docker-compose.override.yml já existe. Verificando se precisa atualizar...
-    findstr "!DB_PORT!:5432" docker-compose.override.yml >nul 2>&1
-    if errorlevel 1 (
-        echo ⚠️  Portas no override são diferentes. Será necessário recriar containers.
-        set NEEDS_RECREATE=1
-    ) else (
-        echo ℹ️  Portas no override já estão corretas.
-        set NEEDS_RECREATE=0
-    )
+    echo Removendo docker-compose.override.yml para usar sempre porta 5432...
+    del docker-compose.override.yml
+    set RECREATE_FOR_5432=1
+    echo ✅ Configuração de portas padrão restaurada (PostgreSQL 5432, Redis 6379, Django 8000)
 ) else (
-    echo ⚠️  Containers já estão rodando. Será necessário recriá-los para aplicar novas portas.
-    set NEEDS_RECREATE=1
+    echo ✅ Portas fixas: PostgreSQL 5432, Redis 6379, Django 8000
 )
-goto :create_override_file
-
-:no_containers
-echo ℹ️  Containers não estão rodando. Serão criados com as novas portas.
-
-:create_override_file
-(
-    echo services:
-    echo   db:
-    echo     ports:
-    echo       - "!DB_PORT!:5432"
-    echo   redis:
-    echo     ports:
-    echo       - "!REDIS_PORT!:6379"
-    echo   web:
-    echo     ports:
-    echo       - "!WEB_PORT!:8000"
-) > docker-compose.override.yml
-echo ✅ Arquivo docker-compose.override.yml criado
-echo    PostgreSQL (externo): localhost:!DB_PORT!
-echo    Redis (externo): localhost:!REDIS_PORT!
-echo    Django: http://localhost:!WEB_PORT!
-echo.
-echo ℹ️  Nota: A aplicação Django dentro do container sempre usa a porta interna 5432
-echo    A porta externa !DB_PORT! é apenas para conexões de fora do Docker (ex: DBeaver)
-
-:skip_override
 
 REM ========================================
 REM Passo 3: Subir ou iniciar containers
@@ -187,21 +84,14 @@ echo [3/10] Verificando containers...
 docker-compose ps | findstr "siscr_web" >nul 2>&1
 if errorlevel 1 goto :create_containers
 
-REM Containers existem
-if not "!NEEDS_RECREATE!"=="1" goto :check_running
-
-REM Precisa recriar
-echo ⚠️  Recriando containers para aplicar novas portas...
-docker-compose down
-docker-compose up -d
-if errorlevel 1 (
-    echo ❌ Erro ao recriar containers!
-    pause
-    exit /b 1
+REM Se removemos o override, precisamos recriar os containers para subir na 5432
+if "!RECREATE_FOR_5432!"=="1" (
+    echo Recriando containers para usar porta 5432...
+    docker-compose down
+    goto :create_containers
 )
-echo ✅ Containers recriados com novas portas!
-goto :containers_ready
 
+REM Containers existem
 :check_running
 echo Containers existem. Verificando se estão rodando...
 docker-compose ps | findstr "Up" >nul 2>&1

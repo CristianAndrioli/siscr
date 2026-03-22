@@ -62,7 +62,7 @@ echo ✅ Arquivo docker-compose.yml encontrado (projeto SISCR confirmado)
 
 REM Parar containers
 echo.
-echo [2/4] Parando containers Docker do projeto SISCR...
+echo [2/5] Parando containers Docker do projeto SISCR...
 docker-compose ps | findstr "siscr" >nul 2>&1
 if errorlevel 1 (
     echo    ℹ️  Nenhum container do projeto SISCR está rodando
@@ -76,9 +76,19 @@ if %errorlevel% neq 0 (
     echo ✅ Containers do projeto SISCR parados
 )
 
+REM Garantir portas padrão na próxima subida
+echo.
+echo [3/5] Garantindo portas padrao ^(5432^) na proxima subida...
+if exist docker-compose.override.yml (
+    del docker-compose.override.yml
+    echo ✅ docker-compose.override.yml removido.
+) else (
+    echo ✅ Projeto ja usa portas padrao.
+)
+
 REM Remover volumes do banco de dados
 echo.
-echo [3/4] Removendo volumes do banco de dados...
+echo [4/5] Removendo volumes do banco de dados...
 docker volume ls | findstr postgres_data >nul 2>&1
 if %errorlevel% equ 0 (
     echo    ⚠️  Volume 'postgres_data' encontrado. Removendo...
@@ -102,7 +112,7 @@ if %errorlevel% equ 0 (
 
 REM Finalização
 echo.
-echo [4/4] Reset concluído!
+echo [5/5] Reset concluído!
 echo.
 echo ========================================
 echo ✅ Reset do banco de dados concluído!
@@ -123,7 +133,7 @@ echo   SISCR - Encerrando Aplicacao
 echo ========================================
 echo.
 
-echo [1/2] Parando containers Docker...
+echo [1/3] Parando containers Docker...
 docker-compose down
 if %errorlevel% neq 0 (
     echo ⚠️  Aviso: Erro ao parar containers ou containers já estão parados.
@@ -132,7 +142,16 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [2/2] Verificando processos do frontend...
+echo [2/3] Garantindo portas padrao ^(5432^) na proxima subida...
+if exist docker-compose.override.yml (
+    del docker-compose.override.yml
+    echo ✅ docker-compose.override.yml removido. Proximo start usara sempre porta 5432.
+) else (
+    echo ✅ Projeto ja usa portas padrao ^(PostgreSQL 5432, Redis 6379, Django 8000^).
+)
+
+echo.
+echo [3/3] Verificando processos do frontend...
 echo.
 echo ℹ️  IMPORTANTE: Se o frontend estiver rodando em uma janela separada,
 echo    feche manualmente aquela janela do CMD.
