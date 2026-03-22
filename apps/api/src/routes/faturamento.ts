@@ -41,6 +41,7 @@ app.get('/notas/:id/xml', async (c) => {
 
   if (!nota?.xml_path) return c.json({ error: 'XML não disponível.' }, 404)
 
+  if (!c.env.R2_STORAGE) return c.json({ error: 'Armazenamento de arquivos não configurado.' }, 503)
   const object = await c.env.R2_STORAGE.get(nota.xml_path)
   if (!object) return c.json({ error: 'Arquivo XML não encontrado.' }, 404)
 

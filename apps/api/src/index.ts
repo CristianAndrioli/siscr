@@ -24,8 +24,8 @@ export type Env = {
   // KV — sessões e cache de tenant routing
   KV_SESSIONS: KVNamespace
   KV_TENANT_CACHE: KVNamespace
-  // R2 — arquivos, XMLs NF-e, PDFs
-  R2_STORAGE: R2Bucket
+  // R2 — arquivos, XMLs NF-e, PDFs (ativar após habilitar R2 no painel)
+  R2_STORAGE?: R2Bucket
   // Queues — tarefas assíncronas
   QUEUE_TASKS: Queue
   // Variáveis de ambiente

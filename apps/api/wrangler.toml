@@ -17,8 +17,8 @@ ALLOWED_ORIGINS = "http://localhost:5173"
 # ──────────────────────────────────────────────
 [[d1_databases]]
 binding = "DB_SHARED"
-database_name = "siscr-shared"
-database_id = "PLACEHOLDER_SHARED_DB_ID"
+database_name = "siscr-shared-staging"
+database_id = "20ed0f6a-54fd-41f4-8cf2-36032ef60da1"
 migrations_dir = "../../packages/db/migrations/shared"
 
 # ──────────────────────────────────────────────
@@ -26,28 +26,28 @@ migrations_dir = "../../packages/db/migrations/shared"
 # ──────────────────────────────────────────────
 [[kv_namespaces]]
 binding = "KV_SESSIONS"
-id = "PLACEHOLDER_KV_SESSIONS_ID"
+id = "7ebafa6b64e24c56abea57f8d0998c94"
 
 [[kv_namespaces]]
 binding = "KV_TENANT_CACHE"
-id = "PLACEHOLDER_KV_TENANT_CACHE_ID"
+id = "1119412c979c4f4ba0e4b4c247720c93"
 
 # ──────────────────────────────────────────────
-# R2 — Arquivos, XMLs de NF-e, PDFs
+# R2 — Desativado no staging (ativar quando habilitar R2 no painel)
 # ──────────────────────────────────────────────
-[[r2_buckets]]
-binding = "R2_STORAGE"
-bucket_name = "siscr-storage"
+# [[r2_buckets]]
+# binding = "R2_STORAGE"
+# bucket_name = "siscr-storage"
 
 # ──────────────────────────────────────────────
 # Queues — Tarefas assíncronas (emails, relatórios)
 # ──────────────────────────────────────────────
 [[queues.producers]]
 binding = "QUEUE_TASKS"
-queue = "siscr-tasks"
+queue = "siscr-tasks-staging"
 
 [[queues.consumers]]
-queue = "siscr-tasks"
+queue = "siscr-tasks-staging"
 max_batch_size = 10
 max_batch_timeout = 30
 
@@ -69,27 +69,27 @@ name = "siscr-api-staging"
 
 [env.staging.vars]
 ENVIRONMENT = "staging"
-APP_URL = "https://siscr-api-staging.CONTA.workers.dev"
+APP_URL = "https://siscr-api-staging.lucaspercisi.workers.dev"
 FRONTEND_URL = "https://siscr-staging.pages.dev"
 ALLOWED_ORIGINS = "https://siscr-staging.pages.dev"
 
 [[env.staging.d1_databases]]
 binding = "DB_SHARED"
 database_name = "siscr-shared-staging"
-database_id = "PLACEHOLDER_STAGING_SHARED_DB_ID"
+database_id = "20ed0f6a-54fd-41f4-8cf2-36032ef60da1"
 migrations_dir = "../../packages/db/migrations/shared"
 
 [[env.staging.kv_namespaces]]
 binding = "KV_SESSIONS"
-id = "PLACEHOLDER_STAGING_KV_SESSIONS_ID"
+id = "7ebafa6b64e24c56abea57f8d0998c94"
 
 [[env.staging.kv_namespaces]]
 binding = "KV_TENANT_CACHE"
-id = "PLACEHOLDER_STAGING_KV_TENANT_CACHE_ID"
+id = "1119412c979c4f4ba0e4b4c247720c93"
 
-[[env.staging.r2_buckets]]
-binding = "R2_STORAGE"
-bucket_name = "siscr-storage-staging"
+# [[env.staging.r2_buckets]]
+# binding = "R2_STORAGE"
+# bucket_name = "siscr-storage-staging"
 
 [[env.staging.queues.producers]]
 binding = "QUEUE_TASKS"

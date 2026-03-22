@@ -26,16 +26,16 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
-      # ─── Etapa 1: Aplicar migrations no D1 staging ──────────────
+      # ─── Etapa 1: Aplicar migrations no D1 staging (remoto) ─────
       - name: Apply D1 Migrations (staging)
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/api
-          command: d1 migrations apply siscr-shared-staging --env staging
+          command: d1 migrations apply siscr-shared-staging --remote
 
       # ─── Etapa 2: Deploy do Worker (API Hono) ───────────────────
       - name: Deploy API Worker (staging)
@@ -50,7 +50,7 @@ jobs:
       - name: Build Frontend
         run: pnpm --filter=@siscr/web run build
         env:
-          VITE_API_URL: https://siscr-api-staging.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev
+          VITE_API_URL: https://siscr-api-staging.lucaspercisi.workers.dev
 
       # ─── Etapa 4: Deploy do frontend no Cloudflare Pages ────────
       - name: Deploy Frontend to Cloudflare Pages (staging)
@@ -64,5 +64,5 @@ jobs:
         run: |
           echo "## Deploy Staging Concluído! 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **API (Worker):** https://siscr-api-staging.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **API (Worker):** https://siscr-api-staging.lucaspercisi.workers.dev" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend (Pages):** https://staging.siscr-web.pages.dev" >> $GITHUB_STEP_SUMMARY
