@@ -1,12 +1,11 @@
 /**
- * Service para comunicação com a API Django
+ * Service para comunicação com a API Hono (Cloudflare Workers)
  */
-import axios, { AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// URL base da API (backend Django)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// URL base da API — injetada pelo Vite em build time (VITE_API_URL)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
-// Criar instância do axios
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
   headers: {
@@ -14,83 +13,38 @@ const api = axios.create({
   },
 });
 
-// Interceptor para adicionar token JWT e tenant domain em todas as requisições
+// Interceptor de request — injeta token e tenant slug em todas as chamadas
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Token de sessão (Bearer)
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    // Adicionar header X-Tenant-Domain se o tenant estiver salvo
-    const tenantStr = localStorage.getItem('tenant');
-    if (tenantStr) {
-      try {
-        const tenant = JSON.parse(tenantStr);
-        // Usar domínio diretamente se disponível, senão construir a partir do schema_name
-        const domain = tenant.domain || (tenant.schema_name ? `${tenant.schema_name}.localhost` : null);
-        if (domain) {
-          config.headers['X-Tenant-Domain'] = domain;
-          console.log('[API] Adicionando header X-Tenant-Domain:', domain);
-        } else {
-          console.warn('[API] Tenant encontrado mas sem domain ou schema_name:', tenant);
-        }
-      } catch (e) {
-        // Se houver erro ao parsear, ignorar silenciosamente
-        console.warn('[API] Erro ao parsear tenant do localStorage:', e);
-      }
-    } else {
-      console.warn('[API] Nenhum tenant encontrado no localStorage');
+
+    // Slug do tenant — identifica qual empresa está acessando
+    const tenantSlug = localStorage.getItem('tenant_slug');
+    if (tenantSlug) {
+      config.headers['X-Tenant-Slug'] = tenantSlug;
     }
-    
+
     return config;
   },
-  (error: AxiosError) => {
-    return Promise.reject(error);
-  }
+  (error: AxiosError) => Promise.reject(error)
 );
 
-// Interceptor para tratar erros de autenticação
+// Interceptor de response — redireciona para login em caso de 401
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    // Se receber 401 e não tiver tentado refresh ainda
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          const response = await axios.post<{ access: string }>(
-            `${API_BASE_URL}/api/auth/token/refresh/`,
-            {
-              refresh: refreshToken,
-            }
-          );
-
-          const { access } = response.data;
-          localStorage.setItem('access_token', access);
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access}`;
-          }
-
-          return api(originalRequest);
-        }
-      } catch (refreshError) {
-        // Refresh token inválido, fazer logout
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        window.location.href = '/login';
-        return Promise.reject(refreshError);
-      }
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('tenant_slug');
+      window.location.href = '/login';
     }
-
     return Promise.reject(error);
   }
 );
 
-// Exportar instância do axios para uso em outros serviços
 export default api;
 
