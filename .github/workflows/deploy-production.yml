@@ -1,121 +1,69 @@
-name: Deploy para Produção
+name: Deploy Production (Cloudflare)
 
 on:
   push:
     tags:
-      - 'v*' # Deploy apenas com tags de versão (ex: v1.0.0)
-  workflow_dispatch: # Permite execução manual
+      - 'v*'  # Acionado por tags de versão: git tag v1.0.0 && git push origin v1.0.0
 
 jobs:
-  deploy-production:
-    name: Deploy para Produção
+  deploy:
+    name: Deploy to Cloudflare Production
     runs-on: ubuntu-latest
-    environment: production # SEMPRE requer aprovação manual
-    
+    environment: production  # Requer aprovação manual no GitHub Environments
+
     steps:
-      - name: Checkout código
+      - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          fetch-depth: 0
+          version: 9
 
-      - name: Verificar se é tag de versão
-        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/v')
-        run: |
-          echo "❌ Deploy para produção requer tag de versão (ex: v1.0.0)"
-          echo "💡 Use: git tag v1.0.0 && git push origin v1.0.0"
-          exit 1
-        continue-on-error: false
-
-      - name: Extrair versão da tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "📦 Versão: $VERSION"
-
-      - name: Configurar SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          ssh-private-key: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          node-version: 20
+          cache: 'pnpm'
 
-      - name: Deploy para Produção via SSH
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ─── Etapa 1: Migrations D1 produção ────────────────────────
+      - name: Apply D1 Migrations (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: d1 migrations apply siscr-shared-production --env production
+
+      # ─── Etapa 2: Deploy Worker produção ────────────────────────
+      - name: Deploy API Worker (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: deploy --env production
+
+      # ─── Etapa 3: Build frontend produção ───────────────────────
+      - name: Build Frontend (production)
+        run: pnpm --filter=@siscr/web run build
         env:
-          PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
-          PROD_USER: ${{ secrets.PRODUCTION_USER }}
-          VERSION: ${{ steps.version.outputs.version || 'manual' }}
-        run: |
-          echo "🚀 Iniciando deploy para PRODUÇÃO..."
-          echo "📦 Versão: $VERSION"
-          echo "📡 Conectando em $PROD_HOST como $PROD_USER"
-          
-          ssh -o StrictHostKeyChecking=no $PROD_USER@$PROD_HOST << 'ENDSSH'
-            set -e
-            echo "📁 Navegando para diretório da aplicação..."
-            cd /opt/siscr || { echo "❌ Diretório /opt/siscr não encontrado"; exit 1; }
-            
-            echo "💾 Criando backup completo antes do deploy..."
-            mkdir -p /opt/siscr/backups
-            BACKUP_FILE="/opt/siscr/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql"
-            docker-compose exec -T db pg_dump -U postgres siscr_db > "$BACKUP_FILE" || true
-            echo "✅ Backup salvo em: $BACKUP_FILE"
-            
-            echo "📥 Atualizando código do repositório..."
-            git fetch origin
-            git checkout main
-            git pull origin main
-            
-            echo "🐳 Parando containers..."
-            docker-compose down
-            
-            echo "🏗️ Reconstruindo imagens..."
-            docker-compose build --no-cache
-            
-            echo "🚀 Iniciando containers..."
-            docker-compose up -d
-            
-            echo "⏳ Aguardando serviços iniciarem..."
-            sleep 20
-            
-            echo "🔄 Executando migrations..."
-            docker-compose exec -T web python manage.py migrate_schemas --shared --noinput || true
-            
-            echo "📦 Coletando arquivos estáticos..."
-            docker-compose exec -T web python manage.py collectstatic --noinput || true
-            
-            echo "✅ Deploy concluído!"
-            echo "📊 Status dos containers:"
-            docker-compose ps
-            
-            echo "📝 Versão deployada: $VERSION"
-          ENDSSH
+          VITE_API_URL: https://api.seudominio.com.br
 
-      - name: Verificar saúde da aplicação
-        env:
-          PROD_URL: ${{ secrets.PRODUCTION_URL || 'https://siscr.com.br' }}
-        run: |
-          echo "🏥 Verificando saúde da aplicação..."
-          sleep 10
-          for i in {1..5}; do
-            if curl -f $PROD_URL/api/health/; then
-              echo "✅ Aplicação está respondendo!"
-              break
-            else
-              echo "⏳ Tentativa $i/5 - aguardando..."
-              sleep 5
-            fi
-          done
+      # ─── Etapa 4: Deploy Pages produção ─────────────────────────
+      - name: Deploy Frontend to Cloudflare Pages (production)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/dist --project-name=siscr-web --branch=production
 
-      - name: Notificar sucesso
-        if: success()
+      - name: Summary
         run: |
-          echo "✅ Deploy para produção concluído com sucesso!"
-          # Aqui você pode adicionar notificações (Slack, Discord, Email, etc.)
-
-      - name: Notificar falha
-        if: failure()
-        run: |
-          echo "❌ Deploy para produção FALHOU!"
-          echo "⚠️ Verifique os logs e considere fazer rollback"
-          # Aqui você pode adicionar alertas de falha
-
+          echo "## Deploy Produção Concluído! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "- **Versão:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **API:** https://api.seudominio.com.br" >> $GITHUB_STEP_SUMMARY
+          echo "- **App:** https://app.seudominio.com.br" >> $GITHUB_STEP_SUMMARY

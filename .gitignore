@@ -1,189 +1,33 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+.wrangler/
+.turbo/
 
-# Django
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-/media
-/staticfiles
-/static
-/cache
-*.pot
-*.pyc
-*.pyo
-*.pyd
-
-# Environment
+# Ambiente
 .env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-.idea/
-.vscode/
+.env.local
+.dev.vars
 
-# IDEs
-.idea/
+# Editor
 .vscode/
+.idea/
 *.swp
 *.swo
-*~
+
+# Sistema
 .DS_Store
-.project
-.pydevproject
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# Docker
-.dockerignore
-docker-compose.override.yml
-*.env.local
-*.env.*.local
-
-# Database
-*.sqlite3
-*.db
-*.sql
+Thumbs.db
 
 # Logs
-logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+logs/
 
-# Node modules (se houver frontend)
-node_modules/
-npm-debug.log
-yarn-error.log
-# package-lock.json - DEVE estar no repositório para builds reproduzíveis
-# yarn.lock
+# Cloudflare local
+.wrangler/
 
-# Frontend React
-frontend/node_modules/
-frontend/dist/
-frontend/.env
-frontend/.env.local
-
-# Coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# Backup files
-*.bak
-*.backup
-*.tmp
-*.temp
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
-
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
-# Linux
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-
-# Secrets and sensitive files
-secrets.json
-*.pem
-*.key
-*.cert
-.secrets/
-
-# Terraform
-terraform/environments/*/terraform.tfvars
-terraform/environments/*/.terraform/
-terraform/environments/*/.terraform.lock.hcl
-*.tfstate
-*.tfstate.*
-*.tfstate.backup
-.terraform/
-.terraform.lock.hcl
-*.tfplan
-crash.log
-crash.*.log
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-
+# TypeScript
+*.tsbuildinfo

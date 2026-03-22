@@ -1,0 +1,68 @@
+name: Deploy Staging (Cloudflare)
+
+on:
+  push:
+    branches:
+      - cloudflare  # Esta branch é o ambiente de staging/teste
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare Staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ─── Etapa 1: Aplicar migrations no D1 staging ──────────────
+      - name: Apply D1 Migrations (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: d1 migrations apply siscr-shared-staging --env staging
+
+      # ─── Etapa 2: Deploy do Worker (API Hono) ───────────────────
+      - name: Deploy API Worker (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: deploy --env staging
+
+      # ─── Etapa 3: Build do frontend ─────────────────────────────
+      - name: Build Frontend
+        run: pnpm --filter=@siscr/web run build
+        env:
+          VITE_API_URL: https://siscr-api-staging.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev
+
+      # ─── Etapa 4: Deploy do frontend no Cloudflare Pages ────────
+      - name: Deploy Frontend to Cloudflare Pages (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/web/dist --project-name=siscr-web --branch=staging
+
+      - name: Summary
+        run: |
+          echo "## Deploy Staging Concluído! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **API (Worker):** https://siscr-api-staging.${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.workers.dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend (Pages):** https://staging.siscr-web.pages.dev" >> $GITHUB_STEP_SUMMARY

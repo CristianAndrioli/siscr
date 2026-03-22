@@ -1,0 +1,17 @@
+{
+  "name": "@siscr/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schema/shared": "./src/schema/shared.ts",
+    "./schema/tenant": "./src/schema/tenant.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.41.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.8.0"
+  }
+}

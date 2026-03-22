@@ -1,509 +1,242 @@
-# SISCR - Sistema de Gestão Empresarial
-
-Sistema de gestão para empresas de logística e comércio exterior desenvolvido em Django com frontend React.
-
-## 📋 Pré-requisitos
-
-- **Docker Desktop** instalado e rodando
-- **Node.js** (versão 16 ou superior) - para o frontend React
-- **Git** (opcional, apenas para clonar o repositório)
-
----
-
-## 🚀 Iniciando a Aplicação
-
-### ⚡ Início Rápido (Windows)
-
-Para facilitar, você pode usar o script batch que automatiza todo o processo:
-
-**Simplesmente execute:**
-```bash
-start.bat
-```
-
-Este script irá:
-- ✅ Verificar se Docker e Node.js estão instalados
-- ✅ Instalar dependências do frontend se necessário
-- ✅ Iniciar o backend (Docker Compose)
-- ✅ Iniciar o frontend React
-- ✅ Abrir automaticamente os navegadores com:
-  - Frontend React: http://localhost:5173
-  - Backend Django API: http://127.0.0.1:8000/api/
-  - Django Admin: http://127.0.0.1:8000/admin/
-
-**Nota:** Na primeira execução, o script pode demorar alguns minutos para baixar imagens Docker e instalar dependências.
-
----
-
-### 📝 Início Manual
-
-Se preferir iniciar manualmente ou estiver em Linux/Mac:
-
-#### Passo 1: Iniciar Backend (Django + PostgreSQL)
-
-O backend utiliza Docker Compose para gerenciar o banco de dados PostgreSQL e a aplicação Django.
-
-**Windows:**
-```bash
-docker-compose up -d --build
-```
-
-**Linux/Mac:**
-```bash
-docker compose up -d --build
-```
-
-Este comando irá:
-- ✅ Baixar as imagens necessárias (PostgreSQL 15 e Python 3.11)
-- ✅ Construir a imagem da aplicação Django
-- ✅ Criar e configurar o banco de dados PostgreSQL
-- ✅ Aplicar as migrações automaticamente
-- ✅ Criar um usuário administrador (admin/admin123)
-- ✅ Iniciar os containers em background
-
-**Aguarde alguns segundos** para os containers iniciarem completamente.
-
-#### Passo 2: Iniciar Frontend React
-
-Em um novo terminal, navegue até a pasta do frontend e inicie o servidor de desenvolvimento:
-
-```bash
-cd frontend
-npm install  # Apenas na primeira vez ou após atualizar dependências
-npm run dev
-```
-
-O frontend React estará disponível em: **http://localhost:5173**
-
----
-
-## 🌐 Acessos e Credenciais
-
-### 1. **Frontend React (Recomendado)** - Porta 5173
-
-- **URL**: http://localhost:5173
-- **Credenciais**:
-  - Usuário: `admin`
-  - Senha: `admin123`
-- **Descrição**: Interface moderna em React com melhor experiência do usuário. Esta é a versão que está sendo desenvolvida atualmente.
-
-### 2. **Backend Django (API REST)** - Porta 8000
-
-- **URL API**: http://127.0.0.1:8000/api/
-- **Descrição**: Backend Django fornece apenas APIs REST. Todas as páginas foram migradas para React (porta 5173).
-
-**Endpoints principais:**
-- `/api/auth/token/` - Autenticação JWT
-- `/api/cadastros/` - APIs de cadastros (Pessoas, Produtos, Serviços)
-- `/api/` - Outras APIs do sistema
-
-### 3. **Django Admin** - Porta 8000
-
-- **URL**: http://127.0.0.1:8000/admin/
-- **Credenciais**:
-  - Usuário: `admin`
-  - Senha: `admin123`
-- **Descrição**: Painel administrativo nativo do Django. Permite gerenciar todos os modelos do sistema através de uma interface administrativa completa.
-
-**Funcionalidades do Django Admin:**
-- ✅ Gerenciar usuários e permissões
-- ✅ Visualizar e editar Pessoas, Produtos e Serviços
-- ✅ Acessar histórico de mudanças
-- ✅ Filtrar e buscar registros
-- ✅ Exportar dados
-- ✅ Interface completa para administração do sistema
-
----
-
-## 🗄️ Banco de Dados
-
-### Configuração
-
-O banco de dados PostgreSQL é gerenciado automaticamente pelo Docker Compose.
-
-**Configurações padrão:**
-- **Host**: `localhost` (ou `db` dentro do container)
-- **Porta**: `5432`
-- **Nome do banco**: `siscr_db`
-- **Usuário**: `postgres`
-- **Senha**: `postgres`
-
-**Variáveis de ambiente** (definidas no `docker-compose.yml`):
-- `DB_NAME`: Nome do banco de dados
-- `DB_USER`: Usuário do PostgreSQL
-- `DB_PASSWORD`: Senha do PostgreSQL
-- `DB_HOST`: Host do banco
-- `DB_PORT`: Porta do banco
-
-### Acessar o Banco de Dados
-
-**Via Docker:**
-```bash
-# Windows
-docker-compose exec db psql -U postgres -d siscr_db
-
-# Linux/Mac
-docker compose exec db psql -U postgres -d siscr_db
-```
-
-**Via Cliente Externo:**
-- Host: `localhost`
-- Porta: `5432`
-- Database: `siscr_db`
-- Usuário: `postgres`
-- Senha: `postgres`
-
----
-
-## 🌱 Seed de Dados para Teste
-
-Para popular o banco de dados com dados de exemplo para testes, utilize o comando `seed_data`:
-
-### Comando Básico
-
-```bash
-# Windows
-docker-compose exec web python manage.py seed_data
-
-# Linux/Mac
-docker compose exec web python manage.py seed_data
-```
-
-### Opções Disponíveis
-
-**Aplicar migrações antes de popular:**
-```bash
-docker-compose exec web python manage.py seed_data --migrate
-```
-
-**Limpar dados existentes e popular novamente:**
-```bash
-docker-compose exec web python manage.py seed_data --clear
-```
-
-### Dados Criados pelo Seed
-
-O comando cria os seguintes dados de exemplo:
-
-**Pessoas (9 registros):**
-- 3 Pessoas Físicas (Clientes)
-- 2 Pessoas Jurídicas (Clientes)
-- 2 Fornecedores
-- 2 Funcionários
-
-**Produtos (5 registros):**
-- Notebook Dell Inspiron 15 (Código: 1001)
-- Mouse Logitech MX Master 3 (Código: 1002)
-- Teclado Mecânico RGB (Código: 1003)
-- Aço Inox 304 - Chapa (Código: 2001)
-- Produto Importado - Componente Eletrônico (Código: 2002)
-
-**Serviços (5 registros):**
-- Consultoria em Comércio Exterior (Código: 3001)
-- Despacho Aduaneiro (Código: 3002)
-- Gestão de Documentação (Código: 3003)
-- Análise de Viabilidade de Importação (Código: 3004)
-- Suporte Técnico Especializado (Código: 3005)
-
-**Nota:** Se um registro já existir, ele será ignorado (não duplica dados).
-
----
-
-## 🛠️ Comandos Úteis
-
-### Verificar Status dos Containers
-
-```bash
-# Windows
-docker-compose ps
-
-# Linux/Mac
-docker compose ps
-```
-
-### Ver Logs da Aplicação
-
-```bash
-# Windows - logs em tempo real
-docker-compose logs -f web
-
-# Windows - últimas 50 linhas
-docker-compose logs --tail 50 web
-
-# Linux/Mac - logs em tempo real
-docker compose logs -f web
-
-# Linux/Mac - últimas 50 linhas
-docker compose logs --tail 50 web
-```
-
-### Parar os Containers
-
-```bash
-# Windows
-docker-compose down
-
-# Linux/Mac
-docker compose down
-```
-
-### Parar e Remover Volumes (apaga o banco de dados)
-
-```bash
-# Windows
-docker-compose down -v
-
-# Linux/Mac
-docker compose down -v
-```
-
-### Reiniciar os Containers
-
-```bash
-# Windows
-docker-compose restart
-
-# Linux/Mac
-docker compose restart
-```
-
-### Reconstruir após Mudanças no Código
-
-```bash
-# Windows
-docker-compose up -d --build
-
-# Linux/Mac
-docker compose up -d --build
-```
-
-### Acessar o Shell do Container
-
-```bash
-# Windows
-docker-compose exec web bash
-
-# Linux/Mac
-docker compose exec web bash
-```
-
-### Criar um Novo Superusuário
-
-```bash
-# Windows
-docker-compose exec web python manage.py createsuperuser
-
-# Linux/Mac
-docker compose exec web python manage.py createsuperuser
-```
-
-### Aplicar Migrations Manualmente
-
-```bash
-# Windows
-docker-compose exec web python manage.py migrate
-
-# Linux/Mac
-docker compose exec web python manage.py migrate
-```
-
-### Coletar Arquivos Estáticos
-
-```bash
-# Windows
-docker-compose exec web python manage.py collectstatic --noinput
-
-# Linux/Mac
-docker compose exec web python manage.py collectstatic --noinput
-```
-
----
-
-## 📁 Estrutura do Projeto
+# SISCR — ERP SaaS Multi-Tenant (Cloudflare)
+
+> Branch: `cloudflare` — Migração completa para Cloudflare Workers + D1 + Pages.
+> Stack 100% serverless, sem servidor, custo zero para começar.
+
+## Stack
+
+| Camada | Tecnologia |
+|---|---|
+| Frontend | React 19 + TypeScript + Vite + Tailwind CSS → **Cloudflare Pages** |
+| Backend | **Hono** (TypeScript) → **Cloudflare Workers** |
+| Banco de Dados | **Cloudflare D1** (SQLite, isolamento por tenant_id) |
+| Cache / Sessões | **Cloudflare KV** |
+| Arquivos / XMLs | **Cloudflare R2** |
+| Tarefas Assíncronas | **Cloudflare Queues** |
+| Agendamento | **Cloudflare Cron Triggers** |
+| ORM | **Drizzle ORM** |
+| Pagamentos | **Stripe** |
+| Monorepo | **Turborepo + pnpm** |
+
+## Estrutura do Projeto
 
 ```
 siscr/
-├── accounts/              # App de autenticação
-├── cadastros/             # App de cadastros (Pessoas, Produtos, Serviços)
-│   ├── api/              # API REST (serializers, viewsets)
-│   └── management/       # Comandos Django (seed_data, create_tables)
-├── core/                 # App principal do Django
-│   ├── models.py         # Modelos principais
-│   ├── views.py          # Views/controllers
-│   ├── forms.py          # Formulários Django
-│   ├── urls.py           # Rotas do app
-│   ├── templates/        # Templates HTML (Frontend Legado)
-│   └── migrations/       # Migrações do banco
-├── frontend/             # Frontend React
-│   ├── src/
-│   │   ├── components/   # Componentes React
-│   │   ├── pages/        # Páginas da aplicação
-│   │   ├── services/     # Serviços de API
-│   │   └── hooks/        # Custom hooks
-│   └── package.json
-├── siscr/                # Configurações do projeto
-│   ├── settings.py      # Configurações Django
-│   ├── urls.py          # URLs raiz
-│   └── wsgi.py          # WSGI para deploy
-├── static/               # Arquivos estáticos
-├── Dockerfile            # Imagem Docker da aplicação
-├── docker-compose.yml    # Orquestração dos containers
-├── requirements.txt      # Dependências Python
-├── manage.py            # Script de gerenciamento Django
-└── README.md            # Este arquivo
+├── apps/
+│   ├── web/          # Frontend React → Cloudflare Pages
+│   └── api/          # Backend Hono → Cloudflare Workers
+│       ├── src/
+│       │   ├── index.ts           # Entry point do Worker
+│       │   ├── middleware/
+│       │   │   ├── tenant.ts      # Identifica tenant (header/subdomínio)
+│       │   │   └── auth.ts        # JWT + sessões no KV
+│       │   └── routes/
+│       │       ├── auth.ts        # Login, signup, logout
+│       │       ├── tenants.ts     # Empresas e filiais
+│       │       ├── cadastros.ts   # Pessoas, produtos, serviços
+│       │       ├── estoque.ts     # Posição + movimentações
+│       │       ├── financeiro.ts  # Contas a receber/pagar
+│       │       ├── faturamento.ts # NF-e, NFSe
+│       │       ├── vendas.ts      # Pedidos e orçamentos
+│       │       └── stripe-webhook.ts
+│       └── wrangler.toml
+├── packages/
+│   ├── db/
+│   │   ├── src/schema/shared.ts   # Schema Drizzle (todas as tabelas)
+│   │   └── migrations/shared/     # Migrations SQL para D1
+│   └── shared/
+│       └── src/types/index.ts     # Tipos compartilhados
+├── .github/workflows/
+│   ├── deploy-staging.yml         # Auto-deploy na branch cloudflare
+│   └── deploy-production.yml      # Deploy via tag (v*)
+├── turbo.json
+├── pnpm-workspace.yaml
+└── package.json
 ```
 
----
+## Arquitetura Multi-Tenant
 
-## 🔧 Configuração
+```
+Tenant (Grupo Empresa)
+  └── D1 compartilhado (tenant_id em cada linha)
+        ├── Empresa A (CNPJ 01)
+        │     ├── Filial - Matriz SP
+        │     └── Filial - RJ
+        └── Empresa B (CNPJ 02)
+              └── Filial - Única
+```
 
-### Variáveis de Ambiente
-
-O projeto usa variáveis de ambiente para configuração. 
-
-**Para desenvolvimento local (fora do Docker):**
-
-1. Copie o arquivo de exemplo:
-   ```bash
-   # Linux/Mac
-   cp env.example .env
-   
-   # Windows
-   copy env.example .env
-   ```
-
-2. Edite o arquivo `.env` e configure as variáveis necessárias.
-
-**No Docker Compose**, as variáveis estão definidas no `docker-compose.yml`:
-
-- `DB_NAME`: Nome do banco de dados (padrão: `siscr_db`)
-- `DB_USER`: Usuário do PostgreSQL (padrão: `postgres`)
-- `DB_PASSWORD`: Senha do PostgreSQL (padrão: `postgres`)
-- `DB_HOST`: Host do banco (padrão: `db`)
-- `DB_PORT`: Porta do banco (padrão: `5432`)
-- `SECRET_KEY`: Chave secreta do Django (altere em produção!)
-
-**⚠️ IMPORTANTE:** Em produção, configure todas as variáveis de ambiente adequadamente. Veja o arquivo `env.example` para a lista completa de variáveis disponíveis.
-
-### Portas
-
-- **8000**: Backend Django (API REST + Templates Legados + Admin)
-- **5173**: Frontend React (Vite Dev Server)
-- **5432**: PostgreSQL (exposta para acesso externo se necessário)
+Identificação do tenant:
+- **Desenvolvimento:** header `X-Tenant-Slug: meugrupo`
+- **Produção:** subdomínio `meugrupo.seudominio.com.br`
 
 ---
 
-## 🐛 Solução de Problemas
+## Pré-requisitos
 
-### Containers não iniciam
+- [Node.js 20+](https://nodejs.org/)
+- [pnpm 9+](https://pnpm.io/installation)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/): `npm install -g wrangler`
+- Conta Cloudflare (gratuita em [cloudflare.com](https://cloudflare.com))
+
+---
+
+## Configuração Inicial (primeira vez)
+
+### 1. Instalar dependências
 
 ```bash
-# Verificar logs
-docker-compose logs web
-docker-compose logs db
-
-# Verificar se as portas estão livres
-# Windows
-netstat -ano | findstr :8000
-netstat -ano | findstr :5432
-
-# Linux/Mac
-sudo lsof -i :8000
-sudo lsof -i :5432
+pnpm install
 ```
 
-### Erro ao conectar no banco de dados
-
-1. Verifique se o container `db` está rodando: `docker-compose ps`
-2. Aguarde alguns segundos após iniciar os containers (o PostgreSQL precisa de tempo para inicializar)
-3. Verifique os logs: `docker-compose logs db`
-
-### Frontend React não inicia
-
-1. Verifique se o Node.js está instalado: `node --version`
-2. Instale as dependências: `cd frontend && npm install`
-3. Verifique se a porta 5173 está livre
-4. Verifique os logs no terminal onde executou `npm run dev`
-
-### Erro 404 nas imagens do login
-
-As imagens estáticas (`logoConectaPrime.jpg`, `fundologin.jpg`) não estão incluídas no repositório. Isso é normal e não impede o funcionamento da aplicação.
-
-### Reiniciar tudo do zero
+### 2. Autenticar no Cloudflare
 
 ```bash
-# Parar e remover tudo
-docker-compose down -v
+wrangler login
+```
 
-# Remover imagens (opcional)
-docker-compose down --rmi all
+### 3. Criar os recursos no Cloudflare (staging)
 
-# Subir novamente
-docker-compose up -d --build
+```bash
+# Criar banco D1
+wrangler d1 create siscr-shared-staging
+
+# Criar namespaces KV
+wrangler kv namespace create KV_SESSIONS --preview
+wrangler kv namespace create KV_TENANT_CACHE --preview
+
+# Criar bucket R2
+wrangler r2 bucket create siscr-storage-staging
+
+# Criar fila
+wrangler queues create siscr-tasks-staging
+```
+
+> Após criar cada recurso, copie os IDs gerados e cole no `apps/api/wrangler.toml`
+> nos campos marcados como `PLACEHOLDER_*`.
+
+### 4. Aplicar migration no banco local
+
+```bash
+# Rodar D1 localmente (sem precisar do Cloudflare)
+pnpm --filter=@siscr/api run db:migrate:shared
+```
+
+### 5. Configurar secrets
+
+```bash
+cd apps/api
+
+# Chave secreta de autenticação (gere uma string aleatória)
+wrangler secret put BETTER_AUTH_SECRET --env staging
+
+# Stripe (modo teste)
+wrangler secret put STRIPE_SECRET_KEY --env staging
+wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
+```
+
+### 6. Iniciar em modo desenvolvimento
+
+```bash
+# Terminal 1 — API (Worker)
+pnpm dev:api
+# Disponível em: http://localhost:8787
+
+# Terminal 2 — Frontend
+pnpm dev:web
+# Disponível em: http://localhost:5173
 ```
 
 ---
 
-## 📝 Notas Importantes
+## Deploy para Staging (teste sem instalar na máquina)
 
-- **Desenvolvimento**: Este setup é para desenvolvimento local. Para produção, configure adequadamente as variáveis de ambiente e segurança.
-- **Banco de Dados**: Os dados são persistidos em um volume Docker. Ao fazer `docker-compose down -v`, todos os dados serão perdidos.
-- **Superusuário**: O superusuário padrão (admin/admin123) é criado automaticamente na primeira execução.
-- **Migrations**: As migrations são aplicadas automaticamente ao subir os containers.
-- **Frontend Legado**: O frontend em Django Templates está sendo gradualmente migrado para React. Ambos coexistem durante a transição.
+O deploy de staging acontece **automaticamente** a cada push na branch `cloudflare`:
 
----
+```bash
+git push origin cloudflare
+```
 
-## 🔐 Segurança
+O GitHub Actions vai:
+1. Aplicar migrations no D1 staging
+2. Fazer deploy do Worker (API)
+3. Fazer build do frontend
+4. Fazer deploy do frontend no Cloudflare Pages
 
-⚠️ **IMPORTANTE PARA PRODUÇÃO:**
-
-- Altere a `SECRET_KEY` no `docker-compose.yml` ou use variáveis de ambiente
-- Altere as credenciais padrão do banco de dados
-- Altere a senha do superusuário padrão
-- Configure `DEBUG=False` no `settings.py`
-- Configure `ALLOWED_HOSTS` adequadamente
-- Use HTTPS em produção
-- Não exponha a porta 5432 do PostgreSQL em produção
+**URLs após deploy:**
+- Frontend: `https://staging.siscr-web.pages.dev`
+- API: `https://siscr-api-staging.SEU_ACCOUNT_ID.workers.dev`
 
 ---
 
-## 📚 Tecnologias Utilizadas
+## Secrets necessários no GitHub
 
-### Backend
-- **Django 4.2+**: Framework web Python
-- **Django REST Framework**: API REST
-- **PostgreSQL 15**: Banco de dados relacional
-- **Docker**: Containerização
-- **Docker Compose**: Orquestração de containers
+Vá em: `GitHub → Repositório → Settings → Secrets and variables → Actions`
 
-### Frontend
-- **React 19**: Biblioteca JavaScript para interfaces
-- **TypeScript**: Tipagem estática
-- **Vite**: Build tool e dev server
-- **Tailwind CSS**: Framework CSS
-- **Axios**: Cliente HTTP
+| Secret | Como obter |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | [Painel Cloudflare → My Profile → API Tokens → Create Token](https://dash.cloudflare.com/profile/api-tokens) → usar template "Edit Cloudflare Workers" |
+| `CLOUDFLARE_ACCOUNT_ID` | [Painel Cloudflare → lado direito da tela → Account ID](https://dash.cloudflare.com/) |
 
 ---
 
-## 📚 Documentação
+## Desenvolvimento local — Como testar multi-tenant
 
-Documentação completa disponível na pasta `docs/`:
+No desenvolvimento local, identifique o tenant pelo header:
 
-- **[Documentação da API](./docs/API_DOCUMENTATION.md)** - Guia completo de todos os endpoints da API
-- **[Guia de Setup para Desenvolvimento](./docs/SETUP_DEVELOPMENT.md)** - Como configurar o ambiente de desenvolvimento
-- **[Guia de Testes](./docs/TESTES.md)** - Como executar e escrever testes
-- **[Roadmap CI/CD](./docs/CI_CD_ROADMAP.md)** - Estratégia de CI/CD e deploy
+```bash
+# Testar health
+curl http://localhost:8787/api/health
 
-## 📞 Suporte
+# Login (tenant identificado pelo body)
+curl -X POST http://localhost:8787/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@teste.com", "password": "senha123", "tenantSlug": "meugrupo"}'
 
-Para problemas ou dúvidas:
-- Consulte os logs dos containers: `docker-compose logs`
-- Verifique a documentação em `docs/`
-- Abra uma issue no repositório
+# Requisição autenticada (tenant pelo header)
+curl http://localhost:8787/api/tenant/cadastros/pessoas \
+  -H "X-Tenant-Slug: meugrupo" \
+  -H "Authorization: Bearer SEU_TOKEN"
+```
 
 ---
 
-## 📄 Licença
+## Endpoints da API
 
-[Adicione informações de licença aqui]
+### Públicos
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api/health` | Health check |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/signup` | Criar conta (tenant + admin) |
+| POST | `/api/auth/logout` | Logout |
+| GET | `/api/auth/me` | Usuário atual |
+| GET | `/api/subscriptions/plans` | Listar planos |
+| POST | `/api/webhooks/stripe` | Webhook Stripe |
+
+### Autenticados (requerem `Authorization: Bearer TOKEN` + `X-Tenant-Slug`)
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api/tenant/info` | Dados do tenant |
+| GET/POST | `/api/tenant/info/empresas` | Empresas do grupo |
+| GET/POST | `/api/tenant/info/empresas/:id/filiais` | Filiais de uma empresa |
+| GET/POST | `/api/tenant/cadastros/pessoas` | Clientes, fornecedores |
+| GET/POST | `/api/tenant/cadastros/produtos` | Produtos |
+| GET | `/api/tenant/estoque` | Posição de estoque |
+| POST | `/api/tenant/estoque/movimentacao` | Entrada/saída de estoque |
+| GET/POST | `/api/tenant/financeiro/receber` | Contas a receber |
+| GET/POST | `/api/tenant/financeiro/pagar` | Contas a pagar |
+| GET | `/api/tenant/financeiro/dashboard` | Resumo financeiro |
+| GET/POST | `/api/tenant/vendas/pedidos` | Pedidos de venda |
+| GET | `/api/tenant/faturamento/notas` | Notas fiscais |
+
+---
+
+## Custos estimados (Cloudflare)
+
+| Escala | Tenants | Custo/mês |
+|---|---|---|
+| Desenvolvimento / Staging | qualquer | **$0** |
+| Produção pequena (< 50 tenants) | 50 | **$5** |
+| Produção média (50–200 tenants) | 200 | **~$16** |
+| Produção grande (200–1.000 tenants) | 1.000 | **~$80** |

@@ -1,4 +1,0 @@
-"""
-Serviços do módulo Financeiro
-"""
-

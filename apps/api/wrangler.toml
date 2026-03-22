@@ -1,0 +1,130 @@
+name = "siscr-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ──────────────────────────────────────────────
+# Variáveis de ambiente (não-secretas)
+# ──────────────────────────────────────────────
+[vars]
+ENVIRONMENT = "development"
+APP_URL = "http://localhost:8787"
+FRONTEND_URL = "http://localhost:5173"
+ALLOWED_ORIGINS = "http://localhost:5173"
+
+# ──────────────────────────────────────────────
+# D1 — Banco compartilhado (tenants, planos, billing)
+# ──────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB_SHARED"
+database_name = "siscr-shared"
+database_id = "PLACEHOLDER_SHARED_DB_ID"
+migrations_dir = "../../packages/db/migrations/shared"
+
+# ──────────────────────────────────────────────
+# KV — Sessões, cache de tenant routing
+# ──────────────────────────────────────────────
+[[kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "PLACEHOLDER_KV_SESSIONS_ID"
+
+[[kv_namespaces]]
+binding = "KV_TENANT_CACHE"
+id = "PLACEHOLDER_KV_TENANT_CACHE_ID"
+
+# ──────────────────────────────────────────────
+# R2 — Arquivos, XMLs de NF-e, PDFs
+# ──────────────────────────────────────────────
+[[r2_buckets]]
+binding = "R2_STORAGE"
+bucket_name = "siscr-storage"
+
+# ──────────────────────────────────────────────
+# Queues — Tarefas assíncronas (emails, relatórios)
+# ──────────────────────────────────────────────
+[[queues.producers]]
+binding = "QUEUE_TASKS"
+queue = "siscr-tasks"
+
+[[queues.consumers]]
+queue = "siscr-tasks"
+max_batch_size = 10
+max_batch_timeout = 30
+
+# ──────────────────────────────────────────────
+# Cron Triggers — Tarefas agendadas
+# ──────────────────────────────────────────────
+[triggers]
+crons = [
+  "0 6 * * *",   # 06:00 UTC diário — verificar vencimentos
+  "0 3 * * *",   # 03:00 UTC diário — renovação de assinaturas
+  "*/30 * * * *" # A cada 30 min — conciliação de pagamentos
+]
+
+# ──────────────────────────────────────────────
+# Ambiente: staging (testes sem afetar produção)
+# ──────────────────────────────────────────────
+[env.staging]
+name = "siscr-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+APP_URL = "https://siscr-api-staging.CONTA.workers.dev"
+FRONTEND_URL = "https://siscr-staging.pages.dev"
+ALLOWED_ORIGINS = "https://siscr-staging.pages.dev"
+
+[[env.staging.d1_databases]]
+binding = "DB_SHARED"
+database_name = "siscr-shared-staging"
+database_id = "PLACEHOLDER_STAGING_SHARED_DB_ID"
+migrations_dir = "../../packages/db/migrations/shared"
+
+[[env.staging.kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "PLACEHOLDER_STAGING_KV_SESSIONS_ID"
+
+[[env.staging.kv_namespaces]]
+binding = "KV_TENANT_CACHE"
+id = "PLACEHOLDER_STAGING_KV_TENANT_CACHE_ID"
+
+[[env.staging.r2_buckets]]
+binding = "R2_STORAGE"
+bucket_name = "siscr-storage-staging"
+
+[[env.staging.queues.producers]]
+binding = "QUEUE_TASKS"
+queue = "siscr-tasks-staging"
+
+# ──────────────────────────────────────────────
+# Ambiente: production
+# ──────────────────────────────────────────────
+[env.production]
+name = "siscr-api-production"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+APP_URL = "https://api.seudominio.com.br"
+FRONTEND_URL = "https://app.seudominio.com.br"
+ALLOWED_ORIGINS = "https://app.seudominio.com.br"
+
+[[env.production.d1_databases]]
+binding = "DB_SHARED"
+database_name = "siscr-shared-production"
+database_id = "PLACEHOLDER_PROD_SHARED_DB_ID"
+migrations_dir = "../../packages/db/migrations/shared"
+
+[[env.production.kv_namespaces]]
+binding = "KV_SESSIONS"
+id = "PLACEHOLDER_PROD_KV_SESSIONS_ID"
+
+[[env.production.kv_namespaces]]
+binding = "KV_TENANT_CACHE"
+id = "PLACEHOLDER_PROD_KV_TENANT_CACHE_ID"
+
+[[env.production.r2_buckets]]
+binding = "R2_STORAGE"
+bucket_name = "siscr-storage-production"
+
+[[env.production.queues.producers]]
+binding = "QUEUE_TASKS"
+queue = "siscr-tasks-production"

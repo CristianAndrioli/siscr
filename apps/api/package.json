@@ -1,0 +1,29 @@
+{
+  "name": "@siscr/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "cf-typegen": "wrangler types",
+    "db:migrate:shared": "wrangler d1 migrations apply siscr-shared --local",
+    "db:migrate:shared:remote": "wrangler d1 migrations apply siscr-shared",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "@hono/zod-validator": "^0.4.3",
+    "better-auth": "^1.2.0",
+    "drizzle-orm": "^0.41.0",
+    "zod": "^3.24.0",
+    "stripe": "^17.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250317.0",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.4.0"
+  }
+}
