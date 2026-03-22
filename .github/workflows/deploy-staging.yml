@@ -56,7 +56,8 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/web/dist --project-name=siscr-web --branch=staging
+          workingDirectory: apps/api
+          command: pages deploy ../../apps/web/dist --project-name=siscr-web --branch=staging
 
       - name: Summary
         run: |
