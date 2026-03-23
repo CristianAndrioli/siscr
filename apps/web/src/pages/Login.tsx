@@ -6,9 +6,13 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/app';
 
+  // Prioridade: URL param → localStorage → vazio
+  const slugFromUrl = searchParams.get('tenant') || '';
+  const slugFromStorage = localStorage.getItem('tenant_slug') || '';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantSlug, setTenantSlug] = useState(localStorage.getItem('tenant_slug') || '');
+  const [tenantSlug, setTenantSlug] = useState(slugFromUrl || slugFromStorage);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();

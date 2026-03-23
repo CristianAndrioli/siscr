@@ -23,16 +23,23 @@ export default function CheckoutSuccess() {
         </p>
 
         {tenantSlug && (
-          <div className="card-dark border border-surface-border p-5 mb-8 text-left">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Suas credenciais de acesso</div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">Identificador:</span>
-                <code className="text-brand-300 font-mono text-sm font-semibold">@{tenantSlug}</code>
+          <div className="card-dark border border-surface-border p-5 mb-8 text-left space-y-3">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Como acessar o sistema</div>
+
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center text-xs font-bold flex-none mt-0.5">1</div>
+              <div>
+                <div className="text-white text-sm font-semibold">Identificador da empresa</div>
+                <code className="text-brand-300 font-mono text-sm">@{tenantSlug}</code>
+                <div className="text-xs text-slate-500 mt-0.5">Já estará preenchido na próxima tela</div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">URL de acesso:</span>
-                <code className="text-brand-300 font-mono text-xs">/login</code>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <div className="w-6 h-6 rounded-full bg-brand-600/20 text-brand-400 flex items-center justify-center text-xs font-bold flex-none mt-0.5">2</div>
+              <div>
+                <div className="text-white text-sm font-semibold">E-mail e senha</div>
+                <div className="text-slate-400 text-xs mt-0.5">Os mesmos que você usou no cadastro</div>
               </div>
             </div>
           </div>
