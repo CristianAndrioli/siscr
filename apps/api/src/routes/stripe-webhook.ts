@@ -19,68 +19,72 @@ app.post('/', async (c) => {
 
     // ─── Pagamento confirmado: criar tenant + usuário ──────────
     case 'checkout.session.completed': {
-      const session = event.data.object
-      const tenantSlug = session.metadata?.tenantSlug
-      const plan = session.metadata?.plan
+      try {
+        const session = event.data.object
+        const tenantSlug = session.metadata?.tenantSlug
+        const plan = session.metadata?.plan
 
-      if (!tenantSlug) break
+        console.log(`[Webhook] checkout.session.completed: tenantSlug=${tenantSlug} plan=${plan}`)
 
-      // Verificar se tenant já existe (proteção contra duplicatas)
-      const existing = await c.env.DB_SHARED
-        .prepare('SELECT id FROM tenants WHERE slug = ?')
-        .bind(tenantSlug)
-        .first()
-
-      if (!existing) {
-        // Recuperar dados pendentes do KV
-        const pendingKey = `pending_signup:${tenantSlug}`
-        const pendingRaw = await c.env.KV_TENANT_CACHE.get(pendingKey)
-
-        if (pendingRaw) {
-          const pending = JSON.parse(pendingRaw) as {
-            nome: string; email: string; password: string;
-            tenantNome: string; tenantSlug: string; plan: string
-          }
-
-          // Buscar plan_id pelo slug do plano
-          const planRow = await c.env.DB_SHARED
-            .prepare('SELECT id FROM plans WHERE nome LIKE ? LIMIT 1')
-            .bind(`%${plan || pending.plan}%`)
-            .first<{ id: number }>()
-
-          const now = new Date().toISOString()
-          const tenantId = crypto.randomUUID()
-
-          // Hash da senha via Web Crypto
-          const passwordHash = await hashPassword(pending.password)
-
-          // Criar tenant + usuário em transação
-          await c.env.DB_SHARED.batch([
-            c.env.DB_SHARED.prepare(`
-              INSERT INTO tenants (id, nome, slug, plan_id, stripe_customer_id, status, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
-            `).bind(tenantId, pending.tenantNome, tenantSlug, planRow?.id ?? pending.plan, session.customer ?? null, now, now),
-
-            c.env.DB_SHARED.prepare(`
-              INSERT INTO users (id, tenant_id, nome, email, password_hash, role, ativo, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, 'admin', 1, ?, ?)
-            `).bind(crypto.randomUUID(), tenantId, pending.nome, pending.email, passwordHash, now, now),
-          ])
-
-          // Remover dados pendentes do KV
-          await c.env.KV_TENANT_CACHE.delete(pendingKey)
-
-          console.log(`[Webhook] Tenant criado: ${tenantSlug} (${pending.email})`)
-        } else {
-          // Dados pendentes não encontrados — apenas atualizar se já existia
-          console.warn(`[Webhook] Dados pendentes não encontrados para: ${tenantSlug}`)
+        if (!tenantSlug) {
+          console.warn('[Webhook] tenantSlug ausente nos metadata')
+          break
         }
-      } else {
-        // Tenant já existe — apenas atualizar status e customer_id
-        await c.env.DB_SHARED
-          .prepare("UPDATE tenants SET stripe_customer_id = ?, status = 'active', updated_at = ? WHERE slug = ?")
-          .bind(session.customer, new Date().toISOString(), tenantSlug)
-          .run()
+
+        // Verificar se tenant já existe (proteção contra duplicatas)
+        const existing = await c.env.DB_SHARED
+          .prepare('SELECT id FROM tenants WHERE slug = ?')
+          .bind(tenantSlug)
+          .first()
+
+        if (!existing) {
+          // Recuperar dados pendentes do KV
+          const pendingKey = `pending_signup:${tenantSlug}`
+          const pendingRaw = await c.env.KV_TENANT_CACHE.get(pendingKey)
+
+          console.log(`[Webhook] KV pendingRaw presente: ${!!pendingRaw}`)
+
+          if (pendingRaw) {
+            const pending = JSON.parse(pendingRaw) as {
+              nome: string; email: string; password: string;
+              tenantNome: string; tenantSlug: string; plan: string
+            }
+
+            const now = new Date().toISOString()
+            const tenantId = crypto.randomUUID()
+            const passwordHash = await hashPassword(pending.password)
+
+            console.log(`[Webhook] Criando tenant ${tenantSlug} para ${pending.email}`)
+
+            await c.env.DB_SHARED
+              .prepare(`INSERT INTO tenants (id, nome, slug, plan_id, stripe_customer_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`)
+              .bind(tenantId, pending.tenantNome, tenantSlug, plan || pending.plan, session.customer ?? null, now, now)
+              .run()
+
+            console.log(`[Webhook] Tenant inserido, criando usuário...`)
+
+            await c.env.DB_SHARED
+              .prepare(`INSERT INTO users (id, tenant_id, nome, email, password_hash, role, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', 1, ?, ?)`)
+              .bind(crypto.randomUUID(), tenantId, pending.nome, pending.email, passwordHash, now, now)
+              .run()
+
+            await c.env.KV_TENANT_CACHE.delete(pendingKey)
+
+            console.log(`[Webhook] ✅ Tenant criado com sucesso: ${tenantSlug}`)
+          } else {
+            console.warn(`[Webhook] ⚠️ Dados pendentes expirados/ausentes para: ${tenantSlug}`)
+          }
+        } else {
+          // Tenant já existe — atualizar customer_id e status
+          await c.env.DB_SHARED
+            .prepare("UPDATE tenants SET stripe_customer_id = ?, status = 'active', updated_at = ? WHERE slug = ?")
+            .bind(session.customer, new Date().toISOString(), tenantSlug)
+            .run()
+          console.log(`[Webhook] Tenant já existia, atualizado: ${tenantSlug}`)
+        }
+      } catch (err) {
+        console.error('[Webhook] ERRO em checkout.session.completed:', err)
+        throw err
       }
       break
     }
