@@ -32,6 +32,7 @@ export const authService = {
     localStorage.setItem('access_token', token);
     localStorage.setItem('tenant_slug', tenant.slug);
     localStorage.setItem('user', JSON.stringify(user));
+    localStorage.setItem('user_nome', user.nome || user.email || '');
 
     return response.data;
   },

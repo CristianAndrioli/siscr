@@ -36,9 +36,9 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
 
   // Verificar usuário no banco compartilhado
   const user = await c.env.DB_SHARED
-    .prepare('SELECT id, email, password_hash, role FROM users WHERE email = ? AND tenant_id = ?')
+    .prepare('SELECT id, email, nome, password_hash, role FROM users WHERE email = ? AND tenant_id = ?')
     .bind(email, tenant.id)
-    .first<{ id: string; email: string; password_hash: string; role: string }>()
+    .first<{ id: string; email: string; nome: string; password_hash: string; role: string }>()
 
   if (!user) {
     return c.json({ error: 'Email ou senha incorretos.' }, 401)
@@ -57,6 +57,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   const sessionData = {
     userId: user.id,
     email: user.email,
+    nome: user.nome,
     role: user.role,
     tenantId: tenant.id,
     tenantSlug: tenant.slug,
@@ -72,7 +73,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
 
   return c.json({
     token: sessionToken,
-    user: { id: user.id, email: user.email, role: user.role },
+    user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
     tenant: { id: tenant.id, slug: tenant.slug },
   })
 })

@@ -1,50 +1,31 @@
-/**
- * Service para gerenciar Pessoas (Cadastro Geral)
- * Segue o padrão esperado pelo hook useCrud
- */
 import api from '../api';
-import type { Pessoa, CrudService, ListParams, ProximoCodigoResponse, ApiResponse } from '../../types';
+import type { Pessoa, CrudService, ListParams, ApiResponse } from '../../types';
 
 export const pessoasService: CrudService<Pessoa> = {
-  // Listar todas as pessoas (compatível com useCrud)
   list: async (params: ListParams = {}): Promise<ApiResponse<Pessoa> | Pessoa[]> => {
-    // Converter pageSize para page_size (padrão do DRF)
-    const drfParams: Record<string, unknown> = { ...params };
-    if ('pageSize' in drfParams && drfParams.pageSize) {
-      drfParams.page_size = drfParams.pageSize;
-      delete drfParams.pageSize;
-    }
-    const response = await api.get<ApiResponse<Pessoa>>('/cadastros/pessoas/', { params: drfParams });
+    const query: Record<string, unknown> = {};
+    if (params.search) query.busca = params.search;
+    if (params.page) query.page = params.page;
+    const response = await api.get('/tenant/cadastros/pessoas', { params: query });
+    return response.data.pessoas ?? [];
+  },
+
+  get: async (id: number | string): Promise<Pessoa> => {
+    const response = await api.get(`/tenant/cadastros/pessoas/${id}`);
     return response.data;
   },
 
-  // Buscar pessoa por código (compatível com useCrud)
-  get: async (codigo: number | string): Promise<Pessoa> => {
-    const response = await api.get<Pessoa>(`/cadastros/pessoas/${codigo}/`);
-    return response.data;
-  },
-
-  // Criar nova pessoa (compatível com useCrud)
   create: async (dados: Partial<Pessoa>): Promise<Pessoa> => {
-    const response = await api.post<Pessoa>('/cadastros/pessoas/', dados);
+    const response = await api.post('/tenant/cadastros/pessoas', dados);
     return response.data;
   },
 
-  // Atualizar pessoa (compatível com useCrud)
-  update: async (codigo: number | string, dados: Partial<Pessoa>): Promise<Pessoa> => {
-    const response = await api.put<Pessoa>(`/cadastros/pessoas/${codigo}/`, dados);
+  update: async (id: number | string, dados: Partial<Pessoa>): Promise<Pessoa> => {
+    const response = await api.put(`/tenant/cadastros/pessoas/${id}`, dados);
     return response.data;
   },
 
-  // Excluir pessoa (compatível com useCrud)
-  delete: async (codigo: number | string): Promise<void> => {
-    await api.delete(`/cadastros/pessoas/${codigo}/`);
-  },
-
-  // Buscar próximo código disponível
-  proximoCodigo: async (): Promise<ProximoCodigoResponse> => {
-    const response = await api.get<ProximoCodigoResponse>('/cadastros/pessoas/proximo_codigo/');
-    return response.data;
+  delete: async (id: number | string): Promise<void> => {
+    await api.delete(`/tenant/cadastros/pessoas/${id}`);
   },
 };
-

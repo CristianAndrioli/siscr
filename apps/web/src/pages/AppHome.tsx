@@ -17,21 +17,13 @@ function AppHome() {
   const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
-    const fetchUserName = async () => {
-      try {
-        const data = await authService.getCurrentUser();
-        const name = data.user.first_name && data.user.last_name
-          ? `${data.user.first_name} ${data.user.last_name}`
-          : data.user.first_name || data.user.username;
-        setUserName(name);
-      } catch (error) {
-        console.error('Erro ao buscar nome do usuário:', error);
-        setUserName('');
-      }
-    };
-
-    if (authService.isAuthenticated()) {
-      fetchUserName();
+    // Lê nome do localStorage salvo no login (evita chamada extra à API)
+    const nome = localStorage.getItem('user_nome');
+    if (nome) {
+      setUserName(nome);
+    } else {
+      const localUser = authService.getLocalUser();
+      setUserName(localUser?.nome || localUser?.email || '');
     }
   }, []);
 

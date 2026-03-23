@@ -97,9 +97,15 @@ export function useCrud<T extends EntityType>({
         });
       }
     } catch (err) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      setError(axiosError.response?.data?.message || 'Erro ao carregar dados');
-      setData([]);
+      const axiosError = err as { response?: { status?: number; data?: { message?: string } } };
+      // 404 = endpoint sem dados ainda — mostrar lista vazia silenciosamente
+      if (axiosError.response?.status === 404) {
+        setData([]);
+        setPagination(prev => ({ ...prev, page, total: 0 }));
+      } else {
+        setError(axiosError.response?.data?.message || 'Erro ao carregar dados');
+        setData([]);
+      }
     } finally {
       setLoading(false);
     }
