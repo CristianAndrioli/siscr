@@ -72,9 +72,7 @@ ENVIRONMENT = "staging"
 APP_URL = "https://siscr-api-staging.lucaspercisi.workers.dev"
 FRONTEND_URL = "https://staging.siscr-web.pages.dev"
 ALLOWED_ORIGINS = "https://staging.siscr-web.pages.dev"
-# Price IDs do Stripe (Teste) — substitua com os IDs reais do painel Stripe
-STRIPE_PRICE_STARTER  = "price_PLACEHOLDER_STARTER"
-STRIPE_PRICE_BUSINESS = "price_PLACEHOLDER_BUSINESS"
+# Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
 
 [[env.staging.d1_databases]]
 binding = "DB_SHARED"

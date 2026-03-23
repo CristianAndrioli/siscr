@@ -146,8 +146,8 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-6">
             {[
               { name: 'Free', price: 'R$ 0', period: '/sempre', features: ['1 empresa', '2 filiais', '3 usuários', 'Suporte comunidade'], cta: 'Começar grátis', highlight: false },
-              { name: 'Starter', price: 'R$ 97', period: '/mês', features: ['1 empresa', '5 filiais', '10 usuários', 'Suporte prioritário'], cta: 'Assinar Starter', highlight: true },
-              { name: 'Business', price: 'R$ 297', period: '/mês', features: ['3 empresas', '20 filiais', '50 usuários', 'SLA garantido'], cta: 'Assinar Business', highlight: false },
+              { name: 'Pro', price: 'Consultar', period: '', features: ['3 empresas', '10 filiais', '20 usuários', 'Suporte prioritário'], cta: 'Assinar Pro', highlight: true },
+              { name: 'Enterprise', price: 'R$ 499', period: '/mês', features: ['Ilimitado', 'Filiais ilimitadas', 'Usuários ilimitados', 'SLA 99.9%'], cta: 'Assinar Enterprise', highlight: false },
             ].map((plan) => (
               <div key={plan.name} className={`relative rounded-2xl p-8 border ${plan.highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30 scale-105' : 'bg-surface-card border-surface-border'}`}>
                 {plan.highlight && (

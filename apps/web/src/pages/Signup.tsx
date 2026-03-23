@@ -5,9 +5,10 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
 const PLAN_LABELS: Record<string, string> = {
-  free:     'Free',
-  starter:  'Starter — R$ 97/mês',
-  business: 'Business — R$ 297/mês',
+  free:       'Free',
+  basico:     'Básico — R$ 99/mês',
+  pro:        'Pro',
+  enterprise: 'Enterprise — R$ 499/mês',
 };
 
 function slugify(value: string) {
@@ -74,7 +75,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      if (plan === 'free') {
+      if (plan === 'free' || plan === 'trial') {
         // Plano free: criar direto e redirecionar para login
         await axios.post(`${API_BASE_URL}/api/auth/signup`, {
           nome,

@@ -58,8 +58,9 @@ app.post('/checkout', async (c) => {
 
   // Mapear plano para Price ID do Stripe
   const STRIPE_PRICE_IDS: Record<string, string> = {
-    starter:  c.env.STRIPE_PRICE_STARTER || '',
-    business: c.env.STRIPE_PRICE_BUSINESS || '',
+    basico:     c.env.STRIPE_PRICE_BASICO || '',
+    pro:        c.env.STRIPE_PRICE_PRO || '',
+    enterprise: c.env.STRIPE_PRICE_ENTERPRISE || '',
   }
 
   const priceId = STRIPE_PRICE_IDS[plan]
