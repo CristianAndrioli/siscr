@@ -26,9 +26,9 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
 
   // Verificar tenant
   const tenant = await c.env.DB_SHARED
-    .prepare('SELECT id, slug, db_id FROM tenants WHERE slug = ? AND status = ?')
+    .prepare('SELECT id, slug FROM tenants WHERE slug = ? AND status = ?')
     .bind(tenantSlug, 'active')
-    .first<{ id: string; slug: string; db_id: string }>()
+    .first<{ id: string; slug: string }>()
 
   if (!tenant) {
     return c.json({ error: 'Tenant não encontrado.' }, 404)

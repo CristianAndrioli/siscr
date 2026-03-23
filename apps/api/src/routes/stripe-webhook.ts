@@ -59,7 +59,7 @@ app.post('/', async (c) => {
             c.env.DB_SHARED.prepare(`
               INSERT INTO tenants (id, nome, slug, plan_id, stripe_customer_id, status, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
-            `).bind(tenantId, pending.tenantNome, tenantSlug, planRow?.id ?? 1, session.customer ?? null, now, now),
+            `).bind(tenantId, pending.tenantNome, tenantSlug, planRow?.id ?? pending.plan, session.customer ?? null, now, now),
 
             c.env.DB_SHARED.prepare(`
               INSERT INTO users (id, tenant_id, nome, email, password_hash, role, ativo, created_at, updated_at)
@@ -109,15 +109,14 @@ app.post('/', async (c) => {
 async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder()
   const salt = crypto.getRandomValues(new Uint8Array(16))
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
-
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), { name: 'PBKDF2' }, false, ['deriveBits'])
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-    key, 256
+  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const hash = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+    keyMaterial, 256
   )
-  const hashHex = Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('')
-  return `pbkdf2:${saltHex}:${hashHex}`
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
+  const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return `${saltHex}:${hashHex}`
 }
 
 async function verifyStripeSignature(payload: string, header: string, secret: string): Promise<boolean> {
