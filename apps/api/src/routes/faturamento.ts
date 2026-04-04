@@ -7,8 +7,8 @@ const app = new Hono<{ Bindings: Env }>()
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
-function calcTotal(itens: { quantidade: number; valor_unitario: number; desconto: number }[]) {
-  return itens.reduce((s, i) => s + (i.quantidade * i.valor_unitario - (i.desconto ?? 0)), 0)
+function calcTotal(itens: { quantidade: number; valorUnitario: number; desconto: number }[]) {
+  return itens.reduce((s, i) => s + (i.quantidade * i.valorUnitario - (i.desconto ?? 0)), 0)
 }
 
 // ─── Cotações ─────────────────────────────────────────────────────
