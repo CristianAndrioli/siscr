@@ -1,237 +1,348 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { cotacoesService, type Cotacao, type CotacaoItem, type CotacaoStatus } from '../../services/faturamentoService';
+import api from '../../services/api';
 
-interface Cotacao {
-  id: string;
-  cliente: string;
-  origem: string;
-  destino: string;
-  tipoCarga: string;
-  peso: number;
-  volume: number;
-  valor: number;
-  prazo: number;
-  status: 'Pendente' | 'Aprovada' | 'Rejeitada' | 'Cancelada';
-  dataCriacao: string;
-}
+const fmtBRL = (v: number) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 
-/**
- * Página de Cotações/Análise Frete
- * Permite criar, visualizar e gerenciar cotações de frete
- */
-function Cotacoes() {
-  const [cotacoes] = useState<Cotacao[]>([
-    {
-      id: 'COT-001',
-      cliente: 'Empresa ABC Ltda',
-      origem: 'São Paulo - SP',
-      destino: 'Rio de Janeiro - RJ',
-      tipoCarga: 'Geral',
-      peso: 1500,
-      volume: 5.2,
-      valor: 2500.00,
-      prazo: 3,
-      status: 'Aprovada',
-      dataCriacao: '2025-11-10',
-    },
-    {
-      id: 'COT-002',
-      cliente: 'XYZ Comércio',
-      origem: 'Belo Horizonte - MG',
-      destino: 'Curitiba - PR',
-      tipoCarga: 'Fragil',
-      peso: 800,
-      volume: 3.5,
-      valor: 1800.00,
-      prazo: 5,
-      status: 'Pendente',
-      dataCriacao: '2025-11-12',
-    },
-    {
-      id: 'COT-003',
-      cliente: 'Importadora Sul',
-      origem: 'Porto de Santos - SP',
-      destino: 'Porto Alegre - RS',
-      tipoCarga: 'Container',
-      peso: 10000,
-      volume: 33.0,
-      valor: 8500.00,
-      prazo: 7,
-      status: 'Aprovada',
-      dataCriacao: '2025-11-08',
-    },
-  ]);
+const STATUS_STYLE: Record<CotacaoStatus, string> = {
+  rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  enviada: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+  aprovada: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  recusada: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+  expirada: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+};
+const STATUS_LABEL: Record<CotacaoStatus, string> = { rascunho: 'Rascunho', enviada: 'Enviada', aprovada: 'Aprovada', recusada: 'Recusada', expirada: 'Expirada' };
 
-  const getStatusColor = (status: Cotacao['status']) => {
-    switch (status) {
-      case 'Aprovada':
-        return 'bg-green-100 text-green-800';
-      case 'Pendente':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'Rejeitada':
-        return 'bg-red-100 text-red-800';
-      case 'Cancelada':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+interface Pessoa { id: string; nome: string; cpf_cnpj: string; }
+interface Produto { id: string; descricao: string; codigo: string; unidade: string; preco_venda: number; }
 
-  const totalCotacoes = cotacoes.length;
-  const cotacoesAprovadas = cotacoes.filter((c) => c.status === 'Aprovada').length;
-  const cotacoesPendentes = cotacoes.filter((c) => c.status === 'Pendente').length;
-  const valorTotal = cotacoes.reduce((sum, c) => sum + c.valor, 0);
+function PessoaBusca({ value, onChange }: { value: string; onChange: (id: string, nome: string) => void }) {
+  const [query, setQuery] = useState('');
+  const [resultados, setResultados] = useState<Pessoa[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!query.trim()) { setResultados([]); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/tenant/cadastros/pessoas', { params: { busca: query, tipo: 'cliente' } });
+        setResultados(res.data.pessoas ?? []);
+        setAberto(true);
+      } catch { setResultados([]); }
+    }, 300);
+  }, [query]);
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Cotações/Análise Frete</h1>
-        <p className="mt-2 text-sm text-gray-500">
-          Gerencie cotações de frete e análises de custos logísticos
-        </p>
-      </div>
-
-      {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-blue-600 text-white p-6 rounded-xl shadow-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-sm font-semibold opacity-80">Total de Cotações</h3>
-              <p className="text-3xl font-bold mt-1">{totalCotacoes}</p>
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-          </div>
+    <div className="relative">
+      <input value={value || query} onChange={e => { setQuery(e.target.value); if (value) onChange('', ''); }}
+        onFocus={() => resultados.length > 0 && setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder="Buscar cliente por nome ou CPF/CNPJ..."
+        className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+      />
+      {aberto && resultados.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden">
+          {resultados.map(p => (
+            <button key={p.id} type="button" onMouseDown={() => { onChange(p.id, p.nome); setQuery(p.nome); setAberto(false); }}
+              className="w-full text-left px-4 py-2.5 hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
+              <div className="text-sm font-medium text-slate-800 dark:text-slate-100">{p.nome}</div>
+              <div className="text-xs text-slate-500 font-mono">{p.cpf_cnpj}</div>
+            </button>
+          ))}
         </div>
-
-        <div className="bg-green-600 text-white p-6 rounded-xl shadow-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-sm font-semibold opacity-80">Aprovadas</h3>
-              <p className="text-3xl font-bold mt-1">{cotacoesAprovadas}</p>
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-          </div>
-        </div>
-
-        <div className="bg-yellow-500 text-white p-6 rounded-xl shadow-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-sm font-semibold opacity-80">Pendentes</h3>
-              <p className="text-3xl font-bold mt-1">{cotacoesPendentes}</p>
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </div>
-        </div>
-
-        <div className="bg-purple-600 text-white p-6 rounded-xl shadow-lg">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-sm font-semibold opacity-80">Valor Total</h3>
-              <p className="text-3xl font-bold mt-1">R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            </div>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23"></line>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      {/* Botão Nova Cotação */}
-      <div className="flex justify-end">
-        <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-150 font-medium">
-          + Nova Cotação
-        </button>
-      </div>
-
-      {/* Tabela de Cotações */}
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Cotações Recentes</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cliente
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Origem → Destino
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tipo
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Peso/Volume
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Valor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Prazo
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {cotacoes.map((cotacao) => (
-                <tr key={cotacao.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {cotacao.id}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    {cotacao.cliente}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <div>{cotacao.origem}</div>
-                    <div className="text-xs text-gray-400">→ {cotacao.destino}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cotacao.tipoCarga}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cotacao.peso} kg / {cotacao.volume} m³
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    R$ {cotacao.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {cotacao.prazo} dias
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(cotacao.status)}`}>
-                      {cotacao.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-blue-600 hover:text-blue-900 mr-3">Ver</button>
-                    <button className="text-indigo-600 hover:text-indigo-900">Editar</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-export default Cotacoes;
+const emptyItem = (): CotacaoItem => ({ descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, unidade: 'UN' });
 
+export function CotacoesPage() {
+  const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busca, setBusca] = useState('');
+  const [statusFiltro, setStatusFiltro] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [pessoaNome, setPessoaNome] = useState('');
+  const [form, setForm] = useState({ pessoaId: '', validade: '', observacoes: '', desconto: 0, status: 'rascunho' as CotacaoStatus, itens: [emptyItem()] });
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try { setCotacoes(await cotacoesService.list()); }
+    catch { setError('Erro ao carregar cotações.'); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (showModal && produtos.length === 0) {
+      api.get('/tenant/cadastros/produtos').then(r => setProdutos(r.data.produtos ?? [])).catch(() => {});
+    }
+  }, [showModal, produtos.length]);
+
+  const openNew = () => {
+    setForm({ pessoaId: '', validade: '', observacoes: '', desconto: 0, status: 'rascunho', itens: [emptyItem()] });
+    setPessoaNome(''); setEditingId(null); setModalError(''); setShowModal(true);
+  };
+
+  const openEdit = async (id: string) => {
+    try {
+      const c = await cotacoesService.get(id);
+      setForm({
+        pessoaId: c.pessoa_id ?? '',
+        validade: c.validade ?? '',
+        observacoes: c.observacoes ?? '',
+        desconto: c.desconto,
+        status: c.status,
+        itens: (c.itens && c.itens.length > 0) ? c.itens.map(i => ({ ...i, valorUnitario: i.valorUnitario ?? 0, desconto: i.desconto ?? 0 })) : [emptyItem()],
+      });
+      setPessoaNome(c.cliente ?? '');
+      setEditingId(id); setModalError(''); setShowModal(true);
+    } catch { setError('Erro ao carregar cotação.'); }
+  };
+
+  const handleSave = async () => {
+    const validItens = form.itens.filter(i => i.descricao.trim());
+    if (validItens.length === 0) { setModalError('Adicione pelo menos um item.'); return; }
+    setSaving(true); setModalError('');
+    try {
+      const payload = { ...form, itens: validItens };
+      if (editingId) await cotacoesService.update(editingId, payload as any);
+      else await cotacoesService.create(payload as any);
+      setShowModal(false); load();
+    } catch (err: any) {
+      setModalError(err?.response?.data?.error || 'Erro ao salvar cotação.');
+    } finally { setSaving(false); }
+  };
+
+  const calcItemTotal = (item: CotacaoItem) => item.quantidade * item.valorUnitario - item.desconto;
+  const subtotal = form.itens.reduce((s, i) => s + calcItemTotal(i), 0);
+  const totalFinal = subtotal - form.desconto;
+
+  const setItem = (idx: number, field: keyof CotacaoItem, value: string | number) => {
+    setForm(f => ({ ...f, itens: f.itens.map((it, i) => i === idx ? { ...it, [field]: value } : it) }));
+  };
+
+  const addItem = () => setForm(f => ({ ...f, itens: [...f.itens, emptyItem()] }));
+  const removeItem = (idx: number) => setForm(f => ({ ...f, itens: f.itens.filter((_, i) => i !== idx) }));
+
+  const fillItemFromProduto = (idx: number, prodId: string) => {
+    const p = produtos.find(x => x.id === prodId);
+    if (p) setForm(f => ({ ...f, itens: f.itens.map((it, i) => i === idx ? { ...it, produtoId: p.id, descricao: p.descricao, valorUnitario: p.preco_venda ?? 0, unidade: p.unidade ?? 'UN' } : it) }));
+  };
+
+  const filtered = cotacoes.filter(c => {
+    const matchBusca = !busca || c.cliente?.toLowerCase().includes(busca.toLowerCase()) || c.numero?.toLowerCase().includes(busca.toLowerCase());
+    const matchStatus = !statusFiltro || c.status === statusFiltro;
+    return matchBusca && matchStatus;
+  });
+
+  const totAprovadas = cotacoes.filter(c => c.status === 'aprovada').reduce((s, c) => s + (c.valor_total ?? 0), 0);
+  const totPendentes = cotacoes.filter(c => c.status === 'enviada').length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Cotações</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Propostas comerciais para clientes</p>
+        </div>
+        <button onClick={openNew} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          Nova Cotação
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[['Total', cotacoes.length, 'text-slate-800 dark:text-slate-100'], ['Aprovadas R$', fmtBRL(totAprovadas), 'text-emerald-600 dark:text-emerald-400'], ['Aguardando', totPendentes, 'text-blue-600 dark:text-blue-400'], ['Rascunhos', cotacoes.filter(c => c.status === 'rascunho').length, 'text-slate-500 dark:text-slate-400']].map(([label, val, cls]) => (
+          <div key={label as string} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label as string}</p>
+            <p className={`text-xl font-bold mt-1 ${cls as string}`}>{val as string}</p>
+          </div>
+        ))}
+      </div>
+
+      {error && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>}
+
+      <div className="flex flex-wrap gap-3">
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por cliente ou número..."
+          className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value)}
+          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Todos os status</option>
+          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">Nenhuma cotação encontrada.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                  {['Número', 'Cliente', 'Validade', 'Total', 'Status', 'Criado em', ''].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filtered.map(c => (
+                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-bold text-brand-600 dark:text-brand-400">{c.numero}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{c.cliente || '—'}</td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{fmtDate(c.validade)}</td>
+                    <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 tabular-nums">{fmtBRL(c.valor_total)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">{fmtDate(c.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button onClick={() => openEdit(c.id)} className="text-xs text-brand-600 dark:text-brand-400 hover:underline font-medium">Editar</button>
+                        <button onClick={() => setDeleteConfirm(c.id)} className="text-xs text-red-500 hover:underline font-medium">Excluir</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal Cotação */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-6 p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{editingId ? 'Editar Cotação' : 'Nova Cotação'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {modalError && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{modalError}</div>}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Cliente</label>
+                <PessoaBusca value={pessoaNome} onChange={(id, nome) => { setForm(f => ({ ...f, pessoaId: id })); setPessoaNome(nome); }} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Validade</label>
+                <input type="date" value={form.validade} onChange={e => setForm(f => ({ ...f, validade: e.target.value }))}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Status</label>
+                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as CotacaoStatus }))}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Itens */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Itens</h3>
+                <button onClick={addItem} className="text-xs text-brand-600 dark:text-brand-400 font-medium hover:underline">+ Adicionar item</button>
+              </div>
+              <div className="space-y-2">
+                {form.itens.map((item, idx) => (
+                  <div key={idx} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 space-y-2">
+                    <div className="flex gap-2">
+                      <select onChange={e => fillItemFromProduto(idx, e.target.value)} value={item.produtoId ?? ''}
+                        className="border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-[160px]">
+                        <option value="">Selec. produto...</option>
+                        {produtos.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.descricao}</option>)}
+                      </select>
+                      <input value={item.descricao} onChange={e => setItem(idx, 'descricao', e.target.value)} placeholder="Descrição do item *"
+                        className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                      {form.itens.length > 1 && (
+                        <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      <div><label className="text-xs text-slate-500 dark:text-slate-400">Qtd.</label>
+                        <input type="number" min="0.001" step="0.001" value={item.quantidade} onChange={e => setItem(idx, 'quantidade', parseFloat(e.target.value) || 0)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" /></div>
+                      <div><label className="text-xs text-slate-500 dark:text-slate-400">Unid.</label>
+                        <input value={item.unidade} onChange={e => setItem(idx, 'unidade', e.target.value.toUpperCase())}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" /></div>
+                      <div><label className="text-xs text-slate-500 dark:text-slate-400">Vlr. Unit.</label>
+                        <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={e => setItem(idx, 'valorUnitario', parseFloat(e.target.value) || 0)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" /></div>
+                      <div><label className="text-xs text-slate-500 dark:text-slate-400">Total: <span className="font-bold text-slate-700 dark:text-slate-200">{fmtBRL(calcItemTotal(item))}</span></label>
+                        <input type="number" min="0" step="0.01" value={item.desconto} onChange={e => setItem(idx, 'desconto', parseFloat(e.target.value) || 0)} placeholder="Desconto"
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" /></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Observações</label>
+                <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} rows={3} placeholder="Condições comerciais, prazo de entrega..."
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" />
+              </div>
+              <div className="flex flex-col justify-end gap-2 text-sm">
+                <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                  <span>Subtotal:</span><span>{fmtBRL(subtotal)}</span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Desconto geral:</span>
+                  <input type="number" min="0" step="0.01" value={form.desconto} onChange={e => setForm(f => ({ ...f, desconto: parseFloat(e.target.value) || 0 }))}
+                    className="w-28 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right" />
+                </div>
+                <div className="flex justify-between font-bold text-base border-t border-slate-200 dark:border-slate-700 pt-2 text-slate-800 dark:text-slate-100">
+                  <span>Total:</span><span>{fmtBRL(totalFinal)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+              <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50">{saving ? 'Salvando...' : 'Salvar Cotação'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Excluir cotação?</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+              <button onClick={async () => { await cotacoesService.delete(deleteConfirm!); setDeleteConfirm(null); load(); }} className="flex-1 px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default CotacoesPage;

@@ -3,10 +3,9 @@ import { useState, useEffect, ReactNode } from 'react';
 import { authService } from './services/auth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Cotacoes from './pages/faturamento/Cotacoes';
-import CotacaoCambio from './pages/faturamento/CotacaoCambio';
-import NFVenda from './pages/faturamento/NFVenda';
-import NFSe from './pages/faturamento/NFSe';
+import CotacoesPage from './pages/faturamento/Cotacoes';
+import NFVendaPage from './pages/faturamento/NFVenda';
+import NFSePage from './pages/faturamento/NFSe';
 import Perfil from './pages/Perfil';
 import SubscriptionManagement from './pages/SubscriptionManagement';
 import ForgotPassword from './pages/ForgotPassword';
@@ -168,7 +167,7 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <Cotacoes />
+                <CotacoesPage />
               </Layout>
             </ProtectedRoute>
           }
@@ -178,7 +177,7 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <NFVenda />
+                <NFVendaPage />
               </Layout>
             </ProtectedRoute>
           }
@@ -188,17 +187,7 @@ function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <NFSe />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/faturamento/cotacao-cambio"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <CotacaoCambio />
+                <NFSePage />
               </Layout>
             </ProtectedRoute>
           }
