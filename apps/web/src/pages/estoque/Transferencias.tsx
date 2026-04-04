@@ -1,10 +1,75 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { transferenciasService, estoqueService, locaisService, type Transferencia } from '../../services/estoqueService';
+import api from '../../services/api';
 
 const fmtQtd = (v: number) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 const fmtDate = (s: string) => s ? new Date(s).toLocaleString('pt-BR') : '—';
 
-interface Produto { id: string; descricao: string; codigo: string; }
+interface Produto { id: string; descricao: string; codigo: string; unidade: string; }
+
+function ProdutoBusca({ onSelect, resetKey }: { onSelect: (p: Produto | null) => void; resetKey: number }) {
+  const [query, setQuery] = useState('');
+  const [resultados, setResultados] = useState<Produto[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [selecionado, setSelecionado] = useState<Produto | null>(null);
+  const [aberto, setAberto] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setQuery(''); setSelecionado(null); setResultados([]); setAberto(false); }, [resetKey]);
+
+  const buscar = useCallback(async (termo: string) => {
+    if (!termo.trim()) { setResultados([]); return; }
+    setBuscando(true);
+    try {
+      const res = await api.get('/tenant/cadastros/produtos', { params: { busca: termo } });
+      setResultados(res.data.produtos ?? []);
+      setAberto(true);
+    } catch { setResultados([]); } finally { setBuscando(false); }
+  }, []);
+
+  useEffect(() => {
+    if (selecionado) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => buscar(query), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, buscar, selecionado]);
+
+  const selecionar = (p: Produto) => {
+    setSelecionado(p); setQuery(`${p.codigo} — ${p.descricao}`);
+    setResultados([]); setAberto(false); onSelect(p);
+  };
+
+  const limpar = () => {
+    setSelecionado(null); setQuery(''); setResultados([]); setAberto(false); onSelect(null);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  return (
+    <div className="relative">
+      <div className="relative flex items-center">
+        <input ref={inputRef} value={query} onChange={e => { setQuery(e.target.value); setSelecionado(null); }}
+          onFocus={() => resultados.length > 0 && setAberto(true)}
+          onBlur={() => setTimeout(() => setAberto(false), 150)}
+          placeholder="Digite o SKU ou nome do produto..."
+          className={`w-full border rounded-lg px-3 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white dark:bg-slate-800 dark:text-slate-100 ${selecionado ? 'border-emerald-400 dark:border-emerald-600' : 'border-slate-300 dark:border-slate-600'}`}
+        />
+        {buscando && <svg className="absolute right-2.5 w-4 h-4 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+        {selecionado && <button type="button" onClick={limpar} className="absolute right-2 text-slate-400 hover:text-slate-600"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>}
+      </div>
+      {aberto && resultados.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden">
+          {resultados.map(p => (
+            <button key={p.id} type="button" onMouseDown={() => selecionar(p)} className="w-full text-left px-4 py-2.5 hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
+              <span className="font-mono text-xs font-bold text-brand-600 dark:text-brand-400">{p.codigo}</span>
+              <span className="ml-2 text-sm text-slate-700 dark:text-slate-200">{p.descricao}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Transferencias() {
   const [transferencias, setTransferencias] = useState<Transferencia[]>([]);
@@ -12,11 +77,12 @@ export function Transferencias() {
   const [error, setError] = useState('');
   const [busca, setBusca] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [produtos, setProdutos] = useState<Produto[]>([]);
   const [locais, setLocais] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [modalError, setModalError] = useState('');
-  const [form, setForm] = useState({ produtoId: '', localOrigem: '', localDestino: '', quantidade: '', motivo: '' });
+  const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
+  const [resetKey, setResetKey] = useState(0);
+  const [form, setForm] = useState({ localOrigem: '', localDestino: '', quantidade: '', motivo: '' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -40,18 +106,16 @@ export function Transferencias() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
-    if (showModal && produtos.length === 0) {
-      import('../../services/api').then(({ default: api }) => {
-        api.get('/tenant/cadastros/produtos').then(res => {
-          setProdutos(res.data.produtos ?? []);
-        }).catch(() => {});
-      });
-    }
-  }, [showModal, produtos.length]);
+  const openModal = () => {
+    setProdutoSelecionado(null);
+    setForm({ localOrigem: '', localDestino: '', quantidade: '', motivo: '' });
+    setModalError('');
+    setResetKey(k => k + 1);
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
-    if (!form.produtoId) { setModalError('Selecione o produto.'); return; }
+    if (!produtoSelecionado) { setModalError('Busque e selecione um produto.'); return; }
     if (!form.localOrigem) { setModalError('Informe o local de origem.'); return; }
     if (!form.localDestino) { setModalError('Informe o local de destino.'); return; }
     if (form.localOrigem.toUpperCase() === form.localDestino.toUpperCase()) { setModalError('Origem e destino devem ser diferentes.'); return; }
@@ -61,7 +125,7 @@ export function Transferencias() {
     setModalError('');
     try {
       await transferenciasService.create({
-        produtoId: form.produtoId,
+        produtoId: produtoSelecionado.id,
         localOrigem: form.localOrigem.toUpperCase(),
         localDestino: form.localDestino.toUpperCase(),
         quantidade: Number(form.quantidade),
@@ -93,7 +157,7 @@ export function Transferencias() {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Movimentação de produtos entre locais</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openModal}
           className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -179,11 +243,8 @@ export function Transferencias() {
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Produto <span className="text-red-500">*</span></label>
-                <select value={form.produtoId} onChange={e => setForm(p => ({ ...p, produtoId: e.target.value }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
-                  <option value="">Selecione o produto...</option>
-                  {produtos.map(p => <option key={p.id} value={p.id}>{p.descricao} ({p.codigo})</option>)}
-                </select>
+                <ProdutoBusca resetKey={resetKey} onSelect={p => setProdutoSelecionado(p)} />
+                {produtoSelecionado && <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ {produtoSelecionado.descricao}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
