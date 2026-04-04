@@ -1,219 +1,353 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCrud } from '../../hooks/useCrud';
-import { DetailView, DynamicForm } from '../../components/common';
-import { contasPagarService } from '../../services/cadastros/contasPagar';
-import { pessoasService } from '../../services/cadastros/pessoas';
-import { useAutoFormFields } from '../../hooks/useAutoFormFields';
-import type { ContaPagar, Pessoa } from '../../types';
+import { contasPagarService, type ContaPagar, type ContaForm } from '../../services/financeiro';
+import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
+
+const fmt = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0);
+
+const fmtDate = (s?: string) =>
+  s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+
+const STATUS_STYLE: Record<string, string> = {
+  pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  pago: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  cancelado: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+};
+
+const CATEGORIAS = ['Fornecedor', 'Aluguel', 'Salário', 'Imposto', 'Serviço', 'Financiamento', 'Outros'];
+const EMPTY: ContaForm = { pessoaId: '', descricao: '', valor: 0, vencimento: '', categoria: '', observacoes: '' };
 
 export function ContasPagarDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [isEditing, setIsEditing] = useState(id === 'novo');
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [nextCode, setNextCode] = useState<number | null>(null);
-  const [formDataState, setFormDataState] = useState<Record<string, unknown> | null>(null);
-  const [fornecedores, setFornecedores] = useState<Pessoa[]>([]);
-  
-  const {
-    currentRecord,
-    loading,
-    error,
-    loadRecord,
-    createRecord,
-    updateRecord,
-    handleDeleteRecord,
-  } = useCrud<ContaPagar>({
-    service: contasPagarService,
-    basePath: '/financeiro/contas-pagar',
-    getRecordId: (record) => record.codigo_conta,
-  });
+  const isNew = id === 'novo';
+
+  const [record, setRecord] = useState<ContaPagar | null>(null);
+  const [form, setForm] = useState<ContaForm>({ ...EMPTY, vencimento: new Date().toISOString().slice(0, 10) });
+  const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [isEditing, setIsEditing] = useState(isNew);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [showPagarModal, setShowPagarModal] = useState(false);
+  const [pagarData, setPagarData] = useState({ dataPagamento: new Date().toISOString().slice(0, 10), valorPago: 0 });
 
   useEffect(() => {
-    pessoasService.list().then(response => {
-      const data = Array.isArray(response) ? response : response.results || [];
-      setFornecedores(data.filter((p: Pessoa) => p.tipo === 'PJ'));
-    });
-
-    if (id && id !== 'novo') {
-      loadRecord(id);
-    } else if (id === 'novo') {
-      contasPagarService.proximoCodigo().then(response => {
-        setNextCode(response.proximo_codigo);
-      });
-    }
-  }, [id, loadRecord]);
-
-  const sampleData = useMemo(() => {
-    if (id === 'novo') {
-      const hoje = new Date().toISOString().split('T')[0];
-      return {
-        codigo_conta: nextCode || '',
-        numero_documento: '',
-        fornecedor: '',
-        valor_total: 0,
-        valor_pago: 0,
-        data_emissao: hoje,
-        data_vencimento: hoje,
-        status: 'Pendente',
-        forma_pagamento: '',
-        descricao: '',
-        observacoes: '',
-      };
-    }
-    return (currentRecord || {}) as Record<string, unknown>;
-  }, [id, nextCode, currentRecord]);
-
-  const formFields = useAutoFormFields(sampleData, {
-    hiddenFields: ['valor_pendente', 'created_at', 'updated_at', 'fornecedor_nome'],
-    readOnlyFields: ['codigo_conta', 'valor_pendente'],
-    fieldConfigs: {
-      codigo_conta: { label: 'Código', readOnly: true },
-      fornecedor: {
-        type: 'select',
-        label: 'Fornecedor',
-        options: fornecedores.map(f => ({
-          value: f.codigo_cadastro,
-          label: f.razao_social || f.nome_fantasia || `Código ${f.codigo_cadastro}`,
-        })),
-      },
-      valor_total: { type: 'number', label: 'Valor Total', step: '0.01' },
-      valor_pago: { type: 'number', label: 'Valor Pago', step: '0.01' },
-      data_emissao: { type: 'text', label: 'Data de Emissão' },
-      data_vencimento: { type: 'text', label: 'Data de Vencimento' },
-      status: {
-        type: 'select',
-        options: [
-          { value: 'Pendente', label: 'Pendente' },
-          { value: 'Parcial', label: 'Parcial' },
-          { value: 'Pago', label: 'Pago' },
-          { value: 'Cancelado', label: 'Cancelado' },
-          { value: 'Vencido', label: 'Vencido' },
-        ],
-      },
-      forma_pagamento: {
-        type: 'select',
-        options: [
-          { value: 'Dinheiro', label: 'Dinheiro' },
-          { value: 'PIX', label: 'PIX' },
-          { value: 'Boleto', label: 'Boleto' },
-          { value: 'Cartão Crédito', label: 'Cartão de Crédito' },
-          { value: 'Cartão Débito', label: 'Cartão de Débito' },
-          { value: 'Transferência', label: 'Transferência Bancária' },
-          { value: 'Cheque', label: 'Cheque' },
-        ],
-      },
-      descricao: { type: 'textarea', label: 'Descrição', rows: 3 },
-      observacoes: { type: 'textarea', label: 'Observações', rows: 3 },
-    },
-  });
-
-  const saveRecord = async (formData: Record<string, unknown>): Promise<void> => {
-    try {
-      setFormErrors({});
-      const dataToSave = { ...formData };
-      
-      if (id === 'novo') {
-        await createRecord(dataToSave as Partial<ContaPagar>);
-      } else {
-        await updateRecord(id!, dataToSave as Partial<ContaPagar>);
-      }
-      
-      navigate('/financeiro/contas-pagar');
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'response' in err) {
-        const errorResponse = err as { response?: { data?: Record<string, string | string[]> } };
-        if (errorResponse.response?.data) {
-          const errors: Record<string, string> = {};
-          Object.entries(errorResponse.response.data).forEach(([key, value]) => {
-            errors[key] = Array.isArray(value) ? value[0] : value;
+    pessoasService.list({ search: '' }).then(setPessoas).catch(() => {});
+    if (!isNew) {
+      contasPagarService.get(id!)
+        .then(data => {
+          setRecord(data);
+          setForm({
+            pessoaId: data.pessoa_id,
+            descricao: data.descricao,
+            valor: data.valor,
+            vencimento: data.vencimento,
+            categoria: data.categoria ?? '',
+            observacoes: data.observacoes ?? '',
           });
-          setFormErrors(errors);
-        }
+          setPagarData(prev => ({ ...prev, valorPago: data.valor }));
+        })
+        .catch(() => setError('Erro ao carregar registro.'))
+        .finally(() => setLoading(false));
+    }
+  }, [id, isNew]);
+
+  const set = (field: keyof ContaForm, value: string | number) =>
+    setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.pessoaId) { setError('Selecione o fornecedor/pessoa.'); return; }
+    if (!form.descricao) { setError('Informe a descrição.'); return; }
+    if (!form.valor || form.valor <= 0) { setError('Informe um valor positivo.'); return; }
+    if (!form.vencimento) { setError('Informe o vencimento.'); return; }
+
+    setSaving(true);
+    setError('');
+    try {
+      if (isNew) {
+        await contasPagarService.create(form);
+        navigate('/financeiro/contas-pagar');
+      } else {
+        await contasPagarService.update(id!, form);
+        const updated = await contasPagarService.get(id!);
+        setRecord(updated);
+        setIsEditing(false);
       }
+    } catch {
+      setError('Erro ao salvar. Verifique os dados.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSubmit = async (formData: Record<string, unknown>): Promise<void> => {
-    await saveRecord(formData);
-  };
-
-  const handleCancel = (): void => {
-    if (id === 'novo') {
+  const handleDelete = async () => {
+    if (!window.confirm('Excluir esta conta?')) return;
+    try {
+      await contasPagarService.delete(id!);
       navigate('/financeiro/contas-pagar');
-    } else {
-      setIsEditing(false);
+    } catch {
+      setError('Erro ao excluir.');
     }
   };
 
-  if (id === 'novo' || isEditing) {
+  const handlePagar = async () => {
+    setSaving(true);
+    try {
+      await contasPagarService.marcarPago(id!, pagarData.dataPagamento, pagarData.valorPago);
+      const updated = await contasPagarService.get(id!);
+      setRecord(updated);
+      setShowPagarModal(false);
+    } catch {
+      setError('Erro ao registrar pagamento.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {id === 'novo' ? 'Nova Conta a Pagar' : 'Editar Conta a Pagar'}
-            </h1>
-          </div>
-          <button onClick={() => navigate('/financeiro/contas-pagar')} className="text-gray-500 hover:text-gray-700">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{error}</div>}
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <DynamicForm
-            key={id === 'novo' && nextCode ? `new-${nextCode}` : `edit-${id}`}
-            fields={formFields}
-            initialData={formDataState !== null ? formDataState : (id === 'novo' ? sampleData : (currentRecord as Record<string, unknown>))}
-            onSubmit={handleSubmit}
-            onCancel={handleCancel}
-            loading={loading}
-            errors={formErrors}
-          />
-        </div>
+      <div className="flex items-center justify-center min-h-64">
+        <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
       </div>
     );
   }
 
-  if (loading && !currentRecord) {
-    return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
-  }
-
-  const fields = [
-    { key: 'codigo_conta', label: 'Código' },
-    { key: 'numero_documento', label: 'Número do Documento' },
-    { key: 'fornecedor_nome', label: 'Fornecedor' },
-    { key: 'valor_total', label: 'Valor Total', render: (v: unknown) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0)) },
-    { key: 'valor_pago', label: 'Valor Pago', render: (v: unknown) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0)) },
-    { key: 'valor_pendente', label: 'Valor Pendente', render: (v: unknown) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0)) },
-    { key: 'data_emissao', label: 'Data de Emissão', render: (v: unknown) => v ? new Date(String(v)).toLocaleDateString('pt-BR') : '-' },
-    { key: 'data_vencimento', label: 'Data de Vencimento', render: (v: unknown) => v ? new Date(String(v)).toLocaleDateString('pt-BR') : '-' },
-    { key: 'data_pagamento', label: 'Data de Pagamento', render: (v: unknown) => v ? new Date(String(v)).toLocaleDateString('pt-BR') : '-' },
-    { key: 'status', label: 'Status' },
-    { key: 'forma_pagamento', label: 'Forma de Pagamento' },
-    { key: 'descricao', label: 'Descrição' },
-    { key: 'observacoes', label: 'Observações' },
-  ];
-
   return (
-    <DetailView
-      title={`Conta a Pagar #${currentRecord?.numero_documento || id}`}
-      subtitle={`Código: ${currentRecord?.codigo_conta || id}`}
-      fields={fields}
-      data={currentRecord as Record<string, unknown>}
-      onEdit={() => setIsEditing(true)}
-      onDelete={() => handleDeleteRecord(id!)}
-      onBack={() => navigate('/financeiro/contas-pagar')}
-      loading={loading}
-      error={error}
-    />
+    <div className="max-w-2xl space-y-6">
+      {/* Cabeçalho */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <button
+            onClick={() => navigate('/financeiro/contas-pagar')}
+            className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-1 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Contas a Pagar
+          </button>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            {isNew ? 'Nova Conta a Pagar' : (record?.descricao ?? 'Detalhe')}
+          </h1>
+          {record && (
+            <span className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[record.status] ?? ''}`}>
+              {record.status}
+            </span>
+          )}
+        </div>
+        {!isNew && !isEditing && record && (
+          <div className="flex gap-2 flex-none">
+            {record.status === 'pendente' && (
+              <button
+                onClick={() => setShowPagarModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+                Pago
+              </button>
+            )}
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Editar
+            </button>
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Excluir
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>
+      )}
+
+      {/* Visualização */}
+      {!isNew && !isEditing && record && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            {[
+              { label: 'Fornecedor', value: record.fornecedor || '—' },
+              { label: 'Categoria', value: record.categoria || '—' },
+              { label: 'Valor', value: fmt(record.valor) },
+              { label: 'Vencimento', value: fmtDate(record.vencimento) },
+              { label: 'Valor Pago', value: record.valor_pago ? fmt(record.valor_pago) : '—' },
+              { label: 'Data Pagamento', value: fmtDate(record.data_pagamento) },
+              { label: 'Observações', value: record.observacoes || '—' },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {/* Formulário */}
+      {(isNew || isEditing) && (
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {/* Fornecedor / Pessoa */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Fornecedor / Pessoa <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={form.pessoaId}
+                onChange={e => set('pessoaId', e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Selecione...</option>
+                {pessoas.map(p => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+              {pessoas.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  Nenhuma pessoa cadastrada. <a href="/cadastros/pessoas/novo" className="underline">Cadastrar pessoa</a>
+                </p>
+              )}
+            </div>
+
+            {/* Descrição */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Descrição <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.descricao}
+                onChange={e => set('descricao', e.target.value)}
+                placeholder="Ex.: Aluguel do galpão"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+
+            {/* Valor */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Valor (R$) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.valor || ''}
+                onChange={e => set('valor', parseFloat(e.target.value) || 0)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+
+            {/* Vencimento */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Vencimento <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={form.vencimento}
+                onChange={e => set('vencimento', e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+
+            {/* Categoria */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
+              <select
+                value={form.categoria}
+                onChange={e => set('categoria', e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Sem categoria</option>
+                {CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
+
+            {/* Observações */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Observações</label>
+              <textarea
+                rows={3}
+                value={form.observacoes}
+                onChange={e => set('observacoes', e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={() => isNew ? navigate('/financeiro/contas-pagar') : setIsEditing(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Modal — Marcar como Pago */}
+      {showPagarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Registrar Pagamento</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data do pagamento</label>
+                <input
+                  type="date"
+                  value={pagarData.dataPagamento}
+                  onChange={e => setPagarData(prev => ({ ...prev, dataPagamento: e.target.value }))}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor pago (R$)</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={pagarData.valorPago}
+                  onChange={e => setPagarData(prev => ({ ...prev, valorPago: parseFloat(e.target.value) || 0 }))}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setShowPagarModal(false)} className="flex-1 px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handlePagar} disabled={saving} className="flex-1 px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50">
+                {saving ? 'Salvando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
 export default ContasPagarDetail;
-

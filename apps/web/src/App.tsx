@@ -52,6 +52,7 @@ import ContasReceberList from './pages/financeiro/ContasReceberList';
 import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
 import ContasPagarDetail from './pages/financeiro/ContasPagarDetail';
+import FinanceiroDashboard from './pages/financeiro/FinanceiroDashboard';
 import Configuracoes from './pages/Configuracoes';
 import UsuariosList from './pages/usuarios/UsuariosList';
 import UsuariosForm from './pages/usuarios/UsuariosForm';
@@ -173,14 +174,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-        {/* Dashboard movido para dentro do módulo financeiro */}
+        {/* Dashboard financeiro */}
         <Route
           path="/financeiro/dashboard"
           element={
             <ProtectedRoute>
               <Layout>
                 <ProtectedRouteWithPermission requiredModule="financeiro" requiredAction="view">
-                  <Dashboard />
+                  <FinanceiroDashboard />
                 </ProtectedRouteWithPermission>
               </Layout>
             </ProtectedRoute>
