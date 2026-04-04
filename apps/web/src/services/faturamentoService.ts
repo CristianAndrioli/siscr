@@ -86,7 +86,7 @@ export const cotacoesService = {
   },
   create: async (data: Omit<Cotacao, 'id' | 'numero' | 'created_at'> & { itens: CotacaoItem[] }): Promise<{ id: string; numero: string }> => {
     const res = await api.post(`${BASE}/cotacoes`, {
-      pessoaId: data.pessoa_id,
+      pessoaId: data.pessoa_id || undefined, // never send empty string
       validade: data.validade,
       observacoes: data.observacoes,
       desconto: data.desconto ?? 0,
@@ -105,7 +105,7 @@ export const cotacoesService = {
   },
   update: async (id: string, data: Partial<Cotacao> & { itens?: CotacaoItem[] }): Promise<void> => {
     await api.put(`${BASE}/cotacoes/${id}`, {
-      pessoaId: data.pessoa_id,
+      pessoaId: data.pessoa_id || undefined,
       validade: data.validade,
       observacoes: data.observacoes,
       desconto: data.desconto,
