@@ -135,40 +135,59 @@ export default function Home() {
 
       {/* ── Pricing preview ── */}
       <section id="pricing" className="py-24 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="font-display text-4xl font-bold text-white mb-4">
-            Preços simples e transparentes
-          </h2>
-          <p className="text-slate-400 text-lg mb-12">
-            Comece grátis. Pague apenas quando crescer.
-          </p>
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="font-display text-4xl font-bold text-white mb-4">
+              Preços simples e transparentes
+            </h2>
+            <p className="text-slate-400 text-lg">
+              Comece grátis. Pague apenas quando crescer.
+            </p>
+          </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
-              { name: 'Free', price: 'R$ 0', period: '/sempre', features: ['1 empresa', '2 filiais', '3 usuários', 'Suporte comunidade'], cta: 'Começar grátis', highlight: false },
-              { name: 'Pro', price: 'Consultar', period: '', features: ['3 empresas', '10 filiais', '20 usuários', 'Suporte prioritário'], cta: 'Assinar Pro', highlight: true },
-              { name: 'Enterprise', price: 'R$ 499', period: '/mês', features: ['Ilimitado', 'Filiais ilimitadas', 'Usuários ilimitados', 'SLA 99.9%'], cta: 'Assinar Enterprise', highlight: false },
+              {
+                name: 'Free', price: 'R$ 0', period: 'para sempre',
+                features: ['1 empresa', '2 filiais', '3 usuários', 'Módulos essenciais', 'Suporte comunidade'],
+                cta: 'Começar grátis', highlight: false,
+              },
+              {
+                name: 'Básico', price: 'R$ 99', period: '/mês',
+                features: ['1 empresa', '3 filiais', '5 usuários', 'Todos os módulos', 'NF-e e NFSe', 'Suporte e-mail'],
+                cta: 'Assinar Básico', highlight: false,
+              },
+              {
+                name: 'Pro', price: 'R$ 249', period: '/mês',
+                features: ['3 empresas', '10 filiais', '20 usuários', 'Todos os módulos', 'NF-e e NFSe', 'Suporte prioritário', 'API de integração'],
+                cta: 'Assinar Pro', highlight: true,
+              },
+              {
+                name: 'Enterprise', price: 'R$ 499', period: '/mês',
+                features: ['Ilimitado', 'Filiais ilimitadas', 'Usuários ilimitados', 'Todos os módulos', 'NF-e e NFSe', 'Suporte 24/7', 'SLA 99.9%', 'Onboarding dedicado'],
+                cta: 'Falar com vendas', highlight: false,
+              },
             ].map((plan) => (
-              <div key={plan.name} className={`relative rounded-2xl p-8 border ${plan.highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30 scale-105' : 'bg-surface-card border-surface-border'}`}>
+              <div key={plan.name} className={`relative flex flex-col rounded-2xl p-6 border ${plan.highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30' : 'bg-surface-card border-surface-border hover:border-brand-600/30 transition-colors'}`}>
                 {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-white text-brand-700 text-xs font-bold rounded-full">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-white text-brand-700 text-xs font-bold rounded-full shadow">
                     MAIS POPULAR
                   </div>
                 )}
-                <div className={`text-sm font-semibold mb-2 ${plan.highlight ? 'text-white/70' : 'text-slate-400'}`}>{plan.name}</div>
-                <div className={`font-display text-4xl font-extrabold mb-1 ${plan.highlight ? 'text-white' : 'text-white'}`}>{plan.price}</div>
-                <div className={`text-sm mb-6 ${plan.highlight ? 'text-white/70' : 'text-slate-500'}`}>{plan.period}</div>
-                <ul className="space-y-2 mb-8">
+                <div className={`text-xs font-bold uppercase tracking-wide mb-2 ${plan.highlight ? 'text-white/70' : 'text-slate-500'}`}>{plan.name}</div>
+                <div className="font-display text-3xl font-extrabold text-white mb-0.5">{plan.price}</div>
+                <div className={`text-xs mb-5 ${plan.highlight ? 'text-white/60' : 'text-slate-500'}`}>{plan.period}</div>
+                <ul className="space-y-2 mb-6 flex-1">
                   {plan.features.map((f) => (
-                    <li key={f} className={`flex items-center gap-2 text-sm ${plan.highlight ? 'text-white/90' : 'text-slate-300'}`}>
-                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs ${plan.highlight ? 'bg-white/20' : 'bg-brand-600/20 text-brand-400'}`}>✓</span>
+                    <li key={f} className={`flex items-center gap-2 text-xs ${plan.highlight ? 'text-white/90' : 'text-slate-300'}`}>
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs flex-none ${plan.highlight ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}>✓</span>
                       {f}
                     </li>
                   ))}
                 </ul>
                 <Link
                   to="/plans"
-                  className={`block w-full text-center py-3 rounded-xl font-semibold text-sm transition-all ${plan.highlight ? 'bg-white text-brand-700 hover:bg-slate-100' : 'bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 border border-brand-600/30'}`}
+                  className={`block w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all ${plan.highlight ? 'bg-white text-brand-700 hover:bg-slate-50' : 'bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 border border-brand-600/30'}`}
                 >
                   {plan.cta}
                 </Link>
@@ -176,8 +195,8 @@ export default function Home() {
             ))}
           </div>
 
-          <p className="text-slate-500 text-sm mt-8">
-            Todos os planos incluem SSL, backups automáticos e infraestrutura global.
+          <p className="text-slate-500 text-sm mt-8 text-center">
+            Todos os planos incluem SSL, backups automáticos e infraestrutura global na Cloudflare.
           </p>
         </div>
       </section>

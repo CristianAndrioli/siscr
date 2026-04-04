@@ -43,8 +43,8 @@ const plans = [
   {
     id: 'pro',
     name: 'Pro',
-    priceLabel: 'Consultar',
-    period: '',
+    priceLabel: 'R$ 249',
+    period: '/mês',
     description: 'Para empresas em crescimento com múltiplas filiais.',
     color: 'brand',
     badge: 'Mais popular',
@@ -137,7 +137,7 @@ export default function Plans() {
 
       {/* Cards de planos */}
       <section className="pb-24 px-6">
-        <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6 items-stretch">
+        <div className="max-w-6xl mx-auto grid sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
           {plans.map((plan) => {
             const isBrand = plan.color === 'brand';
             return (
@@ -145,7 +145,7 @@ export default function Plans() {
                 key={plan.id}
                 className={`relative flex flex-col rounded-2xl border p-8 transition-all duration-200 ${
                   isBrand
-                    ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30 md:-mt-4 md:mb-4'
+                    ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30'
                     : 'bg-surface-card border-surface-border hover:border-brand-600/30'
                 }`}
               >
