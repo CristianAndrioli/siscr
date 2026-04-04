@@ -2,11 +2,12 @@ import { useState, FormEvent } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authService } from '../services/auth';
 
+type TenantChoice = { slug: string; nome: string };
+
 export default function Login() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/app';
 
-  // Prioridade: URL param → localStorage → vazio
   const slugFromUrl = searchParams.get('tenant') || '';
   const slugFromStorage = localStorage.getItem('tenant_slug') || '';
 
@@ -15,24 +16,38 @@ export default function Login() {
   const [tenantSlug, setTenantSlug] = useState(slugFromUrl || slugFromStorage);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showTenantField, setShowTenantField] = useState(!!(slugFromUrl || slugFromStorage));
+  const [tenantChoices, setTenantChoices] = useState<TenantChoice[]>([]);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
-
-    if (!tenantSlug.trim()) {
-      setError('Informe o identificador da sua empresa.');
-      return;
-    }
+    setTenantChoices([]);
 
     setLoading(true);
     try {
-      await authService.login(email, password, tenantSlug.toLowerCase().trim());
+      const slug = tenantSlug.trim() ? tenantSlug.toLowerCase().trim() : undefined;
+      await authService.login(email, password, slug);
       navigate(redirectTo);
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } } };
-      setError(axiosError.response?.data?.error || 'Credenciais inválidas. Verifique seus dados.');
+      const ax = err as {
+        response?: {
+          status?: number;
+          data?: { error?: string; code?: string; tenants?: TenantChoice[] };
+        };
+      };
+      const status = ax.response?.status;
+      const data = ax.response?.data;
+
+      if (status === 409 && data?.code === 'MULTIPLE_TENANTS' && data.tenants?.length) {
+        setTenantChoices(data.tenants);
+        setShowTenantField(true);
+        setError(data.error || 'Informe o identificador da empresa em que deseja entrar.');
+        return;
+      }
+
+      setError(data?.error || 'Credenciais inválidas. Verifique seus dados.');
     } finally {
       setLoading(false);
     }
@@ -40,7 +55,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-surface flex">
-      {/* Painel esquerdo — visual */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-gradient-dark relative overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-32 -left-32 w-96 h-96 bg-brand-600/20 rounded-full blur-[100px]" />
@@ -79,10 +93,8 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Painel direito — formulário */}
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md animate-fade-in">
-          {/* Logo mobile */}
           <Link to="/" className="flex lg:hidden items-center gap-2 mb-10">
             <div className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-sm">S</div>
             <span className="font-display font-bold text-lg text-white">SISCR</span>
@@ -90,7 +102,7 @@ export default function Login() {
 
           <div className="mb-8">
             <h1 className="font-display text-3xl font-bold text-white mb-2">Bem-vindo de volta</h1>
-            <p className="text-slate-400">Entre na sua conta para acessar o sistema</p>
+            <p className="text-slate-400">Entre com seu e-mail e senha. O sistema identifica sua empresa automaticamente.</p>
           </div>
 
           {error && (
@@ -101,22 +113,6 @@ export default function Login() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="input-label text-slate-300">Identificador da empresa</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">@</span>
-                <input
-                  type="text"
-                  value={tenantSlug}
-                  onChange={(e) => setTenantSlug(e.target.value)}
-                  placeholder="minha-empresa"
-                  required
-                  className="input pl-8 bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
-                />
-              </div>
-              <p className="mt-1 text-xs text-slate-600">O identificador que você escolheu ao criar a conta</p>
-            </div>
-
             <div>
               <label className="input-label text-slate-300">E-mail</label>
               <input
@@ -148,11 +144,46 @@ export default function Login() {
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full py-3.5 text-base"
-            >
+            {(showTenantField || tenantChoices.length > 0) && (
+              <div className="rounded-xl border border-surface-border bg-surface-card/40 p-4 space-y-3">
+                <div>
+                  <label className="input-label text-slate-300">Identificador da empresa</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">@</span>
+                    <input
+                      type="text"
+                      value={tenantSlug}
+                      onChange={(e) => setTenantSlug(e.target.value)}
+                      placeholder="minha-empresa"
+                      className="input pl-8 bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+                      list="tenant-slug-suggestions"
+                    />
+                    {tenantChoices.length > 0 && (
+                      <datalist id="tenant-slug-suggestions">
+                        {tenantChoices.map((t) => (
+                          <option key={t.slug} value={t.slug}>{t.nome}</option>
+                        ))}
+                      </datalist>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Só é necessário se você usa o mesmo e-mail em mais de uma empresa, ou se preferir informar manualmente.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!showTenantField && tenantChoices.length === 0 && (
+              <button
+                type="button"
+                onClick={() => setShowTenantField(true)}
+                className="text-xs text-slate-500 hover:text-brand-400 transition-colors text-left"
+              >
+                Uso o mesmo e-mail em mais de uma empresa → informar identificador
+              </button>
+            )}
+
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3.5 text-base">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">

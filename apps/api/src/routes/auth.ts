@@ -2,13 +2,15 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { hashPassword, verifyPassword } from '../lib/password'
 
 const app = new Hono<{ Bindings: Env }>()
 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  tenantSlug: z.string().min(1),
+  /** Opcional: se omitido, o sistema localiza o tenant pelo e-mail (uma conta). Com várias contas no mesmo e-mail, é obrigatório. */
+  tenantSlug: z.string().min(1).optional(),
 })
 
 const signupSchema = z.object({
@@ -20,69 +22,131 @@ const signupSchema = z.object({
   planId: z.string().optional(),
 })
 
-// POST /api/auth/login
+type LoginRow = {
+  user_id: string
+  email: string
+  nome: string
+  password_hash: string
+  role: string
+  tenant_id: string
+  tenant_slug: string
+  tenant_nome: string
+  tenant_status: string
+}
+
+// POST /api/auth/login — e-mail + senha; tenantSlug opcional (obrigatório se o e-mail existir em mais de um tenant)
 app.post('/login', zValidator('json', loginSchema), async (c) => {
   const { email, password, tenantSlug } = c.req.valid('json')
+  const emailNorm = email.trim().toLowerCase()
 
-  // Verificar tenant (incluindo suspensos para dar mensagem adequada)
-  const tenant = await c.env.DB_SHARED
-    .prepare('SELECT id, slug, nome, status FROM tenants WHERE slug = ?')
-    .bind(tenantSlug)
-    .first<{ id: string; slug: string; nome: string; status: string }>()
+  let rows: LoginRow[]
 
-  if (!tenant) {
-    return c.json({ error: 'Tenant não encontrado.' }, 404)
+  if (tenantSlug?.trim()) {
+    const slug = tenantSlug.toLowerCase().trim()
+    const tenant = await c.env.DB_SHARED
+      .prepare('SELECT id, slug, nome, status FROM tenants WHERE slug = ?')
+      .bind(slug)
+      .first<{ id: string; slug: string; nome: string; status: string }>()
+
+    if (!tenant) {
+      return c.json({ error: 'Identificador da empresa não encontrado.' }, 404)
+    }
+
+    if (tenant.status !== 'active') {
+      return c.json({
+        error: 'Sua assinatura está suspensa ou cancelada.',
+        tenantStatus: tenant.status,
+        tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
+      }, 403)
+    }
+
+    const user = await c.env.DB_SHARED
+      .prepare(`
+        SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role,
+               t.id as tenant_id, t.slug as tenant_slug, t.nome as tenant_nome, t.status as tenant_status
+        FROM users u
+        JOIN tenants t ON t.id = u.tenant_id
+        WHERE LOWER(TRIM(u.email)) = ? AND u.tenant_id = ? AND u.ativo = 1
+      `)
+      .bind(emailNorm, tenant.id)
+      .first<LoginRow>()
+
+    if (!user) {
+      return c.json({ error: 'E-mail ou senha incorretos.' }, 401)
+    }
+
+    rows = [user]
+  } else {
+    const { results } = await c.env.DB_SHARED
+      .prepare(`
+        SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role,
+               t.id as tenant_id, t.slug as tenant_slug, t.nome as tenant_nome, t.status as tenant_status
+        FROM users u
+        JOIN tenants t ON t.id = u.tenant_id
+        WHERE LOWER(TRIM(u.email)) = ? AND u.ativo = 1
+      `)
+      .bind(emailNorm)
+      .all<LoginRow>()
+
+    rows = (results ?? []) as LoginRow[]
   }
 
-  if (tenant.status !== 'active') {
+  if (rows.length === 0) {
+    return c.json({ error: 'E-mail ou senha incorretos.' }, 401)
+  }
+
+  const matches: LoginRow[] = []
+  for (const row of rows) {
+    if (row.tenant_status !== 'active') continue
+    if (await verifyPassword(password, row.password_hash)) matches.push(row)
+  }
+
+  if (matches.length === 0) {
+    const suspended = rows.find(r => r.tenant_status !== 'active')
+    if (suspended && rows.every(r => r.tenant_status !== 'active')) {
+      return c.json({
+        error: 'Sua assinatura está suspensa ou cancelada.',
+        tenantStatus: suspended.tenant_status,
+        tenant: {
+          id: suspended.tenant_id,
+          slug: suspended.tenant_slug,
+          nome: suspended.tenant_nome,
+          status: suspended.tenant_status,
+        },
+      }, 403)
+    }
+    return c.json({ error: 'E-mail ou senha incorretos.' }, 401)
+  }
+
+  if (matches.length > 1) {
     return c.json({
-      error: 'Sua assinatura está suspensa ou cancelada.',
-      tenantStatus: tenant.status,
-      tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
-    }, 403)
+      error: 'Este e-mail está vinculado a mais de uma empresa. Informe o identificador da empresa.',
+      code: 'MULTIPLE_TENANTS',
+      tenants: matches.map(m => ({ slug: m.tenant_slug, nome: m.tenant_nome })),
+    }, 409)
   }
 
-  // Verificar usuário no banco compartilhado
-  const user = await c.env.DB_SHARED
-    .prepare('SELECT id, email, nome, password_hash, role FROM users WHERE email = ? AND tenant_id = ?')
-    .bind(email, tenant.id)
-    .first<{ id: string; email: string; nome: string; password_hash: string; role: string }>()
-
-  if (!user) {
-    return c.json({ error: 'Email ou senha incorretos.' }, 401)
-  }
-
-  // Verificar senha com Web Crypto API (PBKDF2)
-  const isValid = await verifyPassword(password, user.password_hash)
-  if (!isValid) {
-    return c.json({ error: 'Email ou senha incorretos.' }, 401)
-  }
-
-  // Gerar token de sessão
+  const row = matches[0]!
   const sessionToken = crypto.randomUUID()
-  const SESSION_TTL = 60 * 60 * 24 * 7 // 7 dias
+  const SESSION_TTL = 60 * 60 * 24 * 7
 
   const sessionData = {
-    userId: user.id,
-    email: user.email,
-    nome: user.nome,
-    role: user.role,
-    tenantId: tenant.id,
-    tenantSlug: tenant.slug,
+    userId: row.user_id,
+    email: row.email,
+    nome: row.nome,
+    role: row.role,
+    tenantId: row.tenant_id,
+    tenantSlug: row.tenant_slug,
     empresaId: null,
     filialId: null,
   }
 
-  await c.env.KV_SESSIONS.put(
-    `session:${sessionToken}`,
-    JSON.stringify(sessionData),
-    { expirationTtl: SESSION_TTL }
-  )
+  await c.env.KV_SESSIONS.put(`session:${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: SESSION_TTL })
 
   return c.json({
     token: sessionToken,
-    user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
-    tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
+    user: { id: row.user_id, email: row.email, nome: row.nome, role: row.role },
+    tenant: { id: row.tenant_id, slug: row.tenant_slug, nome: row.tenant_nome, status: row.tenant_status },
   })
 })
 
@@ -234,34 +298,5 @@ app.get('/me', async (c) => {
   }
   return c.json(session)
 })
-
-// ─── Utilitários de senha (Web Crypto API — nativo no Workers) ─
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])
-  const hash = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    256
-  )
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
-  const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
-  return `${saltHex}:${hashHex}`
-}
-
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [saltHex, hashHex] = stored.split(':')
-  const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map(h => parseInt(h, 16)))
-  const encoder = new TextEncoder()
-  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])
-  const hash = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial,
-    256
-  )
-  const testHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
-  return testHex === hashHex
-}
 
 export default app

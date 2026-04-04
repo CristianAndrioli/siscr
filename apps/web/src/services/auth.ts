@@ -34,13 +34,14 @@ export type SessionStatusResponse =
 
 export const authService = {
   /**
-   * Login multi-tenant — email + senha + slug do tenant
+   * Login — e-mail + senha. O tenant é descoberto automaticamente quando há uma única conta.
+   * Passe `tenantSlug` se o mesmo e-mail existir em mais de uma empresa (resposta 409 da API).
    */
-  login: async (email: string, password: string, tenantSlug: string): Promise<LoginResponse> => {
-    const response = await axios.post<LoginResponse>(
-      `${API_BASE_URL}/api/auth/login`,
-      { email, password, tenantSlug }
-    );
+  login: async (email: string, password: string, tenantSlug?: string): Promise<LoginResponse> => {
+    const body: { email: string; password: string; tenantSlug?: string } = { email, password };
+    if (tenantSlug?.trim()) body.tenantSlug = tenantSlug.trim().toLowerCase();
+
+    const response = await axios.post<LoginResponse>(`${API_BASE_URL}/api/auth/login`, body);
 
     const { token, user, tenant } = response.data;
 

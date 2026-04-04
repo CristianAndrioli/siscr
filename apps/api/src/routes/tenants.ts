@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { hashPassword } from '../lib/password'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -233,12 +234,7 @@ app.post('/usuarios', zValidator('json', userSchema), async (c) => {
 
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
-
-  // Hash da senha (simples — em produção use bcrypt via Worker)
-  const encoder = new TextEncoder()
-  const buf = await crypto.subtle.digest('SHA-256', encoder.encode(data.senha ?? 'Mudar@123'))
-  const hashArray = Array.from(new Uint8Array(buf))
-  const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  const passwordHash = await hashPassword(data.senha ?? 'Mudar@123')
 
   await c.env.DB_SHARED.prepare(
     'INSERT INTO users (id, tenant_id, email, nome, password_hash, role, ativo, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { Env } from '../index'
+import { hashPassword } from '../lib/password'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -152,19 +153,6 @@ app.post('/', async (c) => {
 
   return c.json({ received: true })
 })
-
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits'])
-  const hash = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-    keyMaterial, 256
-  )
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
-  const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
-  return `${saltHex}:${hashHex}`
-}
 
 async function verifyStripeSignature(payload: string, header: string, secret: string): Promise<boolean> {
   try {
