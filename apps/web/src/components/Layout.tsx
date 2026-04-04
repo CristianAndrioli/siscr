@@ -182,11 +182,10 @@ export default function Layout({ children }: LayoutProps) {
         <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
           {hasModuleAccess('configuracoes') && (
             <SubMenu menuKey="configuracoes" label="Configurações" iconD={icons.gear}>
-              <SubLink to="/configuracoes" label="Geral" />
-              <SubLink to="/usuarios" label="Usuários" />
-              <SubLink to="/configuracoes/roles" label="Roles e Permissões" />
-              <SubLink to="/configuracoes/filiais" label="Filiais" />
-              <SubLink to="/configuracoes/email" label="E-mail" />
+              <SubLink to="/configuracoes" label="Visão Geral" />
+              <SubLink to="/configuracoes/usuarios" label="Usuários" />
+              <SubLink to="/configuracoes/permissoes" label="Permissões" />
+              <SubLink to="/configuracoes/filiais" label="Empresas e Filiais" />
               <SubLink to="/subscription-management" label="Assinatura" />
             </SubMenu>
           )}

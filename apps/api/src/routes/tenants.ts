@@ -129,6 +129,153 @@ app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) =>
   return c.json({ id, message: 'Filial criada com sucesso.' }, 201)
 })
 
+// PUT /api/tenant/info/empresas/:id — atualizar empresa
+app.put('/empresas/:id', zValidator('json', empresaSchema.partial()), async (c) => {
+  const tenant = c.get('tenant')
+  const data = c.req.valid('json')
+  const id = c.req.param('id')
+  const now = new Date().toISOString()
+
+  const fields: string[] = ['updated_at = ?']
+  const vals: unknown[] = [now]
+  const map: Record<string, string> = {
+    razaoSocial: 'razao_social', nomeFantasia: 'nome_fantasia', cnpj: 'cnpj',
+    inscricaoEstadual: 'inscricao_estadual', email: 'email', telefone: 'telefone',
+    logradouro: 'logradouro', numero: 'numero', complemento: 'complemento',
+    bairro: 'bairro', cidade: 'cidade', uf: 'uf', cep: 'cep',
+  }
+  for (const [k, col] of Object.entries(map)) {
+    if ((data as any)[k] !== undefined) { fields.push(`${col} = ?`); vals.push((data as any)[k]) }
+  }
+  await c.env.DB_SHARED.prepare(`UPDATE empresas SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
+    .bind(...vals, id, tenant.tenantId).run()
+
+  return c.json({ message: 'Empresa atualizada.' })
+})
+
+// DELETE /api/tenant/info/empresas/:id
+app.delete('/empresas/:id', async (c) => {
+  const tenant = c.get('tenant')
+  await c.env.DB_SHARED.prepare('DELETE FROM empresas WHERE id = ? AND tenant_id = ?')
+    .bind(c.req.param('id'), tenant.tenantId).run()
+  return c.json({ message: 'Empresa removida.' })
+})
+
+// GET /api/tenant/info/filiais — todas as filiais do tenant
+app.get('/filiais', async (c) => {
+  const tenant = c.get('tenant')
+  const { results } = await c.env.DB_SHARED.prepare(`
+    SELECT f.id, f.nome, f.cnpj, f.uf, f.cidade, f.logradouro, f.numero, f.bairro, f.cep, f.ativa, f.created_at,
+           e.id as empresa_id, e.razao_social as empresa_nome
+    FROM filiais f
+    LEFT JOIN empresas e ON e.id = f.empresa_id
+    WHERE f.tenant_id = ?
+    ORDER BY e.razao_social, f.nome
+  `).bind(tenant.tenantId).all()
+  return c.json({ filiais: results })
+})
+
+// PUT /api/tenant/info/filiais/:id
+app.put('/filiais/:id', zValidator('json', filialSchema.partial().extend({ ativa: z.boolean().optional() })), async (c) => {
+  const tenant = c.get('tenant')
+  const data = c.req.valid('json')
+  const id = c.req.param('id')
+  const now = new Date().toISOString()
+
+  const fields: string[] = ['updated_at = ?']
+  const vals: unknown[] = [now]
+  const cols = ['nome', 'cnpj', 'uf', 'cidade', 'logradouro', 'numero', 'bairro', 'cep']
+  for (const col of cols) {
+    if ((data as any)[col] !== undefined) { fields.push(`${col} = ?`); vals.push((data as any)[col]) }
+  }
+  if ((data as any).ativa !== undefined) { fields.push('ativa = ?'); vals.push((data as any).ativa ? 1 : 0) }
+
+  await c.env.DB_SHARED.prepare(`UPDATE filiais SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
+    .bind(...vals, id, tenant.tenantId).run()
+  return c.json({ message: 'Filial atualizada.' })
+})
+
+// DELETE /api/tenant/info/filiais/:id
+app.delete('/filiais/:id', async (c) => {
+  const tenant = c.get('tenant')
+  await c.env.DB_SHARED.prepare('DELETE FROM filiais WHERE id = ? AND tenant_id = ?')
+    .bind(c.req.param('id'), tenant.tenantId).run()
+  return c.json({ message: 'Filial removida.' })
+})
+
+// ─── Usuários ─────────────────────────────────────────────────────
+
+// GET /api/tenant/info/usuarios
+app.get('/usuarios', async (c) => {
+  const tenant = c.get('tenant')
+  const { results } = await c.env.DB_SHARED.prepare(
+    'SELECT id, email, nome, role, ativo, created_at FROM users WHERE tenant_id = ? ORDER BY nome'
+  ).bind(tenant.tenantId).all()
+  return c.json({ usuarios: results })
+})
+
+const userSchema = z.object({
+  email: z.string().email(),
+  nome: z.string().min(2),
+  role: z.enum(['admin', 'manager', 'user', 'viewer']).default('user'),
+  senha: z.string().min(6).optional(),
+})
+
+// POST /api/tenant/info/usuarios
+app.post('/usuarios', zValidator('json', userSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const data = c.req.valid('json')
+
+  const exists = await c.env.DB_SHARED
+    .prepare('SELECT id FROM users WHERE email = ? AND tenant_id = ?')
+    .bind(data.email, tenant.tenantId).first()
+  if (exists) return c.json({ error: 'Já existe um usuário com este e-mail.' }, 400)
+
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+
+  // Hash da senha (simples — em produção use bcrypt via Worker)
+  const encoder = new TextEncoder()
+  const buf = await crypto.subtle.digest('SHA-256', encoder.encode(data.senha ?? 'Mudar@123'))
+  const hashArray = Array.from(new Uint8Array(buf))
+  const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+
+  await c.env.DB_SHARED.prepare(
+    'INSERT INTO users (id, tenant_id, email, nome, password_hash, role, ativo, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
+  ).bind(id, tenant.tenantId, data.email, data.nome, passwordHash, data.role, now).run()
+
+  return c.json({ id, message: 'Usuário criado.' }, 201)
+})
+
+// PUT /api/tenant/info/usuarios/:id
+app.put('/usuarios/:id', zValidator('json', userSchema.partial().omit({ senha: true }).extend({ ativo: z.boolean().optional() })), async (c) => {
+  const tenant = c.get('tenant')
+  const data = c.req.valid('json')
+  const id = c.req.param('id')
+  const now = new Date().toISOString()
+
+  const fields = ['updated_at = ?']
+  const vals: unknown[] = [now]
+  if (data.nome !== undefined) { fields.push('nome = ?'); vals.push(data.nome) }
+  if (data.email !== undefined) { fields.push('email = ?'); vals.push(data.email) }
+  if (data.role !== undefined) { fields.push('role = ?'); vals.push(data.role) }
+  if (data.ativo !== undefined) { fields.push('ativo = ?'); vals.push(data.ativo ? 1 : 0) }
+
+  await c.env.DB_SHARED.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
+    .bind(...vals, id, tenant.tenantId).run()
+  return c.json({ message: 'Usuário atualizado.' })
+})
+
+// DELETE /api/tenant/info/usuarios/:id
+app.delete('/usuarios/:id', async (c) => {
+  const tenant = c.get('tenant')
+  const user = c.get('user')
+  if (user.userId === c.req.param('id')) return c.json({ error: 'Não é possível excluir seu próprio usuário.' }, 400)
+  await c.env.DB_SHARED.prepare('DELETE FROM users WHERE id = ? AND tenant_id = ?')
+    .bind(c.req.param('id'), tenant.tenantId).run()
+  return c.json({ message: 'Usuário removido.' })
+})
+
 // POST /api/tenant/info/subscription/portal — abre o Stripe Customer Portal
 app.post('/subscription/portal', async (c) => {
   const tenant = c.get('tenant')

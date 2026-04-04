@@ -1,253 +1,120 @@
+import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import api from '../services/api';
-import { authService } from '../services/auth';
+
+interface TenantInfo {
+  nome: string;
+  slug: string;
+  plan_id: string;
+  status: string;
+}
+
+function ConfigCard({ to, icon, title, desc, badge }: { to: string; icon: React.ReactNode; title: string; desc: string; badge?: string }) {
+  return (
+    <Link to={to} className="group flex gap-4 items-start bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-brand-300 dark:hover:border-brand-700 hover:shadow-sm rounded-xl p-5 transition-all duration-150">
+      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center flex-none group-hover:bg-brand-50 dark:group-hover:bg-brand-950 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-brand-700 dark:group-hover:text-brand-300 transition-colors">{title}</p>
+          {badge && <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300">{badge}</span>}
+        </div>
+        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{desc}</p>
+      </div>
+      <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-brand-400 flex-none mt-0.5 group-hover:translate-x-0.5 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+    </Link>
+  );
+}
 
 function Configuracoes() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [lastBackup, setLastBackup] = useState<string | null>(null);
-  const [loadingInfo, setLoadingInfo] = useState(true);
+  const [tenant, setTenant] = useState<TenantInfo | null>(null);
 
   useEffect(() => {
-    loadBackupInfo();
+    api.get('/tenant/info').then(r => setTenant(r.data.tenant)).catch(() => {});
   }, []);
 
-  const loadBackupInfo = async () => {
-    try {
-      setLoadingInfo(true);
-      const response = await api.get('/tenant/backup-info/');
-      if (response.data.last_backup_at) {
-        const date = new Date(response.data.last_backup_at);
-        setLastBackup(date.toLocaleString('pt-BR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }));
-      } else {
-        setLastBackup(null);
-      }
-    } catch (err: any) {
-      console.error('Erro ao carregar informações do backup:', err);
-    } finally {
-      setLoadingInfo(false);
-    }
-  };
-
-  const handleBackup = async () => {
-    try {
-      setLoading(true);
-      setError('');
-      setSuccess('');
-
-      // Fazer requisição para o endpoint de backup
-      const response = await api.post(
-        '/tenant/backup/',
-        {},
-        {
-          responseType: 'blob', // Importante para receber arquivo binário
-        }
-      );
-
-      // Criar um link temporário para download
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      
-      // Obter nome do arquivo do header Content-Disposition ou usar padrão
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = 'backup_tenant.zip';
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-        if (filenameMatch) {
-          filename = filenameMatch[1];
-        }
-      }
-      
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      setSuccess('✅ Backup criado e baixado com sucesso!');
-      
-      // Recarregar informações do backup
-      await loadBackupInfo();
-    } catch (err: any) {
-      console.error('Erro ao fazer backup:', err);
-      if (err.response?.status === 403) {
-        setError('Você não tem permissão para fazer backup. Apenas administradores do tenant podem fazer backup.');
-      } else {
-        setError(err.response?.data?.error || 'Erro ao criar backup. Tente novamente.');
-      }
-    } finally {
-      setLoading(false);
-    }
+  const PLAN_LABEL: Record<string, string> = {
+    free: 'Free', basico: 'Básico', pro: 'Pro', enterprise: 'Enterprise',
   };
 
   return (
-    <div className="p-6">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Configurações</h1>
+    <div className="space-y-8 max-w-3xl">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Configurações</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Gerencie usuários, empresas, filiais e permissões</p>
+      </div>
 
-        {/* Seção de Backup */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Backup do Tenant</h2>
-              <p className="text-gray-600 text-sm">
-                Faça o download de um backup completo do seu tenant, incluindo todos os dados do schema e informações relacionadas.
-              </p>
-            </div>
-            <div className="ml-4">
-              <svg className="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-            </div>
+      {/* Info do tenant */}
+      {tenant && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Tenant</p>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 mt-0.5">{tenant.nome}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-mono">{tenant.slug}</p>
           </div>
-
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800 text-sm">{error}</p>
-            </div>
-          )}
-
-          {success && (
-            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 text-sm">{success}</p>
-            </div>
-          )}
-
-          {lastBackup && (
-            <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-              <p className="text-gray-700 text-sm">
-                <strong>Último backup manual:</strong>{' '}
-                <span className="text-gray-900 font-medium">{lastBackup}</span>
-              </p>
-            </div>
-          )}
-
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <p className="text-blue-800 text-sm mb-2">
-              <strong>O que está incluído no backup:</strong>
-            </p>
-            <ul className="text-blue-700 text-sm list-disc list-inside space-y-1">
-              <li>Schema completo do tenant (todas as tabelas e dados)</li>
-              <li>Dados públicos relacionados (domínios, assinaturas, pagamentos, etc.)</li>
-              <li>Informações do tenant (metadados)</li>
-            </ul>
-          </div>
-
-          <button
-            onClick={handleBackup}
-            disabled={loading}
-            className={`w-full sm:w-auto px-6 py-3 rounded-lg font-medium transition duration-200 ${
-              loading
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Gerando backup...
-              </span>
-            ) : (
-              <span className="flex items-center justify-center">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Fazer Backup do Tenant
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Seção de Gerenciamento */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">Gerenciamento</h2>
-              <p className="text-gray-600 text-sm">
-                Gerencie usuários e filiais do seu tenant
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <a
-              href="/usuarios"
-              className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200"
-            >
-              <div className="flex items-center">
-                <svg className="w-8 h-8 text-blue-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-                <div>
-                  <h3 className="font-semibold text-gray-800">Usuários</h3>
-                  <p className="text-sm text-gray-600">Gerenciar usuários do sistema</p>
-                </div>
-              </div>
-            </a>
-
-            <a
-              href="/configuracoes/filiais"
-              className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200"
-            >
-              <div className="flex items-center">
-                <svg className="w-8 h-8 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <div>
-                  <h3 className="font-semibold text-gray-800">Filiais</h3>
-                  <p className="text-sm text-gray-600">Gerenciar filiais das empresas</p>
-                </div>
-              </div>
-            </a>
-
-            <a
-              href="/configuracoes/email"
-              className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200"
-            >
-              <div className="flex items-center">
-                <svg className="w-8 h-8 text-purple-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                <div>
-                  <h3 className="font-semibold text-gray-800">Email</h3>
-                  <p className="text-sm text-gray-600">Configurar servidor de email</p>
-                </div>
-              </div>
-            </a>
-
-            <a
-              href="/configuracoes/relatorios"
-              className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition duration-200"
-            >
-              <div className="flex items-center">
-                <svg className="w-8 h-8 text-orange-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <div>
-                  <h3 className="font-semibold text-gray-800">Relatórios</h3>
-                  <p className="text-sm text-gray-600">Configurar templates de relatórios</p>
-                </div>
-              </div>
-            </a>
+          <div className="text-right">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Plano</p>
+            <span className="inline-flex mt-0.5 items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300">
+              {PLAN_LABEL[tenant.plan_id] ?? tenant.plan_id}
+            </span>
           </div>
         </div>
+      )}
 
-        {/* Outras configurações podem ser adicionadas aqui */}
+      {/* Seção: Acesso */}
+      <div>
+        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Acesso e Usuários</p>
+        <div className="space-y-2">
+          <ConfigCard
+            to="/configuracoes/usuarios"
+            title="Usuários"
+            desc="Adicionar, editar e remover usuários que acessam o sistema"
+            icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>}
+          />
+          <ConfigCard
+            to="/configuracoes/permissoes"
+            title="Permissões"
+            desc="Definir o que cada perfil (admin, gerente, usuário) pode acessar"
+            icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>}
+          />
+        </div>
+      </div>
+
+      {/* Seção: Empresa */}
+      <div>
+        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Empresa e Estrutura</p>
+        <div className="space-y-2">
+          <ConfigCard
+            to="/configuracoes/filiais"
+            title="Empresas e Filiais"
+            desc="Gerenciar empresas do tenant e suas filiais"
+            icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" /></svg>}
+          />
+        </div>
+      </div>
+
+      {/* Seção: Conta */}
+      <div>
+        <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Conta e Assinatura</p>
+        <div className="space-y-2">
+          <ConfigCard
+            to="/perfil"
+            title="Meu Perfil"
+            desc="Nome, e-mail, senha e preferências pessoais"
+            icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
+          />
+          <ConfigCard
+            to="/subscription-management"
+            title="Assinatura"
+            desc="Ver plano atual, fazer upgrade ou gerenciar pagamento"
+            badge="Stripe"
+            icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
 export default Configuracoes;
-
