@@ -145,10 +145,6 @@ export default function Layout({ children }: LayoutProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         <SidebarLink to="/app" label="Início" iconD={icons.home} />
 
-        {hasModuleAccess('servico_logistico') && (
-          <SidebarLink to="/servico-logistico" label="Serviço Logístico" iconD={icons.truck} />
-        )}
-
         {hasModuleAccess('cadastros') && (
           <SubMenu menuKey="cadastros" label="Cadastros" iconD={icons.users}>
             <SubLink to="/cadastros/pessoas" label="Pessoas" />
@@ -181,10 +177,6 @@ export default function Layout({ children }: LayoutProps) {
             <SubLink to="/estoque/locais" label="Locais" />
             <SubLink to="/estoque/instrucoes" label="Instruções" />
           </SubMenu>
-        )}
-
-        {hasModuleAccess('monitoramento') && (
-          <SidebarLink to="/monitoramento" label="Monitoramento" iconD={icons.chart} />
         )}
 
         <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
