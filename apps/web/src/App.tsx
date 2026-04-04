@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, ReactNode } from 'react';
 import { authService } from './services/auth';
 import Login from './pages/Login';
@@ -79,81 +79,20 @@ interface ProtectedRouteProps {
 
 function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [checkingSubscription, setCheckingSubscription] = useState(true);
-  const location = useLocation();
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const authenticated = authService.isAuthenticated();
-      setIsAuthenticated(authenticated);
+    setIsAuthenticated(authService.isAuthenticated());
+  }, []);
 
-      // Rotas que não precisam verificar subscription/tenant
-      const exemptRoutes = [
-        '/payment-pending',
-        '/subscription-expired',
-        '/profile',
-        '/perfil'
-      ];
-      const isExemptRoute = exemptRoutes.includes(location.pathname) || 
-                           location.pathname.startsWith('/checkout');
-      
-      // Se estiver autenticado e não estiver nas rotas especiais, verificar tenant e subscription
-      if (authenticated && !isExemptRoute) {
-        
-        // Verificar se o tenant está ativo
-        const tenantStr = localStorage.getItem('tenant');
-        if (tenantStr) {
-          try {
-            const tenant = JSON.parse(tenantStr);
-            if (tenant.is_active === false) {
-              // Tenant desativado, redirecionar para tela de assinatura expirada
-              window.location.href = '/subscription-expired';
-              return;
-            }
-          } catch (e) {
-            // Ignorar erro de parsing
-          }
-        }
-
-        // Verificar subscription
-        try {
-          const { paymentsService } = await import('./services/payments');
-          const subscription = await paymentsService.getCurrentSubscription();
-          
-          // Se subscription está pending ou past_due, redirecionar para payment-pending
-          if (subscription.status === 'pending' || subscription.status === 'past_due') {
-            window.location.href = '/payment-pending';
-            return;
-          }
-          
-          // Se subscription está canceled ou expired, redirecionar para subscription-expired
-          if (subscription.status === 'canceled' || subscription.status === 'expired') {
-            window.location.href = '/subscription-expired';
-            return;
-          }
-        } catch (err: any) {
-          // Se der erro 404, não há subscription (permitir acesso)
-          // Se der erro 402, está pending (redirecionar)
-          if (err.response?.status === 402) {
-            window.location.href = '/payment-pending';
-            return;
-          }
-          // Outros erros: permitir acesso (pode ser problema de conexão)
-        }
-      }
-      
-      setCheckingSubscription(false);
-    };
-
-    checkAuth();
-  }, [location.pathname]);
-
-  if (isAuthenticated === null || checkingSubscription) {
+  if (isAuthenticated === null) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
+      <div className="flex items-center justify-center min-h-screen bg-surface">
+        <div className="flex flex-col items-center gap-3">
+          <svg className="animate-spin w-8 h-8 text-brand-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-slate-400 text-sm">Carregando...</p>
         </div>
       </div>
     );

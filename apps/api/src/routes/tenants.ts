@@ -129,4 +129,62 @@ app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) =>
   return c.json({ id, message: 'Filial criada com sucesso.' }, 201)
 })
 
+// POST /api/tenant/info/subscription/portal — abre o Stripe Customer Portal
+app.post('/subscription/portal', async (c) => {
+  const tenant = c.get('tenant')
+
+  const tenantData = await c.env.DB_SHARED
+    .prepare('SELECT stripe_customer_id, plan_id, status FROM tenants WHERE id = ?')
+    .bind(tenant.tenantId)
+    .first<{ stripe_customer_id: string | null; plan_id: string; status: string }>()
+
+  if (!tenantData?.stripe_customer_id) {
+    return c.json({ error: 'Nenhuma assinatura Stripe ativa para este tenant.' }, 404)
+  }
+
+  const frontendUrl = c.env.FRONTEND_URL || 'http://localhost:5173'
+
+  const params = new URLSearchParams({
+    customer: tenantData.stripe_customer_id,
+    return_url: `${frontendUrl}/subscription-management`,
+  })
+
+  const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  })
+
+  if (!portalRes.ok) {
+    const err = await portalRes.json() as { error?: { message?: string } }
+    console.error('[Portal] Stripe error:', err)
+    return c.json({ error: err.error?.message || 'Erro ao abrir portal de assinatura.' }, 500)
+  }
+
+  const portalSession = await portalRes.json() as { url: string }
+  return c.json({ url: portalSession.url })
+})
+
+// GET /api/tenant/info/subscription — dados da assinatura atual
+app.get('/subscription', async (c) => {
+  const tenant = c.get('tenant')
+
+  const data = await c.env.DB_SHARED
+    .prepare(`
+      SELECT t.plan_id, t.status, t.stripe_customer_id, t.subscription_expires_at,
+             p.nome as plan_nome, p.preco_mensal, p.preco_anual,
+             p.max_empresas, p.max_filiais, p.max_usuarios
+      FROM tenants t
+      LEFT JOIN plans p ON p.id = t.plan_id
+      WHERE t.id = ?
+    `)
+    .bind(tenant.tenantId)
+    .first()
+
+  return c.json({ subscription: data })
+})
+
 export default app

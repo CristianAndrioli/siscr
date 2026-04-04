@@ -1,337 +1,203 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { paymentsService, type SubscriptionStatus } from '../services/payments';
-import { publicService, type Plan } from '../services/public';
+import { useNavigate, Link } from 'react-router-dom';
+import api from '../services/api';
 import { authService } from '../services/auth';
 
-function SubscriptionManagement() {
+interface SubscriptionData {
+  plan_id: string;
+  status: string;
+  stripe_customer_id: string | null;
+  subscription_expires_at: string | null;
+  plan_nome: string;
+  preco_mensal: number;
+  preco_anual: number;
+  max_empresas: number;
+  max_filiais: number;
+  max_usuarios: number;
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  active:    { label: 'Ativa',      color: 'bg-green-500/15 text-green-400 border-green-500/20' },
+  suspended: { label: 'Suspensa',   color: 'bg-red-500/15 text-red-400 border-red-500/20' },
+  cancelled: { label: 'Cancelada',  color: 'bg-slate-500/15 text-slate-400 border-slate-500/20' },
+};
+
+export default function SubscriptionManagement() {
   const navigate = useNavigate();
-  const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
-  const [selectedBillingCycle, setSelectedBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
   useEffect(() => {
     if (!authService.isAuthenticated()) {
       navigate('/login');
       return;
     }
-    loadData();
+    loadSubscription();
   }, [navigate]);
 
-  const loadData = async () => {
+  const loadSubscription = async () => {
     try {
       setLoading(true);
       setError('');
-      
-      const [subscriptionData, plansData] = await Promise.all([
-        paymentsService.getCurrentSubscription(),
-        publicService.getPlans(),
-      ]);
-      
-      setSubscription(subscriptionData);
-      setPlans(plansData);
-      setSelectedPlanId(subscriptionData.plan.id);
-      setSelectedBillingCycle(subscriptionData.billing_cycle as 'monthly' | 'yearly');
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        navigate('/plans');
-        return;
-      }
-      setError(err.response?.data?.error || 'Erro ao carregar dados da assinatura');
+      const { data } = await api.get('/tenant/info/subscription');
+      setSubscription(data.subscription);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setError(axiosErr.response?.data?.error || 'Erro ao carregar dados da assinatura.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpgradeDowngrade = async () => {
-    if (!selectedPlanId) {
-      setError('Selecione um plano');
-      return;
-    }
-
-    if (selectedPlanId === subscription?.plan.id && selectedBillingCycle === subscription?.billing_cycle) {
-      setError('Você já está neste plano');
-      return;
-    }
-
-    setProcessing(true);
-    setError('');
-
+  const handleOpenPortal = async () => {
     try {
-      await paymentsService.updateSubscription(selectedPlanId, selectedBillingCycle);
-      await loadData(); // Recarregar dados
-      alert('Plano atualizado com sucesso!');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao atualizar plano');
+      setPortalLoading(true);
+      setError('');
+      const { data } = await api.post('/tenant/info/subscription/portal');
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      const msg = axiosErr.response?.data?.error || '';
+      if (msg.includes('Nenhuma assinatura')) {
+        setError('Sua conta está no plano gratuito. Faça upgrade para gerenciar via Stripe.');
+      } else {
+        setError(msg || 'Erro ao abrir o portal de assinatura. Tente novamente.');
+      }
     } finally {
-      setProcessing(false);
+      setPortalLoading(false);
     }
   };
 
-  const handleCancel = async () => {
-    setProcessing(true);
-    setError('');
-
-    try {
-      await paymentsService.cancelSubscription();
-      await loadData(); // Recarregar dados
-      setShowCancelConfirm(false);
-      alert('Assinatura será cancelada ao fim do período atual');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao cancelar assinatura');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const handleReactivate = async () => {
-    setProcessing(true);
-    setError('');
-
-    try {
-      await paymentsService.reactivateSubscription();
-      await loadData(); // Recarregar dados
-      alert('Assinatura reativada com sucesso!');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao reativar assinatura');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '—';
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
     });
-  };
-
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'trial':
-        return 'bg-blue-100 text-blue-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'past_due':
-        return 'bg-orange-100 text-orange-800';
-      case 'canceled':
-        return 'bg-gray-100 text-gray-800';
-      case 'expired':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-700">Carregando...</p>
-      </div>
-    );
-  }
-
-  if (!subscription) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Nenhuma Assinatura</h2>
-          <p className="text-gray-600 mb-6">Você não possui uma assinatura ativa.</p>
-          <button
-            onClick={() => navigate('/plans')}
-            className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700"
-          >
-            Ver Planos Disponíveis
-          </button>
+      <div className="p-6 flex items-center justify-center min-h-64">
+        <div className="flex items-center gap-3 text-slate-400">
+          <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Carregando assinatura...
         </div>
       </div>
     );
   }
 
-  const currentPlan = plans.find((p) => p.id === subscription.plan.id);
-  const availablePlans = plans.filter((p) => !p.is_trial);
+  const statusInfo = subscription ? (STATUS_LABELS[subscription.status] ?? { label: subscription.status, color: 'bg-slate-500/15 text-slate-400 border-slate-500/20' }) : null;
+  const isFree = !subscription?.stripe_customer_id || subscription?.plan_id === 'free';
 
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Gerenciar Assinatura</h1>
+    <div className="p-6 max-w-2xl mx-auto">
+      <div className="mb-8">
+        <h1 className="font-display text-2xl font-bold text-white mb-1">Assinatura</h1>
+        <p className="text-slate-400 text-sm">Gerencie seu plano e dados de cobrança.</p>
+      </div>
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+        <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          <span>⚠</span>
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Plano Atual */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Plano Atual</h2>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-600">Plano</p>
-            <p className="text-lg font-semibold text-gray-900">{subscription.plan.name}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Status</p>
-            <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getStatusBadgeColor(subscription.status)}`}>
-              {subscription.status_display}
-            </span>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Ciclo de Cobrança</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {subscription.billing_cycle === 'monthly' ? 'Mensal' : 'Anual'}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Próxima Cobrança</p>
-            <p className="text-lg font-semibold text-gray-900">
-              {formatDate(subscription.current_period_end)}
-            </p>
-          </div>
-        </div>
+      {subscription && (
+        <>
+          {/* Card do plano atual */}
+          <div className="bg-surface-card border border-surface-border rounded-2xl p-6 mb-4">
+            <div className="flex items-start justify-between mb-6">
+              <div>
+                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Plano atual</div>
+                <div className="font-display text-2xl font-bold text-white">{subscription.plan_nome || subscription.plan_id}</div>
+              </div>
+              {statusInfo && (
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${statusInfo.color}`}>
+                  {statusInfo.label}
+                </span>
+              )}
+            </div>
 
-        {currentPlan && (
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-sm text-gray-600 mb-2">Preço</p>
-            <p className="text-2xl font-bold text-indigo-600">
-              {subscription.billing_cycle === 'monthly' 
-                ? `R$ ${parseFloat(currentPlan.price_monthly).toFixed(2)}/mês`
-                : currentPlan.price_yearly 
-                  ? `R$ ${parseFloat(currentPlan.price_yearly).toFixed(2)}/ano`
-                  : `R$ ${parseFloat(currentPlan.price_monthly).toFixed(2)}/mês`}
-            </p>
-          </div>
-        )}
-      </div>
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-3 rounded-xl bg-surface/50 border border-surface-border">
+                <div className="text-xl font-bold text-white">{subscription.max_empresas}</div>
+                <div className="text-xs text-slate-500 mt-0.5">Empresa{subscription.max_empresas !== 1 ? 's' : ''}</div>
+              </div>
+              <div className="text-center p-3 rounded-xl bg-surface/50 border border-surface-border">
+                <div className="text-xl font-bold text-white">{subscription.max_filiais}</div>
+                <div className="text-xs text-slate-500 mt-0.5">Filiais</div>
+              </div>
+              <div className="text-center p-3 rounded-xl bg-surface/50 border border-surface-border">
+                <div className="text-xl font-bold text-white">{subscription.max_usuarios}</div>
+                <div className="text-xs text-slate-500 mt-0.5">Usuários</div>
+              </div>
+            </div>
 
-      {/* Alterar Plano */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Alterar Plano</h2>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Selecionar Plano
-          </label>
-          <select
-            value={selectedPlanId || ''}
-            onChange={(e) => setSelectedPlanId(Number(e.target.value))}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            disabled={processing}
-          >
-            {availablePlans.map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {plan.name} - R$ {parseFloat(plan.price_monthly).toFixed(2)}/mês
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Ciclo de Cobrança
-          </label>
-          <div className="flex gap-4">
-            <label className="flex items-center">
-              <input
-                type="radio"
-                value="monthly"
-                checked={selectedBillingCycle === 'monthly'}
-                onChange={(e) => setSelectedBillingCycle(e.target.value as 'monthly')}
-                className="mr-2"
-                disabled={processing}
-              />
-              Mensal
-            </label>
-            <label className="flex items-center">
-              <input
-                type="radio"
-                value="yearly"
-                checked={selectedBillingCycle === 'yearly'}
-                onChange={(e) => setSelectedBillingCycle(e.target.value as 'yearly')}
-                className="mr-2"
-                disabled={processing}
-              />
-              Anual
-            </label>
-          </div>
-        </div>
-
-        <button
-          onClick={handleUpgradeDowngrade}
-          disabled={processing || (selectedPlanId === subscription.plan.id && selectedBillingCycle === subscription.billing_cycle)}
-          className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        >
-          {processing ? 'Processando...' : 'Atualizar Plano'}
-        </button>
-      </div>
-
-      {/* Ações */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Ações</h2>
-        
-        {subscription.status === 'canceled' || subscription.status === 'expired' ? (
-          <button
-            onClick={handleReactivate}
-            disabled={processing}
-            className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed mb-4"
-          >
-            {processing ? 'Processando...' : 'Reativar Assinatura'}
-          </button>
-        ) : (
-          <>
-            {!showCancelConfirm ? (
-              <button
-                onClick={() => setShowCancelConfirm(true)}
-                disabled={processing}
-                className="w-full bg-red-600 text-white py-3 rounded-lg font-semibold text-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed mb-4"
-              >
-                Cancelar Assinatura
-              </button>
-            ) : (
-              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-yellow-800 mb-4">
-                  Tem certeza que deseja cancelar sua assinatura? Ela será cancelada ao fim do período atual ({formatDate(subscription.current_period_end)}).
-                </p>
-                <div className="flex gap-4">
-                  <button
-                    onClick={handleCancel}
-                    disabled={processing}
-                    className="flex-1 bg-red-600 text-white py-2 rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                  >
-                    {processing ? 'Processando...' : 'Sim, Cancelar'}
-                  </button>
-                  <button
-                    onClick={() => setShowCancelConfirm(false)}
-                    disabled={processing}
-                    className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg font-semibold hover:bg-gray-400 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                  >
-                    Cancelar
-                  </button>
-                </div>
+            {subscription.preco_mensal > 0 && (
+              <div className="flex items-baseline gap-1 text-brand-300">
+                <span className="text-2xl font-bold">
+                  R$ {subscription.preco_mensal.toFixed(2).replace('.', ',')}
+                </span>
+                <span className="text-sm text-slate-500">/mês</span>
               </div>
             )}
-          </>
-        )}
 
-        <button
-          onClick={() => navigate('/plans')}
-          className="w-full bg-gray-200 text-gray-800 py-3 rounded-lg font-semibold text-lg hover:bg-gray-300"
-        >
-          Ver Todos os Planos
-        </button>
-      </div>
+            {subscription.subscription_expires_at && (
+              <div className="mt-3 text-xs text-slate-500">
+                Válido até: <span className="text-slate-300">{formatDate(subscription.subscription_expires_at)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Ação principal */}
+          {isFree ? (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-center">
+              <div className="text-slate-400 text-sm mb-4">
+                Você está no plano gratuito. Faça upgrade para desbloquear mais recursos.
+              </div>
+              <Link to="/plans" className="btn-primary px-8 py-3">
+                Ver planos disponíveis →
+              </Link>
+            </div>
+          ) : (
+            <div className="bg-surface-card border border-surface-border rounded-2xl p-6">
+              <h2 className="text-white font-semibold mb-2">Portal de cobrança</h2>
+              <p className="text-slate-400 text-sm mb-5">
+                Acesse o portal do Stripe para alterar de plano, atualizar dados de pagamento,
+                baixar faturas ou cancelar a assinatura.
+              </p>
+              <button
+                onClick={handleOpenPortal}
+                disabled={portalLoading}
+                className="btn-primary w-full py-3.5 text-base"
+              >
+                {portalLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Abrindo portal...
+                  </span>
+                ) : (
+                  'Gerenciar assinatura no Stripe →'
+                )}
+              </button>
+              <p className="text-xs text-slate-600 text-center mt-3">
+                Você será redirecionado para o portal seguro do Stripe.
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
-
-export default SubscriptionManagement;
-
