@@ -78,7 +78,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   })
 })
 
-// POST /api/auth/signup — cria tenant + usuário admin
+// POST /api/auth/signup — cria tenant + usuário admin (plano free)
 app.post('/signup', zValidator('json', signupSchema), async (c) => {
   const { email, password, nome, tenantNome, tenantSlug, planId } = c.req.valid('json')
 
@@ -95,19 +95,112 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
   const tenantId = crypto.randomUUID()
   const userId = crypto.randomUUID()
   const passwordHash = await hashPassword(password)
+  const now = new Date().toISOString()
 
   // Criar tenant e usuário admin atomicamente
   await c.env.DB_SHARED.batch([
     c.env.DB_SHARED.prepare(
       'INSERT INTO tenants (id, slug, nome, plan_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(tenantId, tenantSlug, tenantNome, planId ?? 'free', 'active', new Date().toISOString()),
+    ).bind(tenantId, tenantSlug, tenantNome, planId ?? 'free', 'active', now),
 
     c.env.DB_SHARED.prepare(
-      'INSERT INTO users (id, tenant_id, email, password_hash, nome, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).bind(userId, tenantId, email, passwordHash, nome, 'admin', new Date().toISOString()),
+      'INSERT INTO users (id, tenant_id, email, password_hash, nome, role, ativo, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
+    ).bind(userId, tenantId, email, passwordHash, nome, 'admin', now),
   ])
 
-  return c.json({ message: 'Conta criada com sucesso!', tenantSlug }, 201)
+  // Criar sessão imediatamente para auto-login
+  const sessionToken = crypto.randomUUID()
+  const SESSION_TTL = 60 * 60 * 24 * 7 // 7 dias
+
+  await c.env.KV_SESSIONS.put(
+    `session:${sessionToken}`,
+    JSON.stringify({
+      userId,
+      email,
+      nome,
+      role: 'admin',
+      tenantId,
+      tenantSlug,
+      empresaId: null,
+      filialId: null,
+    }),
+    { expirationTtl: SESSION_TTL }
+  )
+
+  return c.json({
+    message: 'Conta criada com sucesso!',
+    tenantSlug,
+    token: sessionToken,
+    user: { id: userId, email, nome, role: 'admin' },
+    tenant: { id: tenantId, slug: tenantSlug },
+  }, 201)
+})
+
+// GET /api/auth/session-status?tenant=slug — verifica se tenant foi criado (pós-Stripe)
+app.get('/session-status', async (c) => {
+  const tenantSlug = c.req.query('tenant')
+  if (!tenantSlug) {
+    return c.json({ error: 'Parâmetro tenant obrigatório.' }, 400)
+  }
+
+  // Verificar se tenant existe e está ativo
+  const tenant = await c.env.DB_SHARED
+    .prepare('SELECT id, slug, nome FROM tenants WHERE slug = ? AND status = ?')
+    .bind(tenantSlug, 'active')
+    .first<{ id: string; slug: string; nome: string }>()
+
+  if (!tenant) {
+    return c.json({ status: 'pending' })
+  }
+
+  // Verificar se há token de auto-login disponível (gravado pelo webhook)
+  const autoLoginRaw = await c.env.KV_SESSIONS.get(`auto_login:${tenantSlug}`)
+  if (!autoLoginRaw) {
+    // Tenant existe mas token já foi consumido ou expirou — pedir login manual
+    return c.json({ status: 'ready', requiresLogin: true })
+  }
+
+  const autoLogin = JSON.parse(autoLoginRaw) as {
+    email: string; userId: string; tenantId: string; tenantSlug: string
+  }
+
+  // Buscar dados completos do usuário
+  const user = await c.env.DB_SHARED
+    .prepare('SELECT id, email, nome, role FROM users WHERE id = ? AND tenant_id = ?')
+    .bind(autoLogin.userId, tenant.id)
+    .first<{ id: string; email: string; nome: string; role: string }>()
+
+  if (!user) {
+    return c.json({ status: 'ready', requiresLogin: true })
+  }
+
+  // Criar sessão e consumir o token de auto-login (one-time use)
+  const sessionToken = crypto.randomUUID()
+  const SESSION_TTL = 60 * 60 * 24 * 7 // 7 dias
+
+  await c.env.KV_SESSIONS.put(
+    `session:${sessionToken}`,
+    JSON.stringify({
+      userId: user.id,
+      email: user.email,
+      nome: user.nome,
+      role: user.role,
+      tenantId: tenant.id,
+      tenantSlug: tenant.slug,
+      empresaId: null,
+      filialId: null,
+    }),
+    { expirationTtl: SESSION_TTL }
+  )
+
+  await c.env.KV_SESSIONS.delete(`auto_login:${tenantSlug}`)
+
+  return c.json({
+    status: 'ready',
+    token: sessionToken,
+    user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
+    tenant: { id: tenant.id, slug: tenant.slug },
+  })
 })
 
 // POST /api/auth/logout

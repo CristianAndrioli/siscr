@@ -76,18 +76,24 @@ export default function Signup() {
     setLoading(true);
     try {
       if (plan === 'free' || plan === 'trial') {
-        // Plano free: criar direto e redirecionar para login
-        await axios.post(`${API_BASE_URL}/api/auth/signup`, {
+        // Plano free: criar conta, receber sessão e redirecionar direto ao app
+        const { data } = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
           nome,
           email,
           password,
           tenantNome: empresaNome,
           tenantSlug,
-          plan,
+          planId: plan,
         });
+        // Gravar sessão no sessionStorage para o CheckoutSuccess consumir
+        sessionStorage.setItem('signup_session', JSON.stringify({
+          token: data.token,
+          user: data.user,
+          tenant: data.tenant,
+        }));
         navigate(`/checkout/success?tenant=${tenantSlug}&free=1`);
       } else {
-        // Planos pagos: criar sessão e ir para Stripe Checkout
+        // Planos pagos: enviar dados ao backend que cria sessão Stripe
         const { data } = await axios.post(`${API_BASE_URL}/api/subscriptions/checkout`, {
           nome,
           email,

@@ -63,12 +63,21 @@ app.post('/', async (c) => {
 
             console.log(`[Webhook] Tenant inserido, criando usuário...`)
 
+            const userId = crypto.randomUUID()
+
             await c.env.DB_SHARED
               .prepare(`INSERT INTO users (id, tenant_id, nome, email, password_hash, role, ativo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'admin', 1, ?, ?)`)
-              .bind(crypto.randomUUID(), tenantId, pending.nome, pending.email, passwordHash, now, now)
+              .bind(userId, tenantId, pending.nome, pending.email, passwordHash, now, now)
               .run()
 
             await c.env.KV_TENANT_CACHE.delete(pendingKey)
+
+            // Gravar token de auto-login para o frontend consumir (TTL: 10 minutos)
+            await c.env.KV_SESSIONS.put(
+              `auto_login:${tenantSlug}`,
+              JSON.stringify({ email: pending.email, userId, tenantId, tenantSlug }),
+              { expirationTtl: 600 }
+            )
 
             console.log(`[Webhook] ✅ Tenant criado com sucesso: ${tenantSlug}`)
           } else {

@@ -8,14 +8,22 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
 export interface LoginResponse {
   token: string;
-  user: { id: string; email: string; role: string };
+  user: { id: string; email: string; nome?: string; role: string };
   tenant: { id: string; slug: string };
 }
 
 export interface SignupResponse {
   message: string;
   tenantSlug: string;
+  token: string;
+  user: { id: string; email: string; nome: string; role: string };
+  tenant: { id: string; slug: string };
 }
+
+export type SessionStatusResponse =
+  | { status: 'pending' }
+  | { status: 'ready'; requiresLogin: true }
+  | { status: 'ready'; requiresLogin?: false; token: string; user: { id: string; email: string; nome: string; role: string }; tenant: { id: string; slug: string } }
 
 export const authService = {
   /**
@@ -104,6 +112,29 @@ export const authService = {
     const str = localStorage.getItem('user');
     if (!str) return null;
     try { return JSON.parse(str); } catch { return null; }
+  },
+
+  /**
+   * Verifica se o tenant já foi criado após pagamento no Stripe.
+   * Retorna status: 'pending' | 'ready'. Quando ready sem requiresLogin,
+   * inclui token de sessão para auto-login imediato.
+   */
+  sessionStatus: async (tenantSlug: string): Promise<SessionStatusResponse> => {
+    const response = await axios.get<SessionStatusResponse>(
+      `${API_BASE_URL}/api/auth/session-status`,
+      { params: { tenant: tenantSlug } }
+    );
+    return response.data;
+  },
+
+  /**
+   * Salva sessão no localStorage (usado após auto-login).
+   */
+  saveSession: (data: { token: string; user: { id: string; email: string; nome?: string; role: string }; tenant: { id: string; slug: string } }) => {
+    localStorage.setItem('access_token', data.token);
+    localStorage.setItem('tenant_slug', data.tenant.slug);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('user_nome', data.user.nome || data.user.email || '');
   },
 };
 
