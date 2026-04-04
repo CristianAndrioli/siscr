@@ -1,360 +1,269 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCrud } from '../../hooks/useCrud';
-import { DetailView, DynamicForm, Alert } from '../../components/common';
-import { pessoasService } from '../../services/cadastros/pessoas';
-import { useAutoFormFields } from '../../hooks/useAutoFormFields';
-import { ESTADOS } from '../../utils/constants';
-import type { Pessoa } from '../../types';
+import { pessoasService, type Pessoa, type PessoaForm } from '../../services/cadastros/pessoas';
 
-/**
- * Página de detalhamento/edição/criação de Pessoa
- * Suporta visualização, edição e criação de registros
- */
+const TIPO_CADASTRO_OPTS = [
+  { value: 'cliente', label: 'Cliente' },
+  { value: 'fornecedor', label: 'Fornecedor' },
+  { value: 'funcionario', label: 'Funcionário' },
+  { value: 'transportadora', label: 'Transportadora' },
+];
+
+const TIPO_OPTS = [
+  { value: 'PF', label: 'Pessoa Física' },
+  { value: 'PJ', label: 'Pessoa Jurídica' },
+];
+
+const EMPTY: PessoaForm = {
+  tipo: 'PF',
+  tipoCadastro: 'cliente',
+  nome: '',
+  cpfCnpj: '',
+  email: '',
+  telefone: '',
+};
+
 export function PessoasDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [isEditing, setIsEditing] = useState(id === 'novo');
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [nextCode, setNextCode] = useState<number | null>(null);
-  const [formDataState, setFormDataState] = useState<Record<string, unknown> | null>(null);
-  
-  const {
-    currentRecord,
-    loading,
-    error,
-    loadRecord,
-    createRecord,
-    updateRecord,
-    handleDeleteRecord,
-  } = useCrud<Pessoa>({
-    service: pessoasService,
-    basePath: '/cadastros/pessoas',
-    getRecordId: (record) => record.codigo_cadastro,
-  });
+  const isNew = id === 'novo';
+
+  const [form, setForm] = useState<PessoaForm>(EMPTY);
+  const [record, setRecord] = useState<Pessoa | null>(null);
+  const [isEditing, setIsEditing] = useState(isNew);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (id && id !== 'novo') {
-      loadRecord(id);
-    } else if (id === 'novo') {
-      // Carregar próximo código quando for novo
-      pessoasService.proximoCodigo().then(response => {
-        setNextCode(response.proximo_codigo);
-      }).catch(err => {
-        console.error('Erro ao carregar próximo código:', err);
-      });
-    }
-  }, [id, loadRecord]);
-
-  // Criar objeto vazio com estrutura para gerar campos quando for novo
-  const sampleData = useMemo(() => {
-    if (id === 'novo') {
-      return {
-        codigo_cadastro: nextCode || '',
-        tipo: 'PF' as const,
-        cpf_cnpj: '',
-        nome_completo: '',
-        razao_social: '',
-        nome_fantasia: '',
-        inscricao_estadual: '',
-        contribuinte: true,
-        logradouro: '',
-        numero: '',
-        letra: '',
-        complemento: '',
-        bairro: '',
-        cidade: '',
-        estado: 'SC',
-        cep: '',
-        nome_contato: '',
-        telefone_fixo: '',
-        telefone_celular: '',
-        email: '',
-        cargo: '',
-        comissoes: 0,
-        observacoes: '',
-      };
-    }
-    return (currentRecord || {}) as Record<string, unknown>;
-  }, [id, nextCode, currentRecord]);
-
-  // Gerar campos do formulário automaticamente
-  const formFields = useAutoFormFields(sampleData, {
-    hiddenFields: [], // Mostrar todos os campos
-    readOnlyFields: ['codigo_cadastro'], // Código é somente leitura
-    fieldConfigs: {
-      codigo_cadastro: {
-        label: 'Código',
-        readOnly: true,
-      },
-      tipo: {
-        type: 'select',
-        options: [
-          { value: 'PF', label: 'Pessoa Física' },
-          { value: 'PJ', label: 'Pessoa Jurídica' },
-        ],
-      },
-      estado: {
-        type: 'select',
-        options: ESTADOS.map(estado => ({
-          value: estado.value,
-          label: estado.label,
-        })),
-        section: 'Endereço',
-      },
-      contribuinte: {
-        type: 'checkbox',
-        label: 'Contribuinte ICMS',
-      },
-      observacoes: {
-        type: 'textarea',
-        rows: 4,
-        section: 'Observações',
-      },
-      // Agrupar campos em seções
-      logradouro: { section: 'Endereço' },
-      numero: { section: 'Endereço' },
-      letra: { section: 'Endereço' },
-      complemento: { section: 'Endereço' },
-      bairro: { section: 'Endereço' },
-      cidade: { section: 'Endereço' },
-      cep: { section: 'Endereço' },
-      nome_contato: { section: 'Contato' },
-      telefone_fixo: { section: 'Contato' },
-      telefone_celular: { section: 'Contato' },
-      email: { section: 'Contato' },
-      cargo: { section: 'Contato' },
-      comissoes: { section: 'Contato' },
-    },
-  });
-
-  const saveRecord = async (formData: Record<string, unknown>, shouldCreateNew = false): Promise<void> => {
-    try {
-      setFormErrors({});
-      // Manter dados do formulário em caso de erro
-      setFormDataState(formData);
-      
-      // Garantir que codigo_cadastro esteja presente ao criar
-      const dataToSend = { ...formData } as Partial<Pessoa>;
-      if (id === 'novo') {
-        // Sempre garantir que o código esteja presente e seja um número
-        if (!dataToSend.codigo_cadastro || dataToSend.codigo_cadastro === '') {
-          if (nextCode) {
-            dataToSend.codigo_cadastro = nextCode;
-          } else {
-            // Se não tiver próximo código, buscar agora
-            const codeResponse = await pessoasService.proximoCodigo();
-            dataToSend.codigo_cadastro = codeResponse.proximo_codigo;
-          }
-        } else {
-          // Garantir que seja número
-          dataToSend.codigo_cadastro = typeof dataToSend.codigo_cadastro === 'number' 
-            ? dataToSend.codigo_cadastro 
-            : parseInt(String(dataToSend.codigo_cadastro), 10);
-        }
-        // Criar novo registro
-        await createRecord(dataToSend);
-        
-        if (shouldCreateNew) {
-          // Limpar formulário e carregar próximo código
-          setFormErrors({});
-          const codeResponse = await pessoasService.proximoCodigo();
-          setNextCode(codeResponse.proximo_codigo);
-          // Limpar formDataState para resetar o formulário (será recriado pelo sampleData)
-          setFormDataState(null);
-          // Manter na mesma rota /novo - o formulário será recriado automaticamente
-        } else {
-          navigate('/cadastros/pessoas');
-        }
-      } else {
-        // Atualizar registro existente
-        await updateRecord(id, dataToSend);
-        setIsEditing(false);
-      }
-    } catch (err) {
-      // Tratar erros de validação
-      const axiosError = err as { response?: { data?: Record<string, unknown> } };
-      if (axiosError.response?.data) {
-        const apiErrors = axiosError.response.data;
-        const errors: Record<string, string> = {};
-        
-        Object.keys(apiErrors).forEach(key => {
-          const errorValue = apiErrors[key];
-          if (Array.isArray(errorValue)) {
-            errors[key] = String(errorValue[0]);
-          } else if (typeof errorValue === 'string') {
-            errors[key] = errorValue;
-          }
+    if (isNew) return;
+    setLoading(true);
+    pessoasService.get(id!)
+      .then(data => {
+        setRecord(data);
+        setForm({
+          tipo: data.tipo,
+          tipoCadastro: data.tipo_cadastro,
+          nome: data.nome,
+          cpfCnpj: data.cpf_cnpj ?? '',
+          email: data.email ?? '',
+          telefone: data.telefone ?? '',
         });
-        
-        setFormErrors(errors);
+      })
+      .catch(() => setError('Erro ao carregar registro.'))
+      .finally(() => setLoading(false));
+  }, [id, isNew]);
+
+  const set = (field: keyof PessoaForm, value: string) =>
+    setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      if (isNew) {
+        await pessoasService.create(form);
+        navigate('/cadastros/pessoas');
       } else {
-        setFormErrors({ _general: 'Erro ao salvar. Tente novamente.' });
+        await pessoasService.update(id!, form);
+        setIsEditing(false);
+        // recarregar
+        const updated = await pessoasService.get(id!);
+        setRecord(updated);
       }
-      // Não navegar - manter formulário com dados preenchidos
+    } catch {
+      setError('Erro ao salvar. Verifique os dados e tente novamente.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSubmit = async (formData: Record<string, unknown>): Promise<void> => {
-    await saveRecord(formData, false);
-  };
-
-  const handleSaveAndNew = async (formData: Record<string, unknown>): Promise<void> => {
-    await saveRecord(formData, true);
-  };
-
-  const handleCancel = (): void => {
-    if (id === 'novo') {
+  const handleDelete = async () => {
+    if (!window.confirm('Deseja excluir esta pessoa?')) return;
+    try {
+      await pessoasService.delete(id!);
       navigate('/cadastros/pessoas');
-    } else {
-      setIsEditing(false);
+    } catch {
+      setError('Erro ao excluir.');
     }
   };
 
-  // Configuração dos campos para exibição (DEVE vir antes de qualquer retorno antecipado)
-  const fields = [
-    { key: 'codigo_cadastro', label: 'Código' },
-    { key: 'tipo', label: 'Tipo', render: (value: unknown) => (value === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica') },
-    { key: 'cpf_cnpj', label: 'CPF/CNPJ' },
-    { key: 'nome_completo', label: 'Nome Completo' },
-    { key: 'razao_social', label: 'Razão Social' },
-    { key: 'nome_fantasia', label: 'Nome Fantasia' },
-    { key: 'inscricao_estadual', label: 'Inscrição Estadual' },
-    { key: 'contribuinte', label: 'Contribuinte ICMS', render: (value: unknown) => (value ? 'Sim' : 'Não') },
-    { key: 'logradouro', label: 'Logradouro' },
-    { key: 'numero', label: 'Número' },
-    { key: 'letra', label: 'Letra' },
-    { key: 'complemento', label: 'Complemento' },
-    { key: 'bairro', label: 'Bairro' },
-    { key: 'cidade', label: 'Cidade' },
-    { key: 'estado', label: 'Estado' },
-    { key: 'cep', label: 'CEP' },
-    { key: 'nome_contato', label: 'Nome do Contato' },
-    { key: 'telefone_fixo', label: 'Telefone Fixo' },
-    { key: 'telefone_celular', label: 'Telefone Celular' },
-    { key: 'email', label: 'Email' },
-    { key: 'cargo', label: 'Cargo' },
-    { key: 'comissoes', label: 'Comissões (%)' },
-    { key: 'observacoes', label: 'Observações' },
-  ];
-
-  // Gerar tabs (DEVE vir antes de qualquer retorno antecipado)
-  const tabs = useMemo(() => {
-    const detailTab = {
-      id: 'detalhamento',
-      label: 'Detalhamento',
-      content: (
-        <div className="space-y-6">
-          {error && (
-            <Alert type="error" message={error} onClose={() => {}} dismissible={false} />
-          )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {currentRecord && fields.map((field) => {
-              const value = (currentRecord as Record<string, unknown>)[field.key];
-              const displayValue = field.render ? field.render(value) : (value ?? '-');
-              return (
-                <div key={field.key} className="border-b border-gray-200 pb-2">
-                  <label className="text-sm font-medium text-gray-500">{field.label}</label>
-                  <p className="mt-1 text-sm text-gray-900">{displayValue}</p>
-                </div>
-              );
-            })}
-            {!currentRecord && (
-              <div className="col-span-2 text-center text-gray-500 py-8">
-                Carregando dados...
-              </div>
-            )}
-          </div>
-        </div>
-      ),
-    };
-    
-    return [detailTab];
-  }, [currentRecord, fields, error]);
-
-  // Se for novo ou estiver editando, mostrar formulário
-  if (id === 'novo' || isEditing) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {id === 'novo' ? 'Nova Pessoa' : 'Editar Pessoa'}
-            </h1>
-            <p className="mt-2 text-sm text-gray-500">
-              {id === 'novo' 
-                ? 'Preencha os dados para criar um novo cadastro'
-                : `Editando: ${currentRecord?.nome_completo || currentRecord?.razao_social || `Código ${id}`}`
-              }
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/cadastros/pessoas')}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
-
-        {formErrors._general && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {formErrors._general}
-          </div>
-        )}
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          {loading && id !== 'novo' && !currentRecord ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            </div>
-          ) : (
-            <DynamicForm
-              key={id === 'novo' && nextCode ? `new-${nextCode}` : `edit-${id}`}
-              fields={formFields}
-              initialData={formDataState !== null ? formDataState : (id === 'novo' ? sampleData : (currentRecord as Record<string, unknown>))}
-              onSubmit={handleSubmit}
-              onSaveAndNew={id === 'novo' ? handleSaveAndNew : undefined}
-              onCancel={handleCancel}
-              loading={loading}
-              errors={formErrors}
-              showSaveAndNew={id === 'novo'}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (loading && !currentRecord) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex items-center justify-center min-h-64">
+        <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
       </div>
     );
   }
 
   return (
-    <DetailView
-      title={currentRecord?.nome_completo || currentRecord?.razao_social || `Pessoa #${id}`}
-      subtitle={`Código: ${currentRecord?.codigo_cadastro || id}`}
-      tabs={tabs}
-      onEdit={() => setIsEditing(true)}
-      onDelete={() => handleDeleteRecord(id!)}
-      onBack={() => navigate('/cadastros/pessoas')}
-      loading={loading}
-      error={error}
-    />
+    <div className="max-w-2xl space-y-6">
+      {/* Cabeçalho */}
+      <div className="flex items-center justify-between">
+        <div>
+          <button
+            onClick={() => navigate('/cadastros/pessoas')}
+            className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-1 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Pessoas
+          </button>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            {isNew ? 'Nova Pessoa' : (record?.nome ?? 'Detalhe')}
+          </h1>
+        </div>
+        {!isNew && !isEditing && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+              Editar
+            </button>
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Excluir
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Modo visualização */}
+      {!isNew && !isEditing && record && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            {[
+              { label: 'Tipo', value: record.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
+              { label: 'Categoria', value: TIPO_CADASTRO_OPTS.find(o => o.value === record.tipo_cadastro)?.label ?? record.tipo_cadastro },
+              { label: 'Nome', value: record.nome },
+              { label: 'CPF/CNPJ', value: record.cpf_cnpj ?? '—' },
+              { label: 'E-mail', value: record.email ?? '—' },
+              { label: 'Telefone', value: record.telefone ?? '—' },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {/* Formulário (novo ou edição) */}
+      {(isNew || isEditing) && (
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Tipo <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={form.tipo}
+                onChange={e => set('tipo', e.target.value)}
+                required
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                {TIPO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Categoria <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={form.tipoCadastro}
+                onChange={e => set('tipoCadastro', e.target.value)}
+                required
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                {TIPO_CADASTRO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Nome <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.nome}
+                onChange={e => set('nome', e.target.value)}
+                required
+                placeholder="Nome completo ou razão social"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CPF/CNPJ</label>
+              <input
+                type="text"
+                value={form.cpfCnpj}
+                onChange={e => set('cpfCnpj', e.target.value)}
+                placeholder="000.000.000-00"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
+              <input
+                type="text"
+                value={form.telefone}
+                onChange={e => set('telefone', e.target.value)}
+                placeholder="(48) 99999-9999"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => set('email', e.target.value)}
+                placeholder="contato@empresa.com.br"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => isNew ? navigate('/cadastros/pessoas') : setIsEditing(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 
 export default PessoasDetail;
-

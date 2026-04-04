@@ -1,279 +1,250 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCrud } from '../../hooks/useCrud';
-import { DetailView, DynamicForm } from '../../components/common';
-import { servicosService } from '../../services/cadastros/servicos';
-import { useAutoFormFields } from '../../hooks/useAutoFormFields';
-import type { Servico } from '../../types';
+import { servicosService, type Servico, type ServicoForm } from '../../services/cadastros/servicos';
 
-/**
- * Página de detalhamento/edição/criação de Serviço
- * Suporta visualização, edição e criação de registros
- */
+const UNIDADES = ['UN', 'HR', 'DIA', 'MES', 'KM', 'SV'];
+
+const EMPTY: ServicoForm = {
+  codigo: '',
+  descricao: '',
+  unidade: 'UN',
+  preco: 0,
+  ativo: true,
+};
+
 export function ServicosDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [isEditing, setIsEditing] = useState(id === 'novo');
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [nextCode, setNextCode] = useState<number | null>(null);
-  const [formDataState, setFormDataState] = useState<Record<string, unknown> | null>(null);
-  
-  const {
-    currentRecord,
-    loading,
-    error,
-    loadRecord,
-    createRecord,
-    updateRecord,
-    handleDeleteRecord,
-  } = useCrud<Servico>({
-    service: servicosService,
-    basePath: '/cadastros/servicos',
-    getRecordId: (record) => record.codigo_servico,
-  });
+  const isNew = id === 'novo';
+
+  const [form, setForm] = useState<ServicoForm>(EMPTY);
+  const [record, setRecord] = useState<Servico | null>(null);
+  const [isEditing, setIsEditing] = useState(isNew);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (id && id !== 'novo') {
-      loadRecord(id);
-    } else if (id === 'novo') {
-      servicosService.proximoCodigo().then(response => {
-        setNextCode(response.proximo_codigo);
-      }).catch(err => {
-        console.error('Erro ao carregar próximo código:', err);
-      });
-    }
-  }, [id, loadRecord]);
-
-  const sampleData = useMemo(() => {
-    if (id === 'novo') {
-      return {
-        codigo_servico: nextCode || '',
-        nome: '',
-        descricao: '',
-        ativo: true,
-        valor_base: 0.00,
-        tipo_contrato: 'Avulso',
-        prazo_execucao: null,
-        valor_impostos_estimado: 0.00,
-        codigo_ncm: '',
-        cfop: '',
-        tributacao_pis: 0.00,
-        tributacao_cofins: 0.00,
-        icms_tributado: false,
-      };
-    }
-    return (currentRecord || {}) as Record<string, unknown>;
-  }, [id, nextCode, currentRecord]);
-
-  const formFields = useAutoFormFields(sampleData, {
-    hiddenFields: [],
-    readOnlyFields: ['codigo_servico'],
-    fieldConfigs: {
-      codigo_servico: { label: 'Código', readOnly: true, section: 'Identificação' },
-      nome: { label: 'Nome do Serviço', required: true, section: 'Identificação' },
-      descricao: { type: 'textarea', rows: 4, label: 'Descrição', section: 'Identificação' },
-      ativo: { type: 'checkbox', label: 'Ativo', section: 'Identificação' },
-      valor_base: { label: 'Valor Base', type: 'number', step: '0.01', required: true, section: 'Valores e Contratos' },
-      tipo_contrato: {
-        type: 'select',
-        label: 'Tipo de Contrato',
-        options: [
-          { value: 'Mensal', label: 'Mensal' },
-          { value: 'Anual', label: 'Anual' },
-          { value: 'Projeto', label: 'Por Projeto' },
-          { value: 'Avulso', label: 'Avulso' },
-        ],
-        section: 'Valores e Contratos',
-      },
-      prazo_execucao: { label: 'Prazo de Execução (dias úteis)', type: 'number', section: 'Valores e Contratos' },
-      valor_impostos_estimado: { label: 'Valor de Impostos Estimado', type: 'number', step: '0.01', section: 'Valores e Contratos' },
-      codigo_ncm: { label: 'Código NCM', section: 'Tributação' },
-      cfop: { label: 'CFOP', section: 'Tributação' },
-      tributacao_pis: { label: 'Tributação PIS (%)', type: 'number', step: '0.01', section: 'Tributação' },
-      tributacao_cofins: { label: 'Tributação COFINS (%)', type: 'number', step: '0.01', section: 'Tributação' },
-      icms_tributado: { 
-        type: 'checkbox', 
-        label: 'ICMS Tributado',
-        section: 'Tributação',
-      },
-    },
-  });
-
-  const saveRecord = async (formData: Record<string, unknown>, shouldCreateNew = false): Promise<void> => {
-    try {
-      setFormErrors({});
-      setFormDataState(formData);
-      
-      const dataToSend = { ...formData } as Partial<Servico>;
-      if (id === 'novo') {
-        if (!dataToSend.codigo_servico || dataToSend.codigo_servico === '') {
-          if (nextCode) {
-            dataToSend.codigo_servico = nextCode;
-          } else {
-            const codeResponse = await servicosService.proximoCodigo();
-            dataToSend.codigo_servico = codeResponse.proximo_codigo;
-          }
-        } else {
-          dataToSend.codigo_servico = typeof dataToSend.codigo_servico === 'number' 
-            ? dataToSend.codigo_servico 
-            : parseInt(String(dataToSend.codigo_servico), 10);
-        }
-        await createRecord(dataToSend);
-        
-        if (shouldCreateNew) {
-          setFormErrors({});
-          const codeResponse = await servicosService.proximoCodigo();
-          setNextCode(codeResponse.proximo_codigo);
-          setFormDataState(null);
-        } else {
-          navigate('/cadastros/servicos');
-        }
-      } else {
-        await updateRecord(id, dataToSend);
-        setIsEditing(false);
-      }
-    } catch (err) {
-      const axiosError = err as { response?: { data?: Record<string, unknown> } };
-      if (axiosError.response?.data) {
-        const apiErrors = axiosError.response.data;
-        const errors: Record<string, string> = {};
-        
-        Object.keys(apiErrors).forEach(key => {
-          const errorValue = apiErrors[key];
-          if (Array.isArray(errorValue)) {
-            errors[key] = String(errorValue[0]);
-          } else if (typeof errorValue === 'string') {
-            errors[key] = errorValue;
-          }
+    if (isNew) return;
+    setLoading(true);
+    servicosService.get(id!)
+      .then(data => {
+        setRecord(data);
+        setForm({
+          codigo: data.codigo,
+          descricao: data.descricao,
+          unidade: data.unidade,
+          preco: data.preco,
+          ativo: data.ativo === 1,
         });
-        
-        setFormErrors(errors);
+      })
+      .catch(() => setError('Erro ao carregar serviço.'))
+      .finally(() => setLoading(false));
+  }, [id, isNew]);
+
+  const set = <K extends keyof ServicoForm>(field: K, value: ServicoForm[K]) =>
+    setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      if (isNew) {
+        await servicosService.create(form);
+        navigate('/cadastros/servicos');
       } else {
-        setFormErrors({ _general: 'Erro ao salvar. Tente novamente.' });
+        await servicosService.update(id!, form);
+        setIsEditing(false);
+        const updated = await servicosService.get(id!);
+        setRecord(updated);
       }
+    } catch {
+      setError('Erro ao salvar. Verifique os dados e tente novamente.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSubmit = async (formData: Record<string, unknown>): Promise<void> => {
-    await saveRecord(formData, false);
-  };
-
-  const handleSaveAndNew = async (formData: Record<string, unknown>): Promise<void> => {
-    await saveRecord(formData, true);
-  };
-
-  const handleCancel = (): void => {
-    if (id === 'novo') {
+  const handleDelete = async () => {
+    if (!window.confirm('Deseja excluir este serviço?')) return;
+    try {
+      await servicosService.delete(id!);
       navigate('/cadastros/servicos');
-    } else {
-      setIsEditing(false);
+    } catch {
+      setError('Erro ao excluir.');
     }
   };
 
-  if (id === 'novo' || isEditing) {
+  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {id === 'novo' ? 'Novo Serviço' : 'Editar Serviço'}
-            </h1>
-            <p className="mt-2 text-sm text-gray-500">
-              {id === 'novo' 
-                ? 'Preencha os dados para criar um novo serviço'
-                : `Editando: ${currentRecord?.nome || `Código ${id}`}`
-              }
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/cadastros/servicos')}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
-
-        {formErrors._general && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {formErrors._general}
-          </div>
-        )}
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          {loading && id !== 'novo' && !currentRecord ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            </div>
-          ) : (
-            <DynamicForm
-              key={id === 'novo' && nextCode ? `new-${nextCode}` : `edit-${id}`}
-              fields={formFields}
-              initialData={formDataState !== null ? formDataState : (id === 'novo' ? sampleData : (currentRecord as Record<string, unknown>))}
-              onSubmit={handleSubmit}
-              onSaveAndNew={id === 'novo' ? handleSaveAndNew : undefined}
-              onCancel={handleCancel}
-              loading={loading}
-              errors={formErrors}
-              showSaveAndNew={id === 'novo'}
-            />
-          )}
-        </div>
+      <div className="flex items-center justify-center min-h-64">
+        <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
       </div>
     );
   }
-
-  if (loading && !currentRecord) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  const fields = [
-    { key: 'codigo_servico', label: 'Código' },
-    { key: 'nome', label: 'Nome' },
-    { key: 'descricao', label: 'Descrição' },
-    { key: 'ativo', label: 'Ativo', render: (value: unknown) => (value ? 'Sim' : 'Não') },
-    { key: 'valor_base', label: 'Valor Base', render: (value: unknown) => {
-      if (value === null || value === undefined) return '-';
-      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value));
-    }},
-    { key: 'tipo_contrato', label: 'Tipo de Contrato' },
-    { key: 'prazo_execucao', label: 'Prazo de Execução (dias úteis)' },
-    { key: 'valor_impostos_estimado', label: 'Valor de Impostos Estimado', render: (value: unknown) => {
-      if (value === null || value === undefined) return '-';
-      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value));
-    }},
-    { key: 'codigo_ncm', label: 'Código NCM' },
-    { key: 'cfop', label: 'CFOP' },
-    { key: 'tributacao_pis', label: 'Tributação PIS (%)' },
-    { key: 'tributacao_cofins', label: 'Tributação COFINS (%)' },
-    { key: 'icms_tributado', label: 'ICMS Tributado', render: (value: unknown) => (value ? 'Sim' : 'Não') },
-  ];
 
   return (
-    <DetailView
-      title={currentRecord?.nome || `Serviço #${id}`}
-      subtitle={`Código: ${currentRecord?.codigo_servico || id}`}
-      fields={fields}
-      data={currentRecord as Record<string, unknown>}
-      onEdit={() => setIsEditing(true)}
-      onDelete={() => handleDeleteRecord(id!)}
-      onBack={() => navigate('/cadastros/servicos')}
-      loading={loading}
-      error={error}
-    />
+    <div className="max-w-2xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <button
+            onClick={() => navigate('/cadastros/servicos')}
+            className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-1 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Serviços
+          </button>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            {isNew ? 'Novo Serviço' : (record?.descricao ?? 'Detalhe')}
+          </h1>
+        </div>
+        {!isNew && !isEditing && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsEditing(true)}
+              className="flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+              Editar
+            </button>
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Excluir
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Visualização */}
+      {!isNew && !isEditing && record && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            {[
+              { label: 'Código', value: record.codigo },
+              { label: 'Unidade', value: record.unidade },
+              { label: 'Descrição', value: record.descricao },
+              { label: 'Preço', value: record.preco?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
+              { label: 'Situação', value: record.ativo ? 'Ativo' : 'Inativo' },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      {/* Formulário */}
+      {(isNew || isEditing) && (
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Código <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.codigo}
+                onChange={e => set('codigo', e.target.value)}
+                required
+                placeholder="Ex: SERV001"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Unidade <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={form.unidade}
+                onChange={e => set('unidade', e.target.value)}
+                required
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Descrição <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.descricao}
+                onChange={e => set('descricao', e.target.value)}
+                required
+                placeholder="Descrição do serviço"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                Preço <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.preco}
+                onChange={e => set('preco', parseFloat(e.target.value) || 0)}
+                required
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div className="flex items-center gap-3 pt-6">
+              <input
+                type="checkbox"
+                id="ativo"
+                checked={form.ativo}
+                onChange={e => set('ativo', e.target.checked)}
+                className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+              />
+              <label htmlFor="ativo" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Serviço ativo
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={() => isNew ? navigate('/cadastros/servicos') : setIsEditing(false)}
+              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 
 export default ServicosDetail;
-
