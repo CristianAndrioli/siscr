@@ -210,7 +210,11 @@ app.delete('/filiais/:id', async (c) => {
 app.get('/usuarios', async (c) => {
   const tenant = c.get('tenant')
   const { results } = await c.env.DB_SHARED.prepare(
-    'SELECT id, email, nome, role, ativo, created_at FROM users WHERE tenant_id = ? ORDER BY nome'
+    `SELECT u.id, u.email, u.nome, u.role, u.ativo, u.created_at, u.custom_role_id,
+            r.nome AS custom_role_nome
+     FROM users u
+     LEFT JOIN tenant_custom_roles r ON r.id = u.custom_role_id AND r.tenant_id = u.tenant_id
+     WHERE u.tenant_id = ? ORDER BY u.nome`
   ).bind(tenant.tenantId).all()
   return c.json({ usuarios: results })
 })
@@ -220,6 +224,7 @@ const userSchema = z.object({
   nome: z.string().min(2),
   role: z.enum(['admin', 'manager', 'user', 'viewer']).default('user'),
   senha: z.string().min(6).optional(),
+  customRoleId: z.string().uuid().nullable().optional(),
 })
 
 // POST /api/tenant/info/usuarios
@@ -232,23 +237,57 @@ app.post('/usuarios', zValidator('json', userSchema), async (c) => {
     .bind(data.email, tenant.tenantId).first()
   if (exists) return c.json({ error: 'Já existe um usuário com este e-mail.' }, 400)
 
+  let customRoleId: string | null = data.customRoleId ?? null
+  if (customRoleId) {
+    const ok = await c.env.DB_SHARED
+      .prepare('SELECT id FROM tenant_custom_roles WHERE id = ? AND tenant_id = ?')
+      .bind(customRoleId, tenant.tenantId).first()
+    if (!ok) return c.json({ error: 'Perfil personalizado inválido.' }, 400)
+  }
+  if (data.role === 'admin') customRoleId = null
+
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const passwordHash = await hashPassword(data.senha ?? 'Mudar@123')
 
   await c.env.DB_SHARED.prepare(
-    'INSERT INTO users (id, tenant_id, email, nome, password_hash, role, ativo, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
-  ).bind(id, tenant.tenantId, data.email, data.nome, passwordHash, data.role, now).run()
+    'INSERT INTO users (id, tenant_id, email, nome, password_hash, role, ativo, created_at, custom_role_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)'
+  ).bind(id, tenant.tenantId, data.email, data.nome, passwordHash, data.role, now, customRoleId).run()
 
   return c.json({ id, message: 'Usuário criado.' }, 201)
 })
 
+const userUpdateSchema = userSchema.partial().omit({ senha: true }).extend({
+  ativo: z.boolean().optional(),
+  customRoleId: z.string().uuid().nullable().optional(),
+})
+
 // PUT /api/tenant/info/usuarios/:id
-app.put('/usuarios/:id', zValidator('json', userSchema.partial().omit({ senha: true }).extend({ ativo: z.boolean().optional() })), async (c) => {
+app.put('/usuarios/:id', zValidator('json', userUpdateSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
   const id = c.req.param('id')
   const now = new Date().toISOString()
+
+  const cur = await c.env.DB_SHARED
+    .prepare('SELECT role, custom_role_id FROM users WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first<{ role: string; custom_role_id: string | null }>()
+  if (!cur) return c.json({ error: 'Usuário não encontrado.' }, 404)
+
+  const nextRole = data.role ?? cur.role
+  let nextCustom: string | null =
+    data.customRoleId !== undefined ? data.customRoleId : cur.custom_role_id
+
+  if (nextCustom) {
+    const ok = await c.env.DB_SHARED
+      .prepare('SELECT id FROM tenant_custom_roles WHERE id = ? AND tenant_id = ?')
+      .bind(nextCustom, tenant.tenantId).first()
+    if (!ok) return c.json({ error: 'Perfil personalizado inválido.' }, 400)
+  } else {
+    nextCustom = null
+  }
+  const finalCustom = nextRole === 'admin' ? null : nextCustom
 
   const fields = ['updated_at = ?']
   const vals: unknown[] = [now]
@@ -256,6 +295,10 @@ app.put('/usuarios/:id', zValidator('json', userSchema.partial().omit({ senha: t
   if (data.email !== undefined) { fields.push('email = ?'); vals.push(data.email) }
   if (data.role !== undefined) { fields.push('role = ?'); vals.push(data.role) }
   if (data.ativo !== undefined) { fields.push('ativo = ?'); vals.push(data.ativo ? 1 : 0) }
+  if (data.customRoleId !== undefined || data.role !== undefined) {
+    fields.push('custom_role_id = ?')
+    vals.push(finalCustom)
+  }
 
   await c.env.DB_SHARED.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
     .bind(...vals, id, tenant.tenantId).run()

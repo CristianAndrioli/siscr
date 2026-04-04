@@ -42,6 +42,17 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { hasModuleAccess } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
+  const [permAlert, setPermAlert] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fn = (e: Event) => {
+      const d = (e as CustomEvent<{ message?: string }>).detail;
+      setPermAlert(d?.message || 'Sem permissão para esta ação.');
+      window.setTimeout(() => setPermAlert(null), 6000);
+    };
+    window.addEventListener('siscr:forbidden', fn);
+    return () => window.removeEventListener('siscr:forbidden', fn);
+  }, []);
 
   const userName = localStorage.getItem('user_nome') || 'Usuário';
   const tenantSlug = localStorage.getItem('tenant_slug') || '';
@@ -273,6 +284,15 @@ export default function Layout({ children }: LayoutProps) {
             </div>
           )}
         </header>
+
+        {permAlert && (
+          <div
+            role="alert"
+            className="mx-4 mt-3 lg:mx-6 lg:mt-4 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 text-sm font-medium shadow-sm"
+          >
+            {permAlert}
+          </div>
+        )}
 
         <main className="flex-1 p-4 lg:p-6">
           {children}

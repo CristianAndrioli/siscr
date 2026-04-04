@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { hashPassword, verifyPassword } from '../lib/password'
+import { buildSessionUserPayload } from '../lib/modulePermissions'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -28,6 +29,7 @@ type LoginRow = {
   nome: string
   password_hash: string
   role: string
+  custom_role_id: string | null
   tenant_id: string
   tenant_slug: string
   tenant_nome: string
@@ -62,7 +64,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
 
     const user = await c.env.DB_SHARED
       .prepare(`
-        SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role,
+        SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role, u.custom_role_id,
                t.id as tenant_id, t.slug as tenant_slug, t.nome as tenant_nome, t.status as tenant_status
         FROM users u
         JOIN tenants t ON t.id = u.tenant_id
@@ -79,7 +81,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   } else {
     const { results } = await c.env.DB_SHARED
       .prepare(`
-        SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role,
+        SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role, u.custom_role_id,
                t.id as tenant_id, t.slug as tenant_slug, t.nome as tenant_nome, t.status as tenant_status
         FROM users u
         JOIN tenants t ON t.id = u.tenant_id
@@ -130,22 +132,28 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   const sessionToken = crypto.randomUUID()
   const SESSION_TTL = 60 * 60 * 24 * 7
 
-  const sessionData = {
+  const sessionData = await buildSessionUserPayload(c.env.DB_SHARED, {
     userId: row.user_id,
     email: row.email,
     nome: row.nome,
     role: row.role,
     tenantId: row.tenant_id,
     tenantSlug: row.tenant_slug,
-    empresaId: null,
-    filialId: null,
-  }
+    customRoleId: row.custom_role_id,
+  })
 
   await c.env.KV_SESSIONS.put(`session:${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: SESSION_TTL })
 
   return c.json({
     token: sessionToken,
-    user: { id: row.user_id, email: row.email, nome: row.nome, role: row.role },
+    user: {
+      id: row.user_id,
+      email: row.email,
+      nome: row.nome,
+      role: row.role,
+      modules: sessionData.modules,
+      customRoleId: row.custom_role_id,
+    },
     tenant: { id: row.tenant_id, slug: row.tenant_slug, nome: row.tenant_nome, status: row.tenant_status },
   })
 })
@@ -180,30 +188,26 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
     ).bind(userId, tenantId, email, passwordHash, nome, 'admin', now),
   ])
 
-  // Criar sessão imediatamente para auto-login
   const sessionToken = crypto.randomUUID()
-  const SESSION_TTL = 60 * 60 * 24 * 7 // 7 dias
+  const SESSION_TTL = 60 * 60 * 24 * 7
 
-  await c.env.KV_SESSIONS.put(
-    `session:${sessionToken}`,
-    JSON.stringify({
-      userId,
-      email,
-      nome,
-      role: 'admin',
-      tenantId,
-      tenantSlug,
-      empresaId: null,
-      filialId: null,
-    }),
-    { expirationTtl: SESSION_TTL }
-  )
+  const sessionData = await buildSessionUserPayload(c.env.DB_SHARED, {
+    userId,
+    email,
+    nome,
+    role: 'admin',
+    tenantId,
+    tenantSlug,
+    customRoleId: null,
+  })
+
+  await c.env.KV_SESSIONS.put(`session:${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: SESSION_TTL })
 
   return c.json({
     message: 'Conta criada com sucesso!',
     tenantSlug,
     token: sessionToken,
-    user: { id: userId, email, nome, role: 'admin' },
+    user: { id: userId, email, nome, role: 'admin', modules: sessionData.modules, customRoleId: null },
     tenant: { id: tenantId, slug: tenantSlug, nome: tenantNome, status: 'active' },
   }, 201)
 })
@@ -238,9 +242,9 @@ app.get('/session-status', async (c) => {
 
   // Buscar dados completos do usuário
   const user = await c.env.DB_SHARED
-    .prepare('SELECT id, email, nome, role FROM users WHERE id = ? AND tenant_id = ?')
+    .prepare('SELECT id, email, nome, role, custom_role_id FROM users WHERE id = ? AND tenant_id = ?')
     .bind(autoLogin.userId, tenant.id)
-    .first<{ id: string; email: string; nome: string; role: string }>()
+    .first<{ id: string; email: string; nome: string; role: string; custom_role_id: string | null }>()
 
   if (!user) {
     return c.json({ status: 'ready', requiresLogin: true })
@@ -250,27 +254,31 @@ app.get('/session-status', async (c) => {
   const sessionToken = crypto.randomUUID()
   const SESSION_TTL = 60 * 60 * 24 * 7 // 7 dias
 
-  await c.env.KV_SESSIONS.put(
-    `session:${sessionToken}`,
-    JSON.stringify({
-      userId: user.id,
-      email: user.email,
-      nome: user.nome,
-      role: user.role,
-      tenantId: tenant.id,
-      tenantSlug: tenant.slug,
-      empresaId: null,
-      filialId: null,
-    }),
-    { expirationTtl: SESSION_TTL }
-  )
+  const sessionData = await buildSessionUserPayload(c.env.DB_SHARED, {
+    userId: user.id,
+    email: user.email,
+    nome: user.nome,
+    role: user.role,
+    tenantId: tenant.id,
+    tenantSlug: tenant.slug,
+    customRoleId: user.custom_role_id,
+  })
+
+  await c.env.KV_SESSIONS.put(`session:${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: SESSION_TTL })
 
   await c.env.KV_SESSIONS.delete(`auto_login:${tenantSlug}`)
 
   return c.json({
     status: 'ready',
     token: sessionToken,
-    user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
+    user: {
+      id: user.id,
+      email: user.email,
+      nome: user.nome,
+      role: user.role,
+      modules: sessionData.modules,
+      customRoleId: user.custom_role_id,
+    },
     tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
   })
 })

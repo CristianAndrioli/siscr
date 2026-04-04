@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { authService } from '../../services/auth';
+import { permissoesApi } from '../../services/permissoesApi';
+import { usePermissions } from '../../hooks/usePermissions';
 
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 
@@ -16,11 +18,38 @@ const ROLE_STYLE: Record<Role, string> = {
   viewer: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 
-interface Usuario { id: string; email: string; nome: string; role: Role; ativo: number; created_at: string; }
+interface Usuario {
+  id: string;
+  email: string;
+  nome: string;
+  role: Role;
+  ativo: number;
+  created_at: string;
+  custom_role_id?: string | null;
+  custom_role_nome?: string | null;
+}
 
-const emptyForm = () => ({ email: '', nome: '', role: 'user' as Role, senha: '', ativo: true });
+type FormState = {
+  email: string;
+  nome: string;
+  role: Role;
+  senha: string;
+  ativo: boolean;
+  customRoleId: string;
+};
+
+const emptyForm = (): FormState => ({
+  email: '',
+  nome: '',
+  role: 'user',
+  senha: '',
+  ativo: true,
+  customRoleId: '',
+});
 
 export function UsuariosPage() {
+  const { refresh: refreshPermissions } = usePermissions();
+  const [perfis, setPerfis] = useState<{ id: string; nome: string }[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,8 +59,15 @@ export function UsuariosPage() {
   const [modalError, setModalError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState<FormState>(emptyForm());
   const currentUserId = authService.getLocalUser()?.id;
+
+  useEffect(() => {
+    permissoesApi
+      .listPerfis()
+      .then((r) => setPerfis((r.data.perfis ?? []).map((p) => ({ id: p.id, nome: p.nome }))))
+      .catch(() => setPerfis([]));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -49,7 +85,14 @@ export function UsuariosPage() {
   };
 
   const openEdit = (u: Usuario) => {
-    setForm({ email: u.email, nome: u.nome, role: u.role, senha: '', ativo: u.ativo === 1 });
+    setForm({
+      email: u.email,
+      nome: u.nome,
+      role: u.role,
+      senha: '',
+      ativo: u.ativo === 1,
+      customRoleId: u.custom_role_id ?? '',
+    });
     setEditingId(u.id); setModalError(''); setShowModal(true);
   };
 
@@ -59,12 +102,22 @@ export function UsuariosPage() {
     setSaving(true); setModalError('');
     try {
       if (editingId) {
+        const customRoleId = form.role === 'admin' ? null : form.customRoleId || null;
         await api.put(`/tenant/info/usuarios/${editingId}`, {
-          nome: form.nome, email: form.email, role: form.role, ativo: form.ativo,
+          nome: form.nome,
+          email: form.email,
+          role: form.role,
+          ativo: form.ativo,
+          customRoleId,
         });
+        if (editingId === currentUserId) await refreshPermissions();
       } else {
         await api.post('/tenant/info/usuarios', {
-          nome: form.nome, email: form.email, role: form.role, senha: form.senha,
+          nome: form.nome,
+          email: form.email,
+          role: form.role,
+          senha: form.senha,
+          ...(form.role !== 'admin' && form.customRoleId ? { customRoleId: form.customRoleId } : {}),
         });
       }
       setShowModal(false); load();
@@ -124,7 +177,7 @@ export function UsuariosPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                {['Usuário', 'E-mail', 'Perfil', 'Status', 'Desde', ''].map(h => (
+                {['Usuário', 'E-mail', 'Perfil', 'Permissão extra', 'Status', 'Desde', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -146,6 +199,9 @@ export function UsuariosPage() {
                   <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{u.email}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_STYLE[u.role]}`}>{ROLE_LABEL[u.role]}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 max-w-[140px] truncate" title={u.custom_role_nome ?? ''}>
+                    {u.role === 'admin' ? '—' : u.custom_role_nome || 'Padrão do perfil'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${u.ativo === 1 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
@@ -190,14 +246,57 @@ export function UsuariosPage() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Perfil de acesso</label>
-                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as Role }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
-                  {Object.entries(ROLE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <select
+                  value={form.role}
+                  onChange={(e) => {
+                    const r = e.target.value as Role;
+                    setForm((f) => ({
+                      ...f,
+                      role: r,
+                      customRoleId: r === 'admin' ? '' : f.customRoleId,
+                    }));
+                  }}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  {Object.entries(ROLE_LABEL).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  {form.role === 'admin' ? 'Acesso total ao sistema' : form.role === 'manager' ? 'Acesso a todos os módulos, sem configurações' : form.role === 'user' ? 'Acesso aos módulos operacionais' : 'Somente visualização, sem edição'}
+                  {form.role === 'admin'
+                    ? 'Acesso total ao sistema (não combina com perfil personalizado)'
+                    : form.role === 'manager'
+                      ? 'Padrão: todos os módulos operacionais; use o item abaixo para restringir'
+                      : form.role === 'user'
+                        ? 'Padrão: módulos operacionais; use o item abaixo para restringir'
+                        : 'Padrão: só leitura nos módulos operacionais; use o item abaixo para ajustar'}
                 </p>
               </div>
+
+              {form.role !== 'admin' && perfis.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                    Perfil personalizado (opcional)
+                  </label>
+                  <select
+                    value={form.customRoleId}
+                    onChange={(e) => setForm((f) => ({ ...f, customRoleId: e.target.value }))}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Nenhum — usar permissões padrão do perfil acima</option>
+                    {perfis.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nome}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    Quando definido, as permissões por módulo deste perfil substituem o padrão do Gerente/Usuário/Visualizador.
+                  </p>
+                </div>
+              )}
 
               {!editingId && (
                 <div>

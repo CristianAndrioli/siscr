@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import { usePermissions } from '../../hooks/usePermissions';
+import { PerfisPersonalizadosSection } from './PerfisPersonalizadosSection';
 
 type Role = 'admin' | 'manager' | 'user' | 'viewer';
 
@@ -34,7 +36,12 @@ const PERM_MAP: Record<Role, Record<string, { ver: boolean; editar: boolean }>> 
     estoque: { ver: true, editar: true },
     configuracoes: { ver: false, editar: false },
   },
-  viewer: Object.fromEntries(MODULOS.map(m => [m.id, { ver: true, editar: false }])),
+  viewer: Object.fromEntries(
+    MODULOS.map((m) => [
+      m.id,
+      m.id === 'configuracoes' ? { ver: false, editar: false } : { ver: true, editar: false },
+    ])
+  ),
 };
 
 const COLOR = {
@@ -43,15 +50,36 @@ const COLOR = {
   slate: { badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300', ring: 'ring-slate-200 dark:ring-slate-700', header: 'bg-slate-50 dark:bg-slate-800/50' },
 };
 
-interface Usuario { id: string; email: string; nome: string; role: Role; ativo: number; }
+interface Usuario {
+  id: string;
+  email: string;
+  nome: string;
+  role: Role;
+  ativo: number;
+  custom_role_id?: string | null;
+  custom_role_nome?: string | null;
+}
+
+type TabKey = 'sistema' | 'personalizados';
 
 export function PermissoesPage() {
+  const { refresh: refreshPermissions } = usePermissions();
+  const [tab, setTab] = useState<TabKey>('sistema');
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUsers, setShowUsers] = useState<Role | null>(null);
   const [changingRole, setChangingRole] = useState<{ userId: string; newRole: Role } | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const isAdmin =
+    (() => {
+      try {
+        return JSON.parse(localStorage.getItem('user') || '{}').role === 'admin';
+      } catch {
+        return false;
+      }
+    })();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -70,10 +98,13 @@ export function PermissoesPage() {
     if (!changingRole) return;
     setSaving(true);
     try {
-      await api.put(`/tenant/info/usuarios/${changingRole.userId}`, { role: changingRole.newRole });
+      const body: { role: Role; customRoleId?: null } = { role: changingRole.newRole };
+      if (changingRole.newRole === 'admin') body.customRoleId = null;
+      await api.put(`/tenant/info/usuarios/${changingRole.userId}`, body);
       setMsg({ type: 'success', text: 'Perfil atualizado com sucesso.' });
       setChangingRole(null);
       load();
+      refreshPermissions();
     } catch {
       setMsg({ type: 'error', text: 'Erro ao atualizar perfil.' });
     } finally { setSaving(false); }
@@ -90,6 +121,34 @@ export function PermissoesPage() {
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Perfis de acesso e o que cada um pode fazer no sistema</p>
       </div>
 
+      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-px">
+        {(
+          [
+            ['sistema', 'Perfis do sistema'],
+            ['personalizados', 'Perfis personalizados'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTab(k)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 -mb-px transition-colors ${
+              tab === k
+                ? 'border-brand-600 text-brand-700 dark:text-brand-300 bg-slate-50 dark:bg-slate-800/80'
+                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'personalizados' && (
+        <PerfisPersonalizadosSection isAdmin={isAdmin} onChanged={refreshPermissions} />
+      )}
+
+      {tab === 'sistema' && (
+        <>
       {msg && (
         <div className={`px-4 py-3 rounded-lg text-sm border ${msg.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'}`}>
           {msg.text}
@@ -186,8 +245,10 @@ export function PermissoesPage() {
       </div>
 
       <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl px-5 py-4 text-sm text-amber-700 dark:text-amber-300">
-        <strong>Nota:</strong> As permissões exibidas refletem o comportamento padrão do sistema por perfil. Para alterar o perfil de um usuário, expanda o perfil desejado e use o seletor ao lado do nome do usuário.
+        <strong>Nota:</strong> As permissões exibidas refletem o comportamento padrão do sistema por perfil. Para permissões por módulo sob medida, use a aba <strong>Perfis personalizados</strong> e atribua o perfil em <strong>Usuários</strong>.
       </div>
+        </>
+      )}
 
       {/* Confirm role change */}
       {changingRole && (

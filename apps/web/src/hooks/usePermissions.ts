@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import api from '../services/api';
 
 export interface UserPermissions {
   role: string;
@@ -7,23 +8,13 @@ export interface UserPermissions {
   modules: Record<string, { name: string; actions: string[] }>;
 }
 
-const ALL_MODULES = [
-  'cadastros',
-  'financeiro',
-  'faturamento',
-  'estoque',
-  'configuracoes',
-  'monitoramento',
-  'servico_logistico',
-  'relatorios',
-  'usuarios',
-];
+const MODULE_KEYS = ['cadastros', 'financeiro', 'faturamento', 'estoque', 'configuracoes'] as const;
 
 const ALL_ACTIONS = ['view', 'add', 'change', 'delete', 'export', 'import', 'approve', 'reject', 'manage'];
 
 function buildAdminPermissions(): UserPermissions {
   const modules: UserPermissions['modules'] = {};
-  ALL_MODULES.forEach((m) => {
+  MODULE_KEYS.forEach((m) => {
     modules[m] = { name: m, actions: ALL_ACTIONS };
   });
   return {
@@ -34,7 +25,53 @@ function buildAdminPermissions(): UserPermissions {
   };
 }
 
-function getLocalUser(): { role?: string } {
+/** Fallback quando `modules` não veio na sessão (sessões antigas). */
+function builtInMatrix(role: string): Record<string, { view: boolean; edit: boolean }> {
+  const m: Record<string, { view: boolean; edit: boolean }> = {};
+  for (const k of MODULE_KEYS) m[k] = { view: false, edit: false };
+  if (role === 'admin') {
+    for (const k of MODULE_KEYS) m[k] = { view: true, edit: true };
+    return m;
+  }
+  if (role === 'manager' || role === 'user') {
+    for (const k of MODULE_KEYS) {
+      if (k === 'configuracoes') m[k] = { view: false, edit: false };
+      else m[k] = { view: true, edit: true };
+    }
+    return m;
+  }
+  if (role === 'viewer') {
+    for (const k of MODULE_KEYS) {
+      if (k === 'configuracoes') m[k] = { view: false, edit: false };
+      else m[k] = { view: true, edit: false };
+    }
+    return m;
+  }
+  return m;
+}
+
+function matrixToModules(
+  matrix: Record<string, { view: boolean; edit: boolean }>
+): UserPermissions['modules'] {
+  const out: UserPermissions['modules'] = {};
+  for (const key of MODULE_KEYS) {
+    const cell = matrix[key];
+    if (!cell?.view) continue;
+    const actions: string[] = ['view'];
+    if (cell.edit) {
+      actions.push('add', 'change', 'delete', 'export', 'import', 'approve', 'reject', 'manage');
+    }
+    out[key] = { name: key, actions };
+  }
+  return out;
+}
+
+function getLocalUser(): {
+  id?: string;
+  role?: string;
+  modules?: Record<string, { view: boolean; edit: boolean }>;
+  customRoleNome?: string;
+} {
   try {
     return JSON.parse(localStorage.getItem('user') || '{}');
   } catch {
@@ -42,19 +79,43 @@ function getLocalUser(): { role?: string } {
   }
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  admin: 'Administrador',
+  manager: 'Gerente',
+  user: 'Usuário',
+  viewer: 'Visualizador',
+};
+
 /**
- * Hook de permissões — lê o role do usuário salvo no localStorage após login.
- * Admin tem acesso total sem precisar chamar a API.
- * Roles futuros poderão buscar permissões granulares via API.
+ * Permissões efetivas: admin = tudo; senão `user.modules` da API/sessão; senão matriz padrão do perfil.
  */
 export function usePermissions() {
-  const localUser = getLocalUser();
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const onStorage = () => setVersion((v) => v + 1);
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const localUser = useMemo(() => getLocalUser(), [version]);
   const role = localUser.role || 'user';
   const isAdmin = role === 'admin';
+  const apiModules = localUser.modules;
 
-  const permissions: UserPermissions = isAdmin
-    ? buildAdminPermissions()
-    : { role, role_display: 'Usuário', permissions: [], modules: {} };
+  const permissions: UserPermissions = useMemo(() => {
+    if (isAdmin) return buildAdminPermissions();
+    const matrix =
+      apiModules && Object.keys(apiModules).length > 0
+        ? apiModules
+        : builtInMatrix(role);
+    return {
+      role,
+      role_display: localUser.customRoleNome || ROLE_LABEL[role] || 'Usuário',
+      permissions: [],
+      modules: matrixToModules(matrix),
+    };
+  }, [isAdmin, role, apiModules, localUser.customRoleNome]);
 
   const hasPermission = useCallback(
     (permission: string): boolean => {
@@ -90,6 +151,34 @@ export function usePermissions() {
     [isAdmin, permissions.modules]
   );
 
+  const refresh = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) return;
+      const { data } = await api.get('/auth/me');
+      const s = data as {
+        userId: string;
+        email: string;
+        nome: string;
+        role: string;
+        modules?: Record<string, { view: boolean; edit: boolean }>;
+      };
+      localStorage.setItem(
+        'user',
+        JSON.stringify({
+          id: s.userId,
+          email: s.email,
+          nome: s.nome,
+          role: s.role,
+          modules: s.modules,
+        })
+      );
+      setVersion((v) => v + 1);
+    } catch {
+      setVersion((v) => v + 1);
+    }
+  }, []);
+
   return {
     permissions,
     loading: false,
@@ -98,6 +187,6 @@ export function usePermissions() {
     hasModuleAccess,
     hasModuleAction,
     getModuleActions,
-    refresh: () => {},
+    refresh,
   };
 }

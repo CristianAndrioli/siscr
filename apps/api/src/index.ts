@@ -5,9 +5,11 @@ import { prettyJSON } from 'hono/pretty-json'
 
 import { tenantMiddleware } from './middleware/tenant'
 import { authMiddleware } from './middleware/auth'
+import { requireTenantModule } from './middleware/moduleGuard'
 
 import authRoutes from './routes/auth'
 import tenantRoutes from './routes/tenants'
+import permissoesRoutes from './routes/permissoes'
 import subscriptionRoutes from './routes/subscriptions'
 import cadastrosRoutes from './routes/cadastros'
 import estoqueRoutes from './routes/estoque'
@@ -75,12 +77,19 @@ app.route('/api/webhooks/stripe', stripeWebhookRoutes)
 app.route('/api/subscriptions', subscriptionRoutes)
 
 // ─── Middleware de tenant (identifica tenant pelo header/subdomain)
-// Todas as rotas abaixo precisam de tenant identificado
 app.use('/api/tenant/*', tenantMiddleware)
 app.use('/api/tenant/*', authMiddleware)
 
+// Permissões por módulo (API) — após autenticação
+app.use('/api/tenant/cadastros', requireTenantModule('cadastros'))
+app.use('/api/tenant/estoque', requireTenantModule('estoque'))
+app.use('/api/tenant/financeiro', requireTenantModule('financeiro'))
+app.use('/api/tenant/faturamento', requireTenantModule('faturamento'))
+app.use('/api/tenant/vendas', requireTenantModule('faturamento'))
+
 // ─── Rotas do tenant (autenticadas + tenant identificado) ──────
 app.route('/api/tenant/info', tenantRoutes)
+app.route('/api/tenant/permissoes', permissoesRoutes)
 app.route('/api/tenant/cadastros', cadastrosRoutes)
 app.route('/api/tenant/estoque', estoqueRoutes)
 app.route('/api/tenant/financeiro', financeiroRoutes)
@@ -113,7 +122,7 @@ export default {
   },
 
   // Handler de Queue (tarefas assíncronas)
-  async queue(batch: MessageBatch, env: Env, ctx: ExecutionContext) {
+  async queue(batch: MessageBatch, _env: Env, _ctx: ExecutionContext) {
     for (const message of batch.messages) {
       try {
         console.log(`Processando task: ${message.id}`, message.body)

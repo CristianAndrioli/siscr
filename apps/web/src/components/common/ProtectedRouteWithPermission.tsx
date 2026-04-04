@@ -35,10 +35,20 @@ export default function ProtectedRouteWithPermission({
     if (requiredAction) {
       // Verificar ação específica no módulo
       if (!hasModuleAction(requiredModule, requiredAction)) {
+        const verb =
+          requiredAction === 'view'
+            ? 'visualizar'
+            : requiredAction === 'add'
+              ? 'criar registros em'
+              : requiredAction === 'change'
+                ? 'editar dados em'
+                : requiredAction === 'delete'
+                  ? 'excluir dados em'
+                  : 'acessar';
         return (
           <AccessDenied
-            title="Acesso Negado"
-            message={`Você não tem permissão para ${requiredAction === 'view' ? 'visualizar' : requiredAction === 'add' ? 'criar' : requiredAction === 'change' ? 'editar' : requiredAction === 'delete' ? 'excluir' : 'acessar'} este módulo.`}
+            title="Acesso negado"
+            message={`Você não tem permissão para ${verb} este módulo. Peça ao administrador para ajustar seu perfil ou permissão personalizada.`}
           />
         );
       }

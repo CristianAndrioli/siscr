@@ -58,6 +58,18 @@ api.interceptors.response.use(
       }
     }
 
+    const code = (error.response?.data as { code?: string } | undefined)?.code;
+    if (
+      error.response?.status === 403 &&
+      (code === 'FORBIDDEN_MODULE' || code === 'FORBIDDEN_EDIT')
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('siscr:forbidden', {
+          detail: { message: msg || 'Sem permissão para esta ação.' },
+        })
+      );
+    }
+
     return Promise.reject(error);
   }
 );

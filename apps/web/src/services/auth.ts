@@ -13,9 +13,18 @@ export interface TenantInfo {
   status: string;
 }
 
+export type ModuleMatrix = Record<string, { view: boolean; edit: boolean }>;
+
 export interface LoginResponse {
   token: string;
-  user: { id: string; email: string; nome?: string; role: string };
+  user: {
+    id: string;
+    email: string;
+    nome?: string;
+    role: string;
+    modules?: ModuleMatrix;
+    customRoleId?: string | null;
+  };
   tenant: TenantInfo;
 }
 
@@ -23,7 +32,7 @@ export interface SignupResponse {
   message: string;
   tenantSlug: string;
   token: string;
-  user: { id: string; email: string; nome: string; role: string };
+  user: LoginResponse['user'];
   tenant: TenantInfo;
 }
 
@@ -148,7 +157,11 @@ export const authService = {
   /**
    * Salva sessão no localStorage (usado após auto-login).
    */
-  saveSession: (data: { token: string; user: { id: string; email: string; nome?: string; role: string }; tenant: TenantInfo }) => {
+  saveSession: (data: {
+    token: string;
+    user: LoginResponse['user'];
+    tenant: TenantInfo;
+  }) => {
     localStorage.setItem('access_token', data.token);
     localStorage.setItem('tenant_slug', data.tenant.slug);
     localStorage.setItem('tenant_status', data.tenant.status ?? 'active');
