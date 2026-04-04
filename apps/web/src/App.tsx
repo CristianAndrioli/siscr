@@ -75,9 +75,11 @@ import RelatorioEstoque from './pages/estoque/Relatorio';
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
   children: ReactNode;
+  /** Quando true, ignora verificação de status do tenant (ex: /subscription-expired) */
+  skipStatusCheck?: boolean;
 }
 
-function ProtectedRoute({ children }: ProtectedRouteProps) {
+function ProtectedRoute({ children, skipStatusCheck = false }: ProtectedRouteProps) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -98,7 +100,17 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+  // Verificar status do tenant — redirecionar se suspenso/cancelado
+  if (!skipStatusCheck) {
+    const tenantStatus = authService.getTenantStatus();
+    if (tenantStatus && tenantStatus !== 'active') {
+      return <Navigate to="/subscription-expired" replace />;
+    }
+  }
+
+  return <>{children}</>;
 }
 
 // Componente para rota raiz - redireciona baseado em autenticação
@@ -148,7 +160,7 @@ function App() {
         <Route
           path="/payment-pending"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute skipStatusCheck>
               <PaymentPending />
             </ProtectedRoute>
           }
@@ -156,7 +168,7 @@ function App() {
         <Route
           path="/subscription-expired"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute skipStatusCheck>
               <SubscriptionExpired />
             </ProtectedRoute>
           }

@@ -33,15 +33,31 @@ api.interceptors.request.use(
   (error: AxiosError) => Promise.reject(error)
 );
 
-// Interceptor de response — redireciona para login em caso de 401
+// Interceptor de response — redireciona para login (401) ou assinatura suspensa (404/403)
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token');
       localStorage.removeItem('tenant_slug');
+      localStorage.removeItem('tenant_status');
       window.location.href = '/login';
+      return Promise.reject(error);
     }
+
+    // Tenant inativo/suspenso — middleware retorna 404 com "inativo" na mensagem
+    const data = error.response?.data as { error?: string } | undefined;
+    const msg = data?.error ?? '';
+    if (
+      (error.response?.status === 404 || error.response?.status === 403) &&
+      (msg.includes('inativo') || msg.includes('suspenso') || msg.includes('suspensa'))
+    ) {
+      localStorage.setItem('tenant_status', 'suspended');
+      if (!window.location.pathname.startsWith('/subscription-expired')) {
+        window.location.href = '/subscription-expired';
+      }
+    }
+
     return Promise.reject(error);
   }
 );

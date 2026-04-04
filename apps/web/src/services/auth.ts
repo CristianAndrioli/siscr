@@ -6,10 +6,17 @@ import api from './api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
+export interface TenantInfo {
+  id: string;
+  slug: string;
+  nome?: string;
+  status: string;
+}
+
 export interface LoginResponse {
   token: string;
   user: { id: string; email: string; nome?: string; role: string };
-  tenant: { id: string; slug: string };
+  tenant: TenantInfo;
 }
 
 export interface SignupResponse {
@@ -17,13 +24,13 @@ export interface SignupResponse {
   tenantSlug: string;
   token: string;
   user: { id: string; email: string; nome: string; role: string };
-  tenant: { id: string; slug: string };
+  tenant: TenantInfo;
 }
 
 export type SessionStatusResponse =
   | { status: 'pending' }
   | { status: 'ready'; requiresLogin: true }
-  | { status: 'ready'; requiresLogin?: false; token: string; user: { id: string; email: string; nome: string; role: string }; tenant: { id: string; slug: string } }
+  | { status: 'ready'; requiresLogin?: false; token: string; user: { id: string; email: string; nome: string; role: string }; tenant: TenantInfo }
 
 export const authService = {
   /**
@@ -39,6 +46,7 @@ export const authService = {
 
     localStorage.setItem('access_token', token);
     localStorage.setItem('tenant_slug', tenant.slug);
+    localStorage.setItem('tenant_status', tenant.status ?? 'active');
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('user_nome', user.nome || user.email || '');
 
@@ -72,7 +80,9 @@ export const authService = {
     } finally {
       localStorage.removeItem('access_token');
       localStorage.removeItem('tenant_slug');
+      localStorage.removeItem('tenant_status');
       localStorage.removeItem('user');
+      localStorage.removeItem('user_nome');
     }
   },
 
@@ -128,11 +138,19 @@ export const authService = {
   },
 
   /**
+   * Retorna o status do tenant salvo no localStorage
+   */
+  getTenantStatus: (): string | null => {
+    return localStorage.getItem('tenant_status');
+  },
+
+  /**
    * Salva sessão no localStorage (usado após auto-login).
    */
-  saveSession: (data: { token: string; user: { id: string; email: string; nome?: string; role: string }; tenant: { id: string; slug: string } }) => {
+  saveSession: (data: { token: string; user: { id: string; email: string; nome?: string; role: string }; tenant: TenantInfo }) => {
     localStorage.setItem('access_token', data.token);
     localStorage.setItem('tenant_slug', data.tenant.slug);
+    localStorage.setItem('tenant_status', data.tenant.status ?? 'active');
     localStorage.setItem('user', JSON.stringify(data.user));
     localStorage.setItem('user_nome', data.user.nome || data.user.email || '');
   },

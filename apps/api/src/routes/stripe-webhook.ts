@@ -101,11 +101,45 @@ app.post('/', async (c) => {
     // ─── Assinatura cancelada: suspender tenant ────────────────
     case 'customer.subscription.deleted': {
       const subscription = event.data.object
+      const tenantRow = await c.env.DB_SHARED
+        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+        .bind(subscription.customer)
+        .first<{ slug: string }>()
+
       await c.env.DB_SHARED
         .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
         .bind(new Date().toISOString(), subscription.customer)
         .run()
-      console.log(`[Webhook] Tenant suspenso: customer=${subscription.customer}`)
+
+      // Invalidar cache KV para forçar o middleware a reler do banco
+      if (tenantRow?.slug) {
+        await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+        console.log(`[Webhook] Tenant suspenso e cache invalidado: ${tenantRow.slug}`)
+      } else {
+        console.log(`[Webhook] Tenant suspenso: customer=${subscription.customer}`)
+      }
+      break
+    }
+
+    // ─── Assinatura reativada (ex: via Customer Portal) ───────
+    case 'customer.subscription.updated': {
+      const subscription = event.data.object
+      if (subscription.status === 'active') {
+        const tenantRow = await c.env.DB_SHARED
+          .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+          .bind(subscription.customer)
+          .first<{ slug: string }>()
+
+        await c.env.DB_SHARED
+          .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
+          .bind(new Date().toISOString(), subscription.customer)
+          .run()
+
+        if (tenantRow?.slug) {
+          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+          console.log(`[Webhook] Tenant reativado e cache invalidado: ${tenantRow.slug}`)
+        }
+      }
       break
     }
 

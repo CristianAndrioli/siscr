@@ -24,14 +24,22 @@ const signupSchema = z.object({
 app.post('/login', zValidator('json', loginSchema), async (c) => {
   const { email, password, tenantSlug } = c.req.valid('json')
 
-  // Verificar tenant
+  // Verificar tenant (incluindo suspensos para dar mensagem adequada)
   const tenant = await c.env.DB_SHARED
-    .prepare('SELECT id, slug FROM tenants WHERE slug = ? AND status = ?')
-    .bind(tenantSlug, 'active')
-    .first<{ id: string; slug: string }>()
+    .prepare('SELECT id, slug, nome, status FROM tenants WHERE slug = ?')
+    .bind(tenantSlug)
+    .first<{ id: string; slug: string; nome: string; status: string }>()
 
   if (!tenant) {
     return c.json({ error: 'Tenant não encontrado.' }, 404)
+  }
+
+  if (tenant.status !== 'active') {
+    return c.json({
+      error: 'Sua assinatura está suspensa ou cancelada.',
+      tenantStatus: tenant.status,
+      tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
+    }, 403)
   }
 
   // Verificar usuário no banco compartilhado
@@ -74,7 +82,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   return c.json({
     token: sessionToken,
     user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
-    tenant: { id: tenant.id, slug: tenant.slug },
+    tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
   })
 })
 
@@ -132,7 +140,7 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
     tenantSlug,
     token: sessionToken,
     user: { id: userId, email, nome, role: 'admin' },
-    tenant: { id: tenantId, slug: tenantSlug },
+    tenant: { id: tenantId, slug: tenantSlug, nome: tenantNome, status: 'active' },
   }, 201)
 })
 
@@ -145,9 +153,9 @@ app.get('/session-status', async (c) => {
 
   // Verificar se tenant existe e está ativo
   const tenant = await c.env.DB_SHARED
-    .prepare('SELECT id, slug, nome FROM tenants WHERE slug = ? AND status = ?')
+    .prepare('SELECT id, slug, nome, status FROM tenants WHERE slug = ? AND status = ?')
     .bind(tenantSlug, 'active')
-    .first<{ id: string; slug: string; nome: string }>()
+    .first<{ id: string; slug: string; nome: string; status: string }>()
 
   if (!tenant) {
     return c.json({ status: 'pending' })
@@ -199,7 +207,7 @@ app.get('/session-status', async (c) => {
     status: 'ready',
     token: sessionToken,
     user: { id: user.id, email: user.email, nome: user.nome, role: user.role },
-    tenant: { id: tenant.id, slug: tenant.slug },
+    tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
   })
 })
 

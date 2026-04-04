@@ -108,4 +108,58 @@ app.post('/checkout', async (c) => {
   return c.json({ url: session.url, sessionId: session.id })
 })
 
+// ─── Portal de reativação (público — funciona mesmo para tenants suspensos) ──
+// POST /api/subscriptions/reactivation-portal
+// Lê a sessão do token Bearer, busca o stripe_customer_id e abre o portal
+app.post('/reactivation-portal', async (c) => {
+  const authHeader = c.req.header('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json({ error: 'Não autenticado.' }, 401)
+  }
+
+  const token = authHeader.slice(7)
+  const session = await c.env.KV_SESSIONS.get(`session:${token}`, 'json') as {
+    tenantId?: string; tenantSlug?: string
+  } | null
+
+  if (!session?.tenantId) {
+    return c.json({ error: 'Sessão inválida ou expirada.' }, 401)
+  }
+
+  // Busca stripe_customer_id ignorando o status do tenant
+  const tenant = await c.env.DB_SHARED
+    .prepare('SELECT stripe_customer_id, slug, status FROM tenants WHERE id = ?')
+    .bind(session.tenantId)
+    .first<{ stripe_customer_id: string | null; slug: string; status: string }>()
+
+  if (!tenant?.stripe_customer_id) {
+    return c.json({ error: 'Nenhuma assinatura Stripe encontrada para esta conta.' }, 404)
+  }
+
+  const frontendUrl = c.env.FRONTEND_URL || 'http://localhost:5173'
+
+  const params = new URLSearchParams({
+    customer: tenant.stripe_customer_id,
+    return_url: `${frontendUrl}/subscription-management`,
+  })
+
+  const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  })
+
+  if (!portalRes.ok) {
+    const err = await portalRes.json() as { error?: { message?: string } }
+    console.error('[ReactivationPortal] Stripe error:', err)
+    return c.json({ error: err.error?.message || 'Erro ao abrir portal de reativação.' }, 500)
+  }
+
+  const portalSession = await portalRes.json() as { url: string }
+  return c.json({ url: portalSession.url })
+})
+
 export default app
