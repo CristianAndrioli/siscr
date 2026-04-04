@@ -175,11 +175,11 @@ export default function Layout({ children }: LayoutProps) {
 
         {hasModuleAccess('estoque') && (
           <SubMenu menuKey="estoque" label="Estoque" iconD={icons.box}>
-            <SubLink to="/estoque/estoque-atual" label="Posição Atual" />
+            <SubLink to="/estoque/posicao" label="Posição Atual" />
             <SubLink to="/estoque/movimentacoes" label="Movimentações" />
             <SubLink to="/estoque/transferencias" label="Transferências" />
-            <SubLink to="/estoque/locations" label="Locais" />
-            <SubLink to="/estoque/relatorio" label="Relatório" />
+            <SubLink to="/estoque/locais" label="Locais" />
+            <SubLink to="/estoque/instrucoes" label="Instruções" />
           </SubMenu>
         )}
 

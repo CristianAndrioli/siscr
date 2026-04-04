@@ -62,16 +62,11 @@ import FiliaisList from './pages/configuracoes/FiliaisList';
 import FiliaisForm from './pages/configuracoes/FiliaisForm';
 import EmailSettingsPage from './pages/configuracoes/EmailSettings';
 import Relatorios from './pages/configuracoes/Relatorios';
-import LocationsList from './pages/estoque/LocationsList';
-import LocationsDetail from './pages/estoque/LocationsDetail';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
-import EstoqueAtualDetail from './pages/estoque/EstoqueAtualDetail';
 import MovimentacoesList from './pages/estoque/MovimentacoesList';
-import MovimentacaoDetail from './pages/estoque/MovimentacaoDetail';
 import Transferencias from './pages/estoque/Transferencias';
-import TransferenciaDetail from './pages/estoque/TransferenciaDetail';
-import ConfiguracoesEstoque from './pages/estoque/Configuracoes';
-import RelatorioEstoque from './pages/estoque/Relatorio';
+import LocaisPage from './pages/estoque/LocaisPage';
+import EstoqueInstrucoes from './pages/estoque/EstoqueInstrucoes';
 
 // Componente para proteger rotas que precisam de autenticação
 interface ProtectedRouteProps {
@@ -698,48 +693,12 @@ function App() {
         />
         {/* Rotas de Estoque */}
         <Route
-          path="/estoque/locations"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
-                  <LocationsList />
-                </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/estoque/locations/:id"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
-                  <LocationsDetail />
-                </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/estoque/estoque-atual"
+          path="/estoque/posicao"
           element={
             <ProtectedRoute>
               <Layout>
                 <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
                   <EstoqueAtualList />
-                </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/estoque/estoque-atual/:id"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
-                  <EstoqueAtualDetail />
                 </ProtectedRouteWithPermission>
               </Layout>
             </ProtectedRoute>
@@ -758,23 +717,11 @@ function App() {
           }
         />
         <Route
-          path="/estoque/movimentacoes/:id"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
-                  <MovimentacaoDetail />
-                </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="/estoque/transferencias"
           element={
             <ProtectedRoute>
               <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="transfer">
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
                   <Transferencias />
                 </ProtectedRouteWithPermission>
               </Layout>
@@ -782,36 +729,24 @@ function App() {
           }
         />
         <Route
-          path="/estoque/transferencias/:id"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="transfer">
-                  <TransferenciaDetail />
-                </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/estoque/configuracoes"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="change">
-                  <ConfiguracoesEstoque />
-                </ProtectedRouteWithPermission>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/estoque/relatorio"
+          path="/estoque/locais"
           element={
             <ProtectedRoute>
               <Layout>
                 <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
-                  <RelatorioEstoque />
+                  <LocaisPage />
+                </ProtectedRouteWithPermission>
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/estoque/instrucoes"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view">
+                  <EstoqueInstrucoes />
                 </ProtectedRouteWithPermission>
               </Layout>
             </ProtectedRoute>
