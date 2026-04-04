@@ -109,11 +109,11 @@ function AppHome() {
 
         {/* Saudação */}
         <div>
-          <p className="text-sm text-slate-400 font-medium mb-1">{greeting()},</p>
-          <h1 className="text-2xl font-bold text-slate-800 font-display">
+          <p className="text-sm text-slate-400 dark:text-slate-500 font-medium mb-1">{greeting()},</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">
             {userName ? userName.split(' ')[0] : 'Usuário'}
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Selecione um módulo para começar.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Selecione um módulo para começar.</p>
         </div>
 
         {/* Grid de módulos */}
@@ -135,18 +135,18 @@ function AppHome() {
               <Link
                 key={module.code}
                 to={module.route}
-                className="group flex items-center gap-4 bg-white border border-slate-200 hover:border-brand-200 hover:shadow-md hover:shadow-brand-100/50 rounded-xl p-5 transition-all duration-200"
+                className="group flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-brand-200 dark:hover:border-brand-800 hover:shadow-md hover:shadow-brand-100/50 dark:hover:shadow-brand-950/50 rounded-xl p-5 transition-all duration-200"
               >
                 <div className={`w-10 h-10 rounded-xl border flex items-center justify-center flex-none transition-transform duration-200 group-hover:scale-110 ${module.color}`}>
                   {module.icon}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800 group-hover:text-brand-700 transition-colors">
+                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 group-hover:text-brand-700 dark:group-hover:text-brand-300 transition-colors">
                     {module.name}
                   </div>
-                  <div className="text-xs text-slate-400 truncate mt-0.5">{module.description}</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5">{module.description}</div>
                 </div>
-                <svg className="w-4 h-4 text-slate-300 group-hover:text-brand-400 ml-auto flex-none transition-all duration-200 group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-brand-400 dark:group-hover:text-brand-500 ml-auto flex-none transition-all duration-200 group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
@@ -156,7 +156,7 @@ function AppHome() {
 
         {/* Acesso rápido */}
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Acesso rápido</p>
+          <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Acesso rápido</p>
           <div className="flex flex-wrap gap-2">
             {[
               { label: 'Perfil', to: '/perfil' },
@@ -166,7 +166,7 @@ function AppHome() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs text-slate-600 font-medium hover:border-brand-200 hover:text-brand-700 hover:bg-brand-50 transition-all duration-150"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-600 dark:text-slate-400 font-medium hover:border-brand-200 dark:hover:border-brand-800 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-950 transition-all duration-150"
               >
                 {item.label}
                 <svg className="w-3 h-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

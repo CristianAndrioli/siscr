@@ -1,10 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>SISCR</title>
+    <!-- Inicializa tema antes do React para evitar flash de cores erradas -->
+    <script>
+      (function () {
+        try {
+          var uid = 'anon';
+          try { uid = JSON.parse(localStorage.getItem('user') || '{}').id || 'anon'; } catch (_) {}
+          var t = localStorage.getItem('theme_' + uid);
+          if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          if (t === 'dark') document.documentElement.classList.add('dark');
+        } catch (_) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
