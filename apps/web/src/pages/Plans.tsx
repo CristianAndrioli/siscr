@@ -200,6 +200,16 @@ export default function Plans() {
                 >
                   {plan.cta}
                 </Link>
+                {plan.id !== 'free' && (
+                  <Link
+                    to={`/checkout?plan=${plan.id}`}
+                    className={`block w-full text-center mt-2 text-xs font-medium transition-colors ${
+                      isBrand ? 'text-white/70 hover:text-white' : 'text-slate-500 hover:text-brand-400'
+                    }`}
+                  >
+                    Já tenho conta — assinar este plano
+                  </Link>
+                )}
               </div>
             );
           })}

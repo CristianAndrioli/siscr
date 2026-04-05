@@ -315,6 +315,79 @@ app.delete('/usuarios/:id', async (c) => {
   return c.json({ message: 'Usuário removido.' })
 })
 
+const subscriptionCheckoutSchema = z.object({
+  plan: z.enum(['basico', 'pro', 'enterprise']),
+})
+
+// POST /api/tenant/info/subscription/checkout — sessão Stripe para upgrade (tenant ativo + usuário logado)
+app.post('/subscription/checkout', zValidator('json', subscriptionCheckoutSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const user = c.get('user')
+  const { plan } = c.req.valid('json')
+
+  const STRIPE_PRICE_IDS: Record<string, string> = {
+    basico: c.env.STRIPE_PRICE_BASICO || '',
+    pro: c.env.STRIPE_PRICE_PRO || '',
+    enterprise: c.env.STRIPE_PRICE_ENTERPRISE || '',
+  }
+  const priceId = STRIPE_PRICE_IDS[plan]
+  if (!priceId) {
+    return c.json({ error: 'Este plano não está configurado para checkout (Stripe).' }, 400)
+  }
+
+  const row = await c.env.DB_SHARED
+    .prepare('SELECT slug, stripe_customer_id FROM tenants WHERE id = ?')
+    .bind(tenant.tenantId)
+    .first<{ slug: string; stripe_customer_id: string | null }>()
+
+  if (!row) return c.json({ error: 'Tenant não encontrado.' }, 404)
+
+  const u = await c.env.DB_SHARED
+    .prepare('SELECT email FROM users WHERE id = ? AND tenant_id = ?')
+    .bind(user.userId, tenant.tenantId)
+    .first<{ email: string }>()
+
+  const frontendUrl = c.env.FRONTEND_URL || 'http://localhost:5173'
+
+  const params = new URLSearchParams({
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    'success_url': `${frontendUrl}/checkout/success?tenant=${encodeURIComponent(row.slug)}`,
+    'cancel_url': `${frontendUrl}/checkout/cancel`,
+    'metadata[tenantSlug]': row.slug,
+    'metadata[plan]': plan,
+    'metadata[flow]': 'tenant_upgrade',
+    'allow_promotion_codes': 'true',
+  })
+
+  if (row.stripe_customer_id) {
+    params.set('customer', row.stripe_customer_id)
+  } else if (u?.email) {
+    params.set('customer_email', u.email)
+  } else {
+    return c.json({ error: 'Não foi possível identificar o e-mail para o checkout.' }, 400)
+  }
+
+  const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  })
+
+  if (!stripeRes.ok) {
+    const err = await stripeRes.json() as { error?: { message?: string } }
+    console.error('[SubscriptionCheckout] Stripe error:', err)
+    return c.json({ error: err.error?.message || 'Erro ao criar sessão de pagamento.' }, 500)
+  }
+
+  const session = await stripeRes.json() as { url: string; id: string }
+  return c.json({ url: session.url, sessionId: session.id })
+})
+
 // POST /api/tenant/info/subscription/portal — abre o Stripe Customer Portal
 app.post('/subscription/portal', async (c) => {
   const tenant = c.get('tenant')

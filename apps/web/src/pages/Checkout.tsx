@@ -1,272 +1,201 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { paymentsService } from '../services/payments';
-import { publicService, type Plan } from '../services/public';
 import { authService } from '../services/auth';
+import {
+  fetchPublicPlans,
+  createTenantCheckout,
+  type PlanRow,
+  type PaidPlanId,
+} from '../services/subscriptions';
 import ErrorMessage from '../components/common/ErrorMessage';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
-function Checkout() {
+const PAID_IDS: PaidPlanId[] = ['basico', 'pro', 'enterprise'];
+
+function isPaidPlanId(id: string): id is PaidPlanId {
+  return PAID_IDS.includes(id as PaidPlanId);
+}
+
+function parseFeatures(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const j = JSON.parse(raw) as unknown;
+    if (Array.isArray(j)) return j.map(String);
+    if (typeof j === 'object' && j !== null && 'items' in j && Array.isArray((j as { items: unknown }).items)) {
+      return (j as { items: string[] }).items.map(String);
+    }
+  } catch {
+    /* texto livre */
+  }
+  return raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+}
+
+export default function Checkout() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const planIdParam = searchParams.get('plan_id');
-  
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [loading, setLoading] = useState(false);
+  const planParam = (searchParams.get('plan') || '').toLowerCase();
+
+  const [plan, setPlan] = useState<PlanRow | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(true);
+  const [loadingCheckout, setLoadingCheckout] = useState(false);
   const [error, setError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    // Verificar se usuário está autenticado
     setIsAuthenticated(authService.isAuthenticated());
+  }, []);
 
-    // Carregar plano se plan_id foi fornecido
-    if (planIdParam) {
-      loadPlan(parseInt(planIdParam));
+  useEffect(() => {
+    if (!planParam) {
+      setLoadingPlan(false);
+      return;
     }
-  }, [planIdParam]);
+    if (planParam === 'free' || planParam === 'trial') {
+      navigate(`/signup?plan=${planParam}`, { replace: true });
+      return;
+    }
+    if (!isPaidPlanId(planParam)) {
+      setError('Plano inválido.');
+      setLoadingPlan(false);
+      return;
+    }
 
-  const loadPlan = async (planId: number) => {
-    try {
-      const plans = await publicService.getPlans();
-      const foundPlan = plans.find((p) => p.id === planId);
-      if (foundPlan) {
-        setPlan(foundPlan);
-      } else {
-        setError('Plano não encontrado');
+    let cancelled = false;
+    (async () => {
+      try {
+        const plans = await fetchPublicPlans();
+        if (cancelled) return;
+        const found = plans.find((p) => p.id === planParam);
+        if (found) setPlan(found);
+        else setError('Plano não encontrado ou indisponível.');
+      } catch {
+        if (!cancelled) setError('Erro ao carregar planos. Tente novamente.');
+      } finally {
+        if (!cancelled) setLoadingPlan(false);
       }
-    } catch (err) {
-      setError('Erro ao carregar plano');
-      console.error(err);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [planParam, navigate]);
 
   const handleCheckout = async () => {
-    if (!plan) {
-      setError('Selecione um plano');
-      return;
-    }
-
-    // Se não estiver autenticado, redirecionar para login
+    if (!plan || !isPaidPlanId(plan.id)) return;
     if (!isAuthenticated) {
-      navigate(`/login?redirect=/checkout?plan_id=${plan.id}`);
+      navigate(`/login?redirect=/checkout?plan=${encodeURIComponent(plan.id)}`);
       return;
     }
-
-    setLoading(true);
+    setLoadingCheckout(true);
     setError('');
-
     try {
-      const { checkout_url } = await paymentsService.createCheckoutSession(
-        plan.id,
-        billingCycle
-      );
-      
-      // Redirecionar para checkout do Stripe
-      window.location.href = checkout_url;
-    } catch (err: any) {
-      setError(
-        err.response?.data?.error ||
-        'Erro ao criar sessão de checkout. Tente novamente.'
-      );
-      setLoading(false);
+      const { url } = await createTenantCheckout(plan.id);
+      window.location.href = url;
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setError(ax.response?.data?.error || 'Erro ao iniciar pagamento. Tente novamente.');
+      setLoadingCheckout(false);
     }
   };
 
-  const formatPrice = (price: string) => {
-    return parseFloat(price).toLocaleString('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    });
-  };
+  const features = plan ? parseFeatures(plan.features) : [];
 
-  const getPrice = () => {
-    if (!plan) return '0';
-    if (billingCycle === 'yearly' && plan.price_yearly) {
-      return plan.price_yearly;
-    }
-    return plan.price_monthly;
-  };
-
-  if (!plan && !planIdParam) {
+  if (loadingPlan) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
-            Selecione um Plano
-          </h2>
-          <p className="text-gray-600 mb-6">
-            Você precisa selecionar um plano antes de fazer o checkout.
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (!planParam || !plan) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center px-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 max-w-md w-full shadow-sm">
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 font-display mb-2">Escolha um plano</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+            Use um link com o plano desejado, por exemplo <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">/checkout?plan=basico</code>.
           </p>
           <Link
             to="/plans"
-            className="block w-full text-center bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 font-semibold"
+            className="block w-full text-center btn-primary py-3"
           >
-            Ver Planos
+            Ver planos
           </Link>
         </div>
       </div>
     );
   }
 
+  const priceLabel = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(plan.preco_mensal);
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <Link to="/" className="text-2xl font-bold text-indigo-600">
-              SISCR
-            </Link>
-            <Link
-              to="/plans"
-              className="text-gray-700 hover:text-indigo-600 font-medium"
-            >
-              ← Voltar para Planos
-            </Link>
-          </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+          <Link to="/" className="font-display font-bold text-lg text-brand-600 dark:text-brand-400">
+            SISCR
+          </Link>
+          <Link to="/plans" className="text-sm font-medium text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400">
+            ← Planos
+          </Link>
         </div>
       </header>
 
-      {/* Checkout Section */}
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">
-            Finalizar Assinatura
-          </h1>
+      <main className="max-w-2xl mx-auto px-4 py-10">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 sm:p-8 shadow-sm">
+          <h1 className="text-2xl font-bold font-display text-slate-800 dark:text-slate-100 mb-6">Assinar plano</h1>
 
-          {plan && (
-            <>
-              {/* Plano Selecionado */}
-              <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  {plan.name}
-                </h2>
-                <p className="text-gray-600 mb-4">{plan.description}</p>
-
-                {/* Seleção de Ciclo de Cobrança */}
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ciclo de Cobrança
-                  </label>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => setBillingCycle('monthly')}
-                      className={`px-4 py-2 rounded-lg font-medium ${
-                        billingCycle === 'monthly'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      Mensal
-                    </button>
-                    <button
-                      onClick={() => setBillingCycle('yearly')}
-                      className={`px-4 py-2 rounded-lg font-medium ${
-                        billingCycle === 'yearly'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
-                    >
-                      Anual
-                      {plan.price_yearly && (
-                        <span className="ml-2 text-xs">
-                          (Economize{' '}
-                          {(
-                            (parseFloat(plan.price_monthly) * 12 -
-                              parseFloat(plan.price_yearly)) /
-                            (parseFloat(plan.price_monthly) * 12)
-                          ).toLocaleString('pt-BR', {
-                            style: 'percent',
-                            minimumFractionDigits: 0,
-                          })}
-                          )
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Preço */}
-                <div className="text-3xl font-bold text-indigo-600 mb-4">
-                  {plan.is_trial ? 'Grátis' : formatPrice(getPrice())}
-                  {!plan.is_trial && (
-                    <span className="text-lg text-gray-500 font-normal">
-                      {' '}
-                      / {billingCycle === 'monthly' ? 'mês' : 'ano'}
-                    </span>
-                  )}
-                </div>
-
-                {/* Features */}
-                <ul className="space-y-2">
-                  <li className="flex items-start">
-                    <span className="text-green-500 mr-2">✓</span>
-                    <span className="text-gray-700">
-                      Até {plan.max_users} usuário{plan.max_users > 1 ? 's' : ''}
-                    </span>
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 p-5 mb-6">
+            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">{plan.nome}</h2>
+            <p className="text-2xl font-bold text-brand-600 dark:text-brand-400 mt-2">
+              {priceLabel}
+              <span className="text-base font-normal text-slate-500 dark:text-slate-400"> /mês</span>
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+              <li>Até {plan.max_usuarios} usuário{plan.max_usuarios !== 1 ? 's' : ''}</li>
+              <li>Até {plan.max_empresas} empresa{plan.max_empresas !== 1 ? 's' : ''}</li>
+              <li>Até {plan.max_filiais} filial{plan.max_filiais !== 1 ? 'is' : ''}</li>
+            </ul>
+            {features.length > 0 && (
+              <ul className="mt-4 space-y-1.5 text-sm text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-4">
+                {features.slice(0, 12).map((f) => (
+                  <li key={f} className="flex gap-2">
+                    <span className="text-green-600 dark:text-green-400">✓</span>
+                    {f}
                   </li>
-                  <li className="flex items-start">
-                    <span className="text-green-500 mr-2">✓</span>
-                    <span className="text-gray-700">
-                      {plan.max_empresas} empresa{plan.max_empresas > 1 ? 's' : ''}
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-green-500 mr-2">✓</span>
-                    <span className="text-gray-700">
-                      {plan.max_filiais} filial{plan.max_filiais > 1 ? 'is' : ''}
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-green-500 mr-2">✓</span>
-                    <span className="text-gray-700">
-                      {plan.max_storage_gb} GB de armazenamento
-                    </span>
-                  </li>
-                </ul>
-              </div>
+                ))}
+              </ul>
+            )}
+          </div>
 
-              {/* Erro */}
-              {error && (
-                <ErrorMessage message={error} onClose={() => setError('')} />
-              )}
+          {error && <ErrorMessage message={error} onClose={() => setError('')} />}
 
-              {/* Botão de Checkout */}
-              {!isAuthenticated ? (
-                <div className="bg-yellow-50 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-6">
-                  <p className="mb-2">
-                    Você precisa estar logado para fazer o checkout.
-                  </p>
-                  <Link
-                    to={`/login?redirect=/checkout?plan_id=${plan.id}`}
-                    className="text-indigo-600 hover:text-indigo-800 font-semibold underline"
-                  >
-                    Fazer Login
-                  </Link>
-                </div>
-              ) : (
-                <button
-                  onClick={handleCheckout}
-                  disabled={loading}
-                  className="w-full bg-indigo-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Processando...' : 'Prosseguir para Pagamento'}
-                </button>
-              )}
-
-              {/* Informação de Segurança */}
-              <p className="text-sm text-gray-500 text-center mt-6">
-                🔒 Pagamento seguro processado pelo Stripe
-              </p>
-            </>
+          {!isAuthenticated ? (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 text-sm text-amber-900 dark:text-amber-200 mb-4">
+              <p className="mb-2">Faça login com a conta do tenant que deseja assinar.</p>
+              <Link
+                to={`/login?redirect=/checkout?plan=${encodeURIComponent(plan.id)}`}
+                className="font-semibold text-brand-600 dark:text-brand-400 underline"
+              >
+                Entrar
+              </Link>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCheckout}
+              disabled={loadingCheckout}
+              className="w-full btn-primary py-3.5 justify-center"
+            >
+              {loadingCheckout ? 'Redirecionando…' : 'Pagar com Stripe'}
+            </button>
           )}
+
+          <p className="text-xs text-slate-400 dark:text-slate-500 text-center mt-4">
+            Cobrança segura via Stripe. Após o pagamento, o plano é atualizado automaticamente.
+          </p>
         </div>
-      </section>
+      </main>
     </div>
   );
 }
-
-export default Checkout;
-

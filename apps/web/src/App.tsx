@@ -16,7 +16,6 @@ import Signup from './pages/Signup';
 import Checkout from './pages/Checkout';
 import CheckoutSuccess from './pages/CheckoutSuccess';
 import CheckoutCancel from './pages/CheckoutCancel';
-import PaymentPending from './pages/PaymentPending';
 import SubscriptionExpired from './pages/SubscriptionExpired';
 import Layout from './components/Layout';
 import ProtectedRouteWithPermission from './components/common/ProtectedRouteWithPermission';
@@ -118,7 +117,7 @@ function App() {
         <Route path="/checkout" element={<Checkout />} />
         <Route path="/checkout/success" element={<CheckoutSuccess />} />
         <Route path="/checkout/cancel" element={<CheckoutCancel />} />
-        <Route path="/payment-pending" element={<ProtectedRoute skipStatusCheck><PaymentPending /></ProtectedRoute>} />
+        <Route path="/payment-pending" element={<Navigate to="/subscription-expired" replace />} />
         <Route path="/subscription-expired" element={<ProtectedRoute skipStatusCheck><SubscriptionExpired /></ProtectedRoute>} />
 
         {/* Financeiro */}

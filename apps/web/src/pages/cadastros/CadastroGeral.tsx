@@ -71,18 +71,6 @@ function CadastroGeral() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const carregarProximoCodigo = useCallback(async () => {
-    try {
-      const response = await pessoasService.proximoCodigo?.();
-      if (response) {
-        setFormData((prev) => ({ ...prev, codigo_cadastro: response.proximo_codigo || 'NOVO' }));
-      }
-    } catch (error) {
-      console.error('Erro ao carregar próximo código:', error);
-      setError('Erro ao carregar próximo código');
-    }
-  }, [setFormData]);
-
   const carregarDados = useCallback(async () => {
     if (!codigo) return;
     
@@ -106,9 +94,9 @@ function CadastroGeral() {
     if (editando) {
       carregarDados();
     } else {
-      carregarProximoCodigo();
+      setFormData((prev) => ({ ...prev, codigo_cadastro: '—' }));
     }
-  }, [editando, carregarDados, carregarProximoCodigo]);
+  }, [editando, carregarDados, setFormData]);
 
   // Formatação automática de campos
   const handleFormattedChange = (e: ChangeEvent<HTMLInputElement>) => {

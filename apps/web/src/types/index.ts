@@ -120,25 +120,6 @@ export interface ContaPagar {
 }
 
 // ============================================
-// TIPOS GENÉRICOS
-// ============================================
-export type EntityType = Pessoa | Produto | Servico | ContaReceber | ContaPagar;
-
-// ============================================
-// RESPOSTAS DA API
-// ============================================
-export interface ApiResponse<T> {
-  results?: T[];
-  count?: number;
-  next?: string | null;
-  previous?: string | null;
-}
-
-export interface ProximoCodigoResponse {
-  proximo_codigo: number;
-}
-
-// ============================================
 // PAGINAÇÃO
 // ============================================
 export interface Pagination {
@@ -175,25 +156,6 @@ export interface GridColumn {
   required?: boolean;
   fixed?: boolean;
   render?: (value: unknown, record?: unknown) => React.ReactNode;
-}
-
-// ============================================
-// SERVIÇOS CRUD
-// ============================================
-export interface CrudService<T> {
-  list: (params?: ListParams) => Promise<ApiResponse<T> | T[]>;
-  get: (id: number | string) => Promise<T>;
-  create: (data: Partial<T>) => Promise<T>;
-  update: (id: number | string, data: Partial<T>) => Promise<T>;
-  delete: (id: number | string) => Promise<void>;
-  proximoCodigo?: () => Promise<ProximoCodigoResponse>;
-}
-
-export interface ListParams {
-  page?: number;
-  pageSize?: number;
-  page_size?: number;
-  search?: string;
 }
 
 // ============================================

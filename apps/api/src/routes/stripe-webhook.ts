@@ -85,12 +85,16 @@ app.post('/', async (c) => {
             console.warn(`[Webhook] ⚠️ Dados pendentes expirados/ausentes para: ${tenantSlug}`)
           }
         } else {
-          // Tenant já existe — atualizar customer_id e status
+          // Tenant já existe (upgrade / segunda compra) — customer, plano e status
+          const planId = plan || session.metadata?.plan
           await c.env.DB_SHARED
-            .prepare("UPDATE tenants SET stripe_customer_id = ?, status = 'active', updated_at = ? WHERE slug = ?")
-            .bind(session.customer, new Date().toISOString(), tenantSlug)
+            .prepare(
+              "UPDATE tenants SET stripe_customer_id = ?, plan_id = COALESCE(?, plan_id), status = 'active', updated_at = ? WHERE slug = ?",
+            )
+            .bind(session.customer, planId ?? null, new Date().toISOString(), tenantSlug)
             .run()
-          console.log(`[Webhook] Tenant já existia, atualizado: ${tenantSlug}`)
+          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantSlug}`)
+          console.log(`[Webhook] Tenant existente atualizado (Stripe + plano): ${tenantSlug}`)
         }
       } catch (err) {
         console.error('[Webhook] ERRO em checkout.session.completed:', err)
