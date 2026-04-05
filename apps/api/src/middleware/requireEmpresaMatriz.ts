@@ -22,6 +22,8 @@ export function allowsTenantAccessWithoutEmpresa(pathname: string, method: strin
 
   if (m === 'POST' && /^\/api\/tenant\/info\/empresas\/[^/]+\/certificado-a1$/.test(p)) return true
 
+  if (m === 'POST' && /^\/api\/tenant\/info\/filiais\/[^/]+\/certificado-a1$/.test(p)) return true
+
   // Assinatura Stripe (portal/checkout) — não exige empresa cadastrada
   if (p.startsWith('/api/tenant/info/subscription')) return true
 

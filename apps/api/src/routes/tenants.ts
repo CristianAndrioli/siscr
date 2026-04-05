@@ -5,6 +5,7 @@ import type { Env } from '../index'
 import { hashPassword } from '../lib/password'
 import { encryptA1Bundle } from '../lib/certBlob'
 import { EmpresaRepository } from '../repositories/EmpresaRepository'
+import { FilialRepository } from '../repositories/FilialRepository'
 import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
@@ -134,7 +135,7 @@ app.post('/empresas/:id/certificado-a1', async (c) => {
     return c.json(
       {
         error:
-          'Armazenamento de certificados não configurado no servidor (R2 + CERT_BLOB_SECRET). Envio disponível após configurar o Worker.',
+          'O envio do certificado digital ainda não está disponível. Você poderá configurá-lo depois no local adequado.',
         code: 'CERT_STORAGE_UNAVAILABLE',
       },
       503,
@@ -225,6 +226,88 @@ app.get('/filiais', async (c) => {
   return c.json({ filiais })
 })
 
+// POST /api/tenant/info/filiais/:id/certificado-a1 — quando a filial emite com CNPJ próprio
+app.post('/filiais/:id/certificado-a1', async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Apenas administradores podem enviar o certificado digital A1.' }, 403)
+  }
+
+  const tenant = c.get('tenant')
+  const filialId = c.req.param('id')
+  const filRepo = new FilialRepository(c.env.DB_SHARED, tenant.tenantId)
+  const exists = await c.env.DB_SHARED
+    .prepare('SELECT id FROM filiais WHERE id = ? AND tenant_id = ?')
+    .bind(filialId, tenant.tenantId)
+    .first<{ id: string }>()
+  if (!exists) {
+    return c.json({ error: 'Filial não encontrada.' }, 404)
+  }
+
+  if (!c.env.R2_STORAGE || !c.env.CERT_BLOB_SECRET?.trim()) {
+    return c.json(
+      {
+        error:
+          'O envio do certificado digital ainda não está disponível. Você poderá configurá-lo depois no local adequado.',
+        code: 'CERT_STORAGE_UNAVAILABLE',
+      },
+      503,
+    )
+  }
+
+  let formData: FormData
+  try {
+    formData = await c.req.formData()
+  } catch {
+    return c.json({ error: 'Use multipart/form-data com os campos file e password.' }, 400)
+  }
+
+  const fileEntry = formData.get('file')
+  const password = String(formData.get('password') ?? '')
+
+  const isFileBlob =
+    typeof fileEntry === 'object' &&
+    fileEntry !== null &&
+    'arrayBuffer' in fileEntry &&
+    typeof (fileEntry as Blob).arrayBuffer === 'function'
+
+  if (!isFileBlob) {
+    return c.json({ error: 'Arquivo obrigatório (campo file: .pfx ou .p12).' }, 400)
+  }
+  const file = fileEntry as File
+  if (!password) {
+    return c.json({ error: 'Informe a senha do certificado.' }, 400)
+  }
+
+  const name = (file.name || '').toLowerCase()
+  if (!name.endsWith('.pfx') && !name.endsWith('.p12')) {
+    return c.json({ error: 'Envie um arquivo .pfx ou .p12 (certificado A1).' }, 400)
+  }
+
+  const buf = await file.arrayBuffer()
+  if (buf.byteLength > 512 * 1024) {
+    return c.json({ error: 'Arquivo muito grande (máximo 512 KB).' }, 400)
+  }
+
+  const scopeKey = `filial:${filialId}`
+  const encrypted = await encryptA1Bundle(c.env.CERT_BLOB_SECRET, tenant.tenantId, scopeKey, buf, password)
+
+  const objectKey = `tenants/${tenant.tenantId}/a1/filial/${filialId}.enc`
+  const oldKey = await filRepo.getA1ObjectKey(filialId)
+  if (oldKey && oldKey !== objectKey) {
+    await c.env.R2_STORAGE.delete(oldKey).catch(() => {})
+  }
+
+  await c.env.R2_STORAGE.put(objectKey, encrypted, {
+    httpMetadata: { contentType: 'application/octet-stream' },
+  })
+
+  const now = new Date().toISOString()
+  await filRepo.setA1CertObjectKey(filialId, objectKey, now)
+
+  return c.json({ message: 'Certificado armazenado de forma cifrada.', uploadedAt: now })
+})
+
 // PUT /api/tenant/info/filiais/:id
 app.put('/filiais/:id', zValidator('json', filialSchema.partial().extend({ ativa: z.boolean().optional() })), async (c) => {
   const tenant = c.get('tenant')
@@ -238,8 +321,14 @@ app.put('/filiais/:id', zValidator('json', filialSchema.partial().extend({ ativa
 // DELETE /api/tenant/info/filiais/:id
 app.delete('/filiais/:id', async (c) => {
   const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const filRepo = new FilialRepository(c.env.DB_SHARED, tenant.tenantId)
+  const certKey = await filRepo.getA1ObjectKey(id)
+  if (certKey && c.env.R2_STORAGE) {
+    await c.env.R2_STORAGE.delete(certKey).catch(() => {})
+  }
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  await svc.deleteFilial(c.req.param('id'))
+  await svc.deleteFilial(id)
   return c.json({ message: 'Filial removida.' })
 })
 

@@ -1,18 +1,17 @@
 /**
- * Cifra o bundle .pfx + senha para armazenamento no R2 (AES-256-GCM).
- * A chave deriva de CERT_BLOB_SECRET + tenant + empresa (isolamento por registro).
- * Formato gravado: 12 bytes IV + ciphertext (inclui tag GCM).
+ * Cifra o bundle .pfx + senha (AES-256-GCM).
+ * `scopeKey` isola registros: use o mesmo id da empresa (`empresaId`) para matriz, ou `filial:${filialId}` para filial.
  */
 export async function encryptA1Bundle(
   masterSecret: string,
   tenantId: string,
-  empresaId: string,
+  scopeKey: string,
   pfxBytes: ArrayBuffer,
   pfxPassword: string,
 ): Promise<ArrayBuffer> {
   const pfxB64 = arrayBufferToBase64(pfxBytes)
   const plain = JSON.stringify({ v: 1, pfxB64, pwd: pfxPassword })
-  const keyMaterial = new TextEncoder().encode(`${masterSecret}|${tenantId}|${empresaId}`)
+  const keyMaterial = new TextEncoder().encode(`${masterSecret}|${tenantId}|${scopeKey}`)
   const keyRaw = await crypto.subtle.digest('SHA-256', keyMaterial)
   const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['encrypt'])
 
@@ -33,7 +32,7 @@ export async function encryptA1Bundle(
 export async function decryptA1Bundle(
   masterSecret: string,
   tenantId: string,
-  empresaId: string,
+  scopeKey: string,
   encrypted: ArrayBuffer,
 ): Promise<{ pfxBytes: ArrayBuffer; password: string }> {
   const u8 = new Uint8Array(encrypted)
@@ -42,7 +41,7 @@ export async function decryptA1Bundle(
   const iv = u8.slice(0, 12)
   const ct = u8.slice(12)
 
-  const keyMaterial = new TextEncoder().encode(`${masterSecret}|${tenantId}|${empresaId}`)
+  const keyMaterial = new TextEncoder().encode(`${masterSecret}|${tenantId}|${scopeKey}`)
   const keyRaw = await crypto.subtle.digest('SHA-256', keyMaterial)
   const key = await crypto.subtle.importKey('raw', keyRaw, 'AES-GCM', false, ['decrypt'])
 

@@ -28,7 +28,7 @@ export class EmpresaRepository extends BaseTenantRepository {
     const { results } = await this.db
       .prepare(
         `
-      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.created_at,
+      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.created_at, e.a1_cert_uploaded_at,
              (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id) as total_filiais
       FROM empresas e
       WHERE e.tenant_id = ?

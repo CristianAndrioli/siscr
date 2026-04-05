@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import { authService } from '../../services/auth';
 
 const UF_LIST = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
@@ -9,11 +10,13 @@ interface Empresa {
   cidade?: string; uf?: string; email?: string; telefone?: string;
   logradouro?: string; numero?: string; bairro?: string; cep?: string;
   total_filiais?: number; created_at: string;
+  a1_cert_uploaded_at?: string | null;
 }
 interface Filial {
   id: string; nome: string; cnpj?: string; uf?: string; cidade?: string;
   logradouro?: string; numero?: string; bairro?: string; cep?: string;
   ativa: number; empresa_id: string; empresa_nome?: string; created_at?: string;
+  a1_cert_uploaded_at?: string | null;
 }
 
 type EmpresaForm = { razaoSocial: string; nomeFantasia: string; cnpj: string; email: string; telefone: string; uf: string; cidade: string; logradouro: string; numero: string; bairro: string; cep: string; };
@@ -68,6 +71,16 @@ export function FiliaisPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<{ tipo: 'empresa' | 'filial'; id: string } | null>(null);
 
+  const [certStorageReady, setCertStorageReady] = useState(false);
+  const [empresaCertFile, setEmpresaCertFile] = useState<File | null>(null);
+  const [empresaCertPwd, setEmpresaCertPwd] = useState('');
+  const [empresaCertBusy, setEmpresaCertBusy] = useState(false);
+  const [filialCertFile, setFilialCertFile] = useState<File | null>(null);
+  const [filialCertPwd, setFilialCertPwd] = useState('');
+  const [filialCertBusy, setFilialCertBusy] = useState(false);
+
+  const isAdmin = (authService.getLocalUser() as { role?: string } | null)?.role === 'admin';
+
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
@@ -83,10 +96,18 @@ export function FiliaisPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    api.get('/tenant/info/onboarding')
+      .then((r) => setCertStorageReady(!!r.data.certificateStorageReady))
+      .catch(() => setCertStorageReady(false));
+  }, []);
+
   // ── Empresa ────────────────────────────────────────────
 
   const openNewEmpresa = () => {
-    setEmpresaForm(emptyEmpresa()); setEmpresaEditing(null); setEmpresaModalError(''); setShowEmpresaModal(true);
+    setEmpresaForm(emptyEmpresa()); setEmpresaEditing(null); setEmpresaModalError('');
+    setEmpresaCertFile(null); setEmpresaCertPwd('');
+    setShowEmpresaModal(true);
   };
 
   const openEditEmpresa = (e: Empresa) => {
@@ -95,7 +116,9 @@ export function FiliaisPage() {
       email: e.email ?? '', telefone: e.telefone ?? '', uf: e.uf ?? 'SC', cidade: e.cidade ?? '',
       logradouro: e.logradouro ?? '', numero: e.numero ?? '', bairro: e.bairro ?? '', cep: e.cep ?? '',
     });
-    setEmpresaEditing(e.id); setEmpresaModalError(''); setShowEmpresaModal(true);
+    setEmpresaEditing(e.id); setEmpresaModalError('');
+    setEmpresaCertFile(null); setEmpresaCertPwd('');
+    setShowEmpresaModal(true);
   };
 
   const setEF = (k: keyof EmpresaForm, v: string) => setEmpresaForm(f => ({ ...f, [k]: v }));
@@ -120,13 +143,59 @@ export function FiliaisPage() {
   // ── Filial ──────────────────────────────────────────────
 
   const openNewFilial = (empresaId: string) => {
-    setFilialForm(emptyFilial()); setFilialEditing(null); setFilialParentId(empresaId); setFilialModalError(''); setShowFilialModal(true);
+    setFilialForm(emptyFilial()); setFilialEditing(null); setFilialParentId(empresaId); setFilialModalError('');
+    setFilialCertFile(null); setFilialCertPwd('');
+    setShowFilialModal(true);
   };
 
   const openEditFilial = (f: Filial) => {
     setFilialForm({ nome: f.nome, cnpj: f.cnpj ?? '', uf: f.uf ?? 'SC', cidade: f.cidade ?? '',
       logradouro: f.logradouro ?? '', numero: f.numero ?? '', bairro: f.bairro ?? '', cep: f.cep ?? '', ativa: f.ativa === 1 });
-    setFilialEditing(f.id); setFilialParentId(f.empresa_id); setFilialModalError(''); setShowFilialModal(true);
+    setFilialEditing(f.id); setFilialParentId(f.empresa_id); setFilialModalError('');
+    setFilialCertFile(null); setFilialCertPwd('');
+    setShowFilialModal(true);
+  };
+
+  const uploadEmpresaCert = async () => {
+    if (!empresaEditing || !empresaCertFile || !empresaCertPwd.trim()) {
+      setEmpresaModalError('Selecione o arquivo .pfx ou .p12 e informe a senha.');
+      return;
+    }
+    setEmpresaCertBusy(true); setEmpresaModalError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', empresaCertFile);
+      fd.append('password', empresaCertPwd);
+      await api.post(`/tenant/info/empresas/${empresaEditing}/certificado-a1`, fd);
+      setEmpresaCertFile(null); setEmpresaCertPwd('');
+      await load();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setEmpresaModalError(ax.response?.data?.error || 'Erro ao enviar certificado.');
+    } finally {
+      setEmpresaCertBusy(false);
+    }
+  };
+
+  const uploadFilialCert = async () => {
+    if (!filialEditing || !filialCertFile || !filialCertPwd.trim()) {
+      setFilialModalError('Selecione o arquivo .pfx ou .p12 e informe a senha.');
+      return;
+    }
+    setFilialCertBusy(true); setFilialModalError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', filialCertFile);
+      fd.append('password', filialCertPwd);
+      await api.post(`/tenant/info/filiais/${filialEditing}/certificado-a1`, fd);
+      setFilialCertFile(null); setFilialCertPwd('');
+      await load();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setFilialModalError(ax.response?.data?.error || 'Erro ao enviar certificado.');
+    } finally {
+      setFilialCertBusy(false);
+    }
   };
 
   const setFF = (k: keyof FilialForm, v: string | boolean) => setFilialForm(f => ({ ...f, [k]: v }));
@@ -202,7 +271,12 @@ export function FiliaisPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{empresa.razao_social}</p>
-                      <p className="text-xs text-slate-400 dark:text-slate-500">{empresa.nome_fantasia || empresa.cnpj || 'CNPJ não informado'} · {filiaisE.length} filial(is)</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 flex flex-wrap items-center gap-2">
+                        <span>{empresa.nome_fantasia || empresa.cnpj || 'CNPJ não informado'} · {filiaisE.length} filial(is)</span>
+                        {empresa.a1_cert_uploaded_at && (
+                          <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">A1 matriz</span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
@@ -243,7 +317,12 @@ export function FiliaisPage() {
                                 <div className={`w-2 h-2 rounded-full flex-none ${filial.ativa === 1 ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}`} />
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{filial.nome}</p>
-                                  <p className="text-xs text-slate-400 dark:text-slate-500">{filial.cidade && filial.uf ? `${filial.cidade}/${filial.uf}` : filial.cnpj || '—'}</p>
+                                  <p className="text-xs text-slate-400 dark:text-slate-500 flex flex-wrap items-center gap-2">
+                                    <span>{filial.cidade && filial.uf ? `${filial.cidade}/${filial.uf}` : filial.cnpj || '—'}</span>
+                                    {filial.a1_cert_uploaded_at && (
+                                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-semibold">A1 filial</span>
+                                    )}
+                                  </p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 ml-4 flex-none">
@@ -287,6 +366,63 @@ export function FiliaisPage() {
                 <SelectField label="UF" value={empresaForm.uf} onChange={v => setEF('uf', v)} options={UF_LIST} />
                 <Field label="CEP" value={empresaForm.cep} onChange={v => setEF('cep', v.replace(/\D/g, ''))} maxLen={8} />
               </div>
+
+              {isAdmin && !empresaEditing && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-4">
+                  Depois de salvar, use <strong className="text-slate-600 dark:text-slate-300">Editar</strong> para enviar o certificado digital A1 da matriz, se necessário.
+                </p>
+              )}
+
+              {isAdmin && empresaEditing && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-5 space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Certificado digital (e-CNPJ A1) — empresa</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Vinculado ao CNPJ desta empresa (matriz). Use quando as notas forem emitidas em nome deste CNPJ.
+                  </p>
+                  {!certStorageReady && (
+                    <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                      O envio do certificado ainda não está disponível aqui. Você poderá configurar depois no mesmo lugar (editar esta empresa).
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    {empresas.find((x) => x.id === empresaEditing)?.a1_cert_uploaded_at
+                      ? `Certificado enviado em ${fmtDate(empresas.find((x) => x.id === empresaEditing)!.a1_cert_uploaded_at!)}. Envie outro arquivo para substituir.`
+                      : 'Nenhum certificado cadastrado para esta empresa.'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Arquivo .pfx ou .p12</label>
+                      <input
+                        type="file"
+                        accept=".pfx,.p12"
+                        disabled={!certStorageReady || empresaCertBusy}
+                        onChange={(e) => setEmpresaCertFile(e.target.files?.[0] ?? null)}
+                        className="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-brand-600 file:px-2 file:py-1 file:text-white disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Senha do certificado</label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={empresaCertPwd}
+                        onChange={(e) => setEmpresaCertPwd(e.target.value)}
+                        disabled={!certStorageReady || empresaCertBusy}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={uploadEmpresaCert}
+                    disabled={!certStorageReady || empresaCertBusy}
+                    className="text-sm px-4 py-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50"
+                  >
+                    {empresaCertBusy ? 'Enviando…' : 'Enviar certificado'}
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowEmpresaModal(false)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
                 <button onClick={saveEmpresa} disabled={empresaSaving} className="flex-1 px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50">{empresaSaving ? 'Salvando...' : 'Salvar'}</button>
@@ -325,6 +461,63 @@ export function FiliaisPage() {
                   <label className="text-sm text-slate-700 dark:text-slate-300">{filialForm.ativa ? 'Filial ativa' : 'Filial inativa'}</label>
                 </div>
               )}
+
+              {isAdmin && !filialEditing && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800 pt-4">
+                  Depois de salvar a filial, use <strong className="text-slate-600 dark:text-slate-300">Editar</strong> para enviar certificado A1 próprio da filial, se ela emitir NF-e com CNPJ diferente da matriz.
+                </p>
+              )}
+
+              {isAdmin && filialEditing && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-5 space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Certificado digital (e-CNPJ A1) — filial</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Se esta filial <strong className="text-slate-600 dark:text-slate-300">emite notas com CNPJ próprio</strong>, envie o e-CNPJ A1 desse CNPJ. Se todas as notas saem pelo CNPJ da matriz, em geral basta o certificado cadastrado na empresa.
+                  </p>
+                  {!certStorageReady && (
+                    <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                      O envio do certificado ainda não está disponível aqui. Configure depois editando esta filial novamente.
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    {filiais.find((x) => x.id === filialEditing)?.a1_cert_uploaded_at
+                      ? `Certificado enviado em ${fmtDate(filiais.find((x) => x.id === filialEditing)!.a1_cert_uploaded_at!)}. Envie outro arquivo para substituir.`
+                      : 'Nenhum certificado específico desta filial.'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Arquivo .pfx ou .p12</label>
+                      <input
+                        type="file"
+                        accept=".pfx,.p12"
+                        disabled={!certStorageReady || filialCertBusy}
+                        onChange={(e) => setFilialCertFile(e.target.files?.[0] ?? null)}
+                        className="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-brand-600 file:px-2 file:py-1 file:text-white disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Senha do certificado</label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={filialCertPwd}
+                        onChange={(e) => setFilialCertPwd(e.target.value)}
+                        disabled={!certStorageReady || filialCertBusy}
+                        className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={uploadFilialCert}
+                    disabled={!certStorageReady || filialCertBusy}
+                    className="text-sm px-4 py-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50"
+                  >
+                    {filialCertBusy ? 'Enviando…' : 'Enviar certificado da filial'}
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowFilialModal(false)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
                 <button onClick={saveFilial} disabled={filialSaving} className="flex-1 px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50">{filialSaving ? 'Salvando...' : 'Salvar'}</button>
