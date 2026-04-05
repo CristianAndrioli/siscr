@@ -3,6 +3,15 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { hashPassword } from '../lib/password'
+import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
+
+function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
+  if (e instanceof Error && typeof (e as Error & { status?: number }).status === 'number') {
+    const status = (e as Error & { status: number }).status
+    return c.json({ error: e.message }, status)
+  }
+  throw e
+}
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -10,32 +19,17 @@ const app = new Hono<{ Bindings: Env }>()
 app.get('/', async (c) => {
   const tenant = c.get('tenant')
   const user = c.get('user')
-
-  const data = await c.env.DB_SHARED
-    .prepare('SELECT id, slug, nome, plan_id, status, created_at FROM tenants WHERE id = ?')
-    .bind(tenant.tenantId)
-    .first()
-
+  const info = createTenantInfoService(c.env.DB_SHARED, tenant.tenantId)
+  const data = await info.getTenant()
   return c.json({ tenant: data, currentUser: user })
 })
 
 // GET /api/tenant/info/empresas — listar empresas do tenant
 app.get('/empresas', async (c) => {
   const tenant = c.get('tenant')
-  const db = c.env.DB_SHARED
-
-  const { results } = await db
-    .prepare(`
-      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.created_at,
-             (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id) as total_filiais
-      FROM empresas e
-      WHERE e.tenant_id = ?
-      ORDER BY e.razao_social
-    `)
-    .bind(tenant.tenantId)
-    .all()
-
-  return c.json({ empresas: results })
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  const empresas = await svc.listEmpresas()
+  return c.json({ empresas })
 })
 
 // POST /api/tenant/info/empresas — criar empresa
@@ -58,23 +52,8 @@ const empresaSchema = z.object({
 app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
-  const id = crypto.randomUUID()
-
-  await c.env.DB_SHARED
-    .prepare(`
-      INSERT INTO empresas (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual,
-        email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    .bind(
-      id, tenant.tenantId, data.razaoSocial, data.nomeFantasia ?? null, data.cnpj,
-      data.inscricaoEstadual ?? null, data.email ?? null, data.telefone ?? null,
-      data.logradouro ?? null, data.numero ?? null, data.complemento ?? null,
-      data.bairro ?? null, data.cidade ?? null, data.uf ?? null, data.cep ?? null,
-      new Date().toISOString()
-    )
-    .run()
-
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  const id = await svc.createEmpresa(data)
   return c.json({ id, message: 'Empresa criada com sucesso.' }, 201)
 })
 
@@ -82,18 +61,13 @@ app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
 app.get('/empresas/:id/filiais', async (c) => {
   const tenant = c.get('tenant')
   const empresaId = c.req.param('id')
-
-  const { results } = await c.env.DB_SHARED
-    .prepare(`
-      SELECT id, nome, cnpj, uf, cidade, ativa, created_at
-      FROM filiais
-      WHERE empresa_id = ? AND tenant_id = ?
-      ORDER BY nome
-    `)
-    .bind(empresaId, tenant.tenantId)
-    .all()
-
-  return c.json({ filiais: results })
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  try {
+    const filiais = await svc.listFiliaisByEmpresa(empresaId)
+    return c.json({ filiais })
+  } catch (e) {
+    return jsonHttpError(c, e)
+  }
 })
 
 // POST /api/tenant/info/empresas/:id/filiais — criar filial
@@ -112,95 +86,56 @@ app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) =>
   const tenant = c.get('tenant')
   const empresaId = c.req.param('id')
   const data = c.req.valid('json')
-  const id = crypto.randomUUID()
-
-  await c.env.DB_SHARED
-    .prepare(`
-      INSERT INTO filiais (id, tenant_id, empresa_id, nome, cnpj, uf, cidade, logradouro, numero, bairro, cep, ativa, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    .bind(
-      id, tenant.tenantId, empresaId, data.nome, data.cnpj ?? null,
-      data.uf ?? null, data.cidade ?? null, data.logradouro ?? null,
-      data.numero ?? null, data.bairro ?? null, data.cep ?? null,
-      1, new Date().toISOString()
-    )
-    .run()
-
-  return c.json({ id, message: 'Filial criada com sucesso.' }, 201)
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  try {
+    const id = await svc.createFilial(empresaId, data)
+    return c.json({ id, message: 'Filial criada com sucesso.' }, 201)
+  } catch (e) {
+    return jsonHttpError(c, e)
+  }
 })
 
 // PUT /api/tenant/info/empresas/:id — atualizar empresa
 app.put('/empresas/:id', zValidator('json', empresaSchema.partial()), async (c) => {
   const tenant = c.get('tenant')
-  const data = c.req.valid('json')
+  const data = c.req.valid('json') as Record<string, unknown>
   const id = c.req.param('id')
-  const now = new Date().toISOString()
-
-  const fields: string[] = ['updated_at = ?']
-  const vals: unknown[] = [now]
-  const map: Record<string, string> = {
-    razaoSocial: 'razao_social', nomeFantasia: 'nome_fantasia', cnpj: 'cnpj',
-    inscricaoEstadual: 'inscricao_estadual', email: 'email', telefone: 'telefone',
-    logradouro: 'logradouro', numero: 'numero', complemento: 'complemento',
-    bairro: 'bairro', cidade: 'cidade', uf: 'uf', cep: 'cep',
-  }
-  for (const [k, col] of Object.entries(map)) {
-    if ((data as any)[k] !== undefined) { fields.push(`${col} = ?`); vals.push((data as any)[k]) }
-  }
-  await c.env.DB_SHARED.prepare(`UPDATE empresas SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
-    .bind(...vals, id, tenant.tenantId).run()
-
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  await svc.updateEmpresa(id, data)
   return c.json({ message: 'Empresa atualizada.' })
 })
 
 // DELETE /api/tenant/info/empresas/:id
 app.delete('/empresas/:id', async (c) => {
   const tenant = c.get('tenant')
-  await c.env.DB_SHARED.prepare('DELETE FROM empresas WHERE id = ? AND tenant_id = ?')
-    .bind(c.req.param('id'), tenant.tenantId).run()
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  await svc.deleteEmpresa(c.req.param('id'))
   return c.json({ message: 'Empresa removida.' })
 })
 
 // GET /api/tenant/info/filiais — todas as filiais do tenant
 app.get('/filiais', async (c) => {
   const tenant = c.get('tenant')
-  const { results } = await c.env.DB_SHARED.prepare(`
-    SELECT f.id, f.nome, f.cnpj, f.uf, f.cidade, f.logradouro, f.numero, f.bairro, f.cep, f.ativa, f.created_at,
-           e.id as empresa_id, e.razao_social as empresa_nome
-    FROM filiais f
-    LEFT JOIN empresas e ON e.id = f.empresa_id
-    WHERE f.tenant_id = ?
-    ORDER BY e.razao_social, f.nome
-  `).bind(tenant.tenantId).all()
-  return c.json({ filiais: results })
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  const filiais = await svc.listAllFiliais()
+  return c.json({ filiais })
 })
 
 // PUT /api/tenant/info/filiais/:id
 app.put('/filiais/:id', zValidator('json', filialSchema.partial().extend({ ativa: z.boolean().optional() })), async (c) => {
   const tenant = c.get('tenant')
-  const data = c.req.valid('json')
+  const data = c.req.valid('json') as Record<string, unknown> & { ativa?: boolean }
   const id = c.req.param('id')
-  const now = new Date().toISOString()
-
-  const fields: string[] = ['updated_at = ?']
-  const vals: unknown[] = [now]
-  const cols = ['nome', 'cnpj', 'uf', 'cidade', 'logradouro', 'numero', 'bairro', 'cep']
-  for (const col of cols) {
-    if ((data as any)[col] !== undefined) { fields.push(`${col} = ?`); vals.push((data as any)[col]) }
-  }
-  if ((data as any).ativa !== undefined) { fields.push('ativa = ?'); vals.push((data as any).ativa ? 1 : 0) }
-
-  await c.env.DB_SHARED.prepare(`UPDATE filiais SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
-    .bind(...vals, id, tenant.tenantId).run()
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  await svc.updateFilial(id, data)
   return c.json({ message: 'Filial atualizada.' })
 })
 
 // DELETE /api/tenant/info/filiais/:id
 app.delete('/filiais/:id', async (c) => {
   const tenant = c.get('tenant')
-  await c.env.DB_SHARED.prepare('DELETE FROM filiais WHERE id = ? AND tenant_id = ?')
-    .bind(c.req.param('id'), tenant.tenantId).run()
+  const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
+  await svc.deleteFilial(c.req.param('id'))
   return c.json({ message: 'Filial removida.' })
 })
 
