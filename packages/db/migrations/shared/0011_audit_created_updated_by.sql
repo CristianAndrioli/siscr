@@ -53,7 +53,7 @@ ALTER TABLE nota_fiscal_itens ADD COLUMN created_by TEXT REFERENCES users(id);
 ALTER TABLE nota_fiscal_itens ADD COLUMN updated_by TEXT REFERENCES users(id);
 UPDATE nota_fiscal_itens SET updated_at = created_at WHERE updated_at IS NULL;
 
-ALTER TABLE cotacoes ADD COLUMN updated_at TEXT;
+-- cotacoes.updated_at já existe em 0006_faturamento_schema.sql
 ALTER TABLE cotacoes ADD COLUMN created_by TEXT REFERENCES users(id);
 ALTER TABLE cotacoes ADD COLUMN updated_by TEXT REFERENCES users(id);
 
