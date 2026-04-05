@@ -4,6 +4,72 @@ import { authService } from '../../services/auth';
 
 const UF_LIST = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
+const fmtDateTime = (s?: string) => s ? new Date(s).toLocaleString('pt-BR') : '—';
+
+/** Metadados públicos do certificado A1 (API / D1). */
+type A1CertMeta = {
+  subjectCn: string | null;
+  subjectDn: string | null;
+  issuerCn: string | null;
+  issuerDn: string | null;
+  serialNumber: string | null;
+  validFrom: string;
+  validTo: string;
+  thumbprintSha256: string;
+};
+
+function parseA1CertMeta(raw: unknown): A1CertMeta | null {
+  if (raw == null || raw === '') return null;
+  if (typeof raw === 'object' && raw !== null && 'validTo' in raw && typeof (raw as A1CertMeta).validTo === 'string') {
+    return raw as A1CertMeta;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const o = JSON.parse(raw) as A1CertMeta;
+      return o?.validTo ? o : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
+function certValidityHint(validTo: string): { text: string; expired: boolean; soon: boolean } {
+  const end = new Date(validTo);
+  const now = new Date();
+  if (end < now) return { text: 'Certificado expirado', expired: true, soon: false };
+  const days = Math.ceil((end.getTime() - now.getTime()) / 864e5);
+  if (days <= 30) return { text: `Expira em ${days} dia(s)`, expired: false, soon: true };
+  return { text: `Válido até ${fmtDate(validTo)}`, expired: false, soon: false };
+}
+
+function CertMetaDetails({ meta }: { meta: A1CertMeta }) {
+  const v = certValidityHint(meta.validTo);
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2.5 text-xs text-slate-600 dark:text-slate-300 space-y-1.5">
+      <p className="font-medium text-slate-800 dark:text-slate-100">
+        {meta.subjectCn || meta.subjectDn || 'Titular (CN) não identificado'}
+      </p>
+      {meta.subjectDn && meta.subjectCn && (
+        <p className="text-slate-500 dark:text-slate-400 break-words leading-snug">{meta.subjectDn}</p>
+      )}
+      <p>
+        <span className="text-slate-500 dark:text-slate-400">Válido: </span>
+        {fmtDateTime(meta.validFrom)} — {fmtDateTime(meta.validTo)}
+      </p>
+      <p className={v.expired ? 'text-red-600 dark:text-red-400 font-medium' : v.soon ? 'text-amber-700 dark:text-amber-300 font-medium' : 'text-emerald-700 dark:text-emerald-400'}>
+        {v.text}
+      </p>
+      {(meta.issuerCn || meta.issuerDn) && (
+        <p className="text-slate-500 dark:text-slate-400 break-words">
+          <span className="font-medium text-slate-600 dark:text-slate-300">Emissor: </span>
+          {meta.issuerCn || meta.issuerDn}
+        </p>
+      )}
+      {meta.serialNumber && (
+        <p className="font-mono text-[10px] text-slate-400 dark:text-slate-500 break-all">Série: {meta.serialNumber}</p>
+      )}
+    </div>
+  );
+}
 
 interface Empresa {
   id: string; razao_social: string; nome_fantasia?: string; cnpj?: string;
@@ -11,12 +77,14 @@ interface Empresa {
   logradouro?: string; numero?: string; bairro?: string; cep?: string;
   total_filiais?: number; created_at: string;
   a1_cert_uploaded_at?: string | null;
+  a1_cert_meta?: string | null;
 }
 interface Filial {
   id: string; nome: string; cnpj?: string; uf?: string; cidade?: string;
   logradouro?: string; numero?: string; bairro?: string; cep?: string;
   ativa: number; empresa_id: string; empresa_nome?: string; created_at?: string;
   a1_cert_uploaded_at?: string | null;
+  a1_cert_meta?: string | null;
 }
 
 type EmpresaForm = { razaoSocial: string; nomeFantasia: string; cnpj: string; email: string; telefone: string; uf: string; cidade: string; logradouro: string; numero: string; bairro: string; cep: string; };
@@ -78,6 +146,8 @@ export function FiliaisPage() {
   const [filialCertFile, setFilialCertFile] = useState<File | null>(null);
   const [filialCertPwd, setFilialCertPwd] = useState('');
   const [filialCertBusy, setFilialCertBusy] = useState(false);
+  const [empresaCertSyncBusy, setEmpresaCertSyncBusy] = useState(false);
+  const [filialCertSyncBusy, setFilialCertSyncBusy] = useState(false);
 
   const isAdmin = (authService.getLocalUser() as { role?: string } | null)?.role === 'admin';
 
@@ -198,6 +268,34 @@ export function FiliaisPage() {
     }
   };
 
+  const syncEmpresaCertMeta = async () => {
+    if (!empresaEditing) return;
+    setEmpresaCertSyncBusy(true); setEmpresaModalError('');
+    try {
+      await api.post(`/tenant/info/empresas/${empresaEditing}/certificado-a1/atualizar-metadados`);
+      await load();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setEmpresaModalError(ax.response?.data?.error || 'Erro ao atualizar dados do certificado.');
+    } finally {
+      setEmpresaCertSyncBusy(false);
+    }
+  };
+
+  const syncFilialCertMeta = async () => {
+    if (!filialEditing) return;
+    setFilialCertSyncBusy(true); setFilialModalError('');
+    try {
+      await api.post(`/tenant/info/filiais/${filialEditing}/certificado-a1/atualizar-metadados`);
+      await load();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setFilialModalError(ax.response?.data?.error || 'Erro ao atualizar dados do certificado.');
+    } finally {
+      setFilialCertSyncBusy(false);
+    }
+  };
+
   const setFF = (k: keyof FilialForm, v: string | boolean) => setFilialForm(f => ({ ...f, [k]: v }));
 
   const saveFilial = async () => {
@@ -262,6 +360,7 @@ export function FiliaisPage() {
           {empresas.map(empresa => {
             const filiaisE = filiaisDaEmpresa(empresa.id);
             const expanded = expandedEmpresa === empresa.id;
+            const empresaCertMeta = parseA1CertMeta(empresa.a1_cert_meta);
             return (
               <div key={empresa.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => setExpandedEmpresa(expanded ? null : empresa.id)}>
@@ -276,6 +375,14 @@ export function FiliaisPage() {
                         {empresa.a1_cert_uploaded_at && (
                           <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold">A1 matriz</span>
                         )}
+                        {empresaCertMeta && (() => {
+                          const h = certValidityHint(empresaCertMeta.validTo);
+                          return (
+                            <span className={`text-[10px] ${h.expired ? 'text-red-600 dark:text-red-400' : h.soon ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                              {h.expired || h.soon ? h.text : `até ${fmtDate(empresaCertMeta.validTo)}`}
+                            </span>
+                          );
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -311,7 +418,9 @@ export function FiliaisPage() {
                         <p className="text-xs text-slate-400 dark:text-slate-500 italic">Nenhuma filial cadastrada para esta empresa.</p>
                       ) : (
                         <div className="space-y-2">
-                          {filiaisE.map(filial => (
+                          {filiaisE.map(filial => {
+                            const filialCertMeta = parseA1CertMeta(filial.a1_cert_meta);
+                            return (
                             <div key={filial.id} className="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg px-4 py-2.5">
                               <div className="flex items-center gap-3 min-w-0">
                                 <div className={`w-2 h-2 rounded-full flex-none ${filial.ativa === 1 ? 'bg-emerald-400' : 'bg-slate-300 dark:bg-slate-600'}`} />
@@ -322,6 +431,14 @@ export function FiliaisPage() {
                                     {filial.a1_cert_uploaded_at && (
                                       <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-semibold">A1 filial</span>
                                     )}
+                                    {filialCertMeta && (() => {
+                                      const h = certValidityHint(filialCertMeta.validTo);
+                                      return (
+                                        <span className={`text-[10px] ${h.expired ? 'text-red-600 dark:text-red-400' : h.soon ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                                          {h.expired || h.soon ? h.text : `até ${fmtDate(filialCertMeta.validTo)}`}
+                                        </span>
+                                      );
+                                    })()}
                                   </p>
                                 </div>
                               </div>
@@ -331,7 +448,8 @@ export function FiliaisPage() {
                                 <button onClick={() => setDeleteTarget({ tipo: 'filial', id: filial.id })} className="text-xs text-red-500 hover:underline font-medium">Excluir</button>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -384,18 +502,38 @@ export function FiliaisPage() {
                       O envio do certificado ainda não está disponível aqui. Você poderá configurar depois no mesmo lugar (editar esta empresa).
                     </p>
                   )}
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    {empresas.find((x) => x.id === empresaEditing)?.a1_cert_uploaded_at
-                      ? `Certificado enviado em ${fmtDate(empresas.find((x) => x.id === empresaEditing)!.a1_cert_uploaded_at!)}. Envie outro arquivo para substituir.`
-                      : 'Nenhum certificado cadastrado para esta empresa.'}
-                  </p>
+                  {(() => {
+                    const eRow = empresas.find((x) => x.id === empresaEditing);
+                    const uploadedAt = eRow?.a1_cert_uploaded_at;
+                    const meta = parseA1CertMeta(eRow?.a1_cert_meta);
+                    return (
+                      <>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                          {uploadedAt
+                            ? `Certificado enviado em ${fmtDate(uploadedAt)}. Envie outro arquivo para substituir.`
+                            : 'Nenhum certificado cadastrado para esta empresa.'}
+                        </p>
+                        {meta && <CertMetaDetails meta={meta} />}
+                        {uploadedAt && certStorageReady && (
+                          <button
+                            type="button"
+                            onClick={syncEmpresaCertMeta}
+                            disabled={empresaCertSyncBusy || empresaCertBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            {empresaCertSyncBusy ? 'Atualizando…' : meta ? 'Recarregar dados do certificado' : 'Carregar validade e titular'}
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Arquivo .pfx ou .p12</label>
                       <input
                         type="file"
                         accept=".pfx,.p12"
-                        disabled={!certStorageReady || empresaCertBusy}
+                        disabled={!certStorageReady || empresaCertBusy || empresaCertSyncBusy}
                         onChange={(e) => setEmpresaCertFile(e.target.files?.[0] ?? null)}
                         className="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-brand-600 file:px-2 file:py-1 file:text-white disabled:opacity-50"
                       />
@@ -407,7 +545,7 @@ export function FiliaisPage() {
                         autoComplete="new-password"
                         value={empresaCertPwd}
                         onChange={(e) => setEmpresaCertPwd(e.target.value)}
-                        disabled={!certStorageReady || empresaCertBusy}
+                        disabled={!certStorageReady || empresaCertBusy || empresaCertSyncBusy}
                         className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
                       />
                     </div>
@@ -415,7 +553,7 @@ export function FiliaisPage() {
                   <button
                     type="button"
                     onClick={uploadEmpresaCert}
-                    disabled={!certStorageReady || empresaCertBusy}
+                    disabled={!certStorageReady || empresaCertBusy || empresaCertSyncBusy}
                     className="text-sm px-4 py-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50"
                   >
                     {empresaCertBusy ? 'Enviando…' : 'Enviar certificado'}
@@ -479,18 +617,38 @@ export function FiliaisPage() {
                       O envio do certificado ainda não está disponível aqui. Configure depois editando esta filial novamente.
                     </p>
                   )}
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    {filiais.find((x) => x.id === filialEditing)?.a1_cert_uploaded_at
-                      ? `Certificado enviado em ${fmtDate(filiais.find((x) => x.id === filialEditing)!.a1_cert_uploaded_at!)}. Envie outro arquivo para substituir.`
-                      : 'Nenhum certificado específico desta filial.'}
-                  </p>
+                  {(() => {
+                    const fRow = filiais.find((x) => x.id === filialEditing);
+                    const uploadedAt = fRow?.a1_cert_uploaded_at;
+                    const meta = parseA1CertMeta(fRow?.a1_cert_meta);
+                    return (
+                      <>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                          {uploadedAt
+                            ? `Certificado enviado em ${fmtDate(uploadedAt)}. Envie outro arquivo para substituir.`
+                            : 'Nenhum certificado específico desta filial.'}
+                        </p>
+                        {meta && <CertMetaDetails meta={meta} />}
+                        {uploadedAt && certStorageReady && (
+                          <button
+                            type="button"
+                            onClick={syncFilialCertMeta}
+                            disabled={filialCertSyncBusy || filialCertBusy}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                          >
+                            {filialCertSyncBusy ? 'Atualizando…' : meta ? 'Recarregar dados do certificado' : 'Carregar validade e titular'}
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Arquivo .pfx ou .p12</label>
                       <input
                         type="file"
                         accept=".pfx,.p12"
-                        disabled={!certStorageReady || filialCertBusy}
+                        disabled={!certStorageReady || filialCertBusy || filialCertSyncBusy}
                         onChange={(e) => setFilialCertFile(e.target.files?.[0] ?? null)}
                         className="block w-full text-xs text-slate-600 dark:text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-brand-600 file:px-2 file:py-1 file:text-white disabled:opacity-50"
                       />
@@ -502,7 +660,7 @@ export function FiliaisPage() {
                         autoComplete="new-password"
                         value={filialCertPwd}
                         onChange={(e) => setFilialCertPwd(e.target.value)}
-                        disabled={!certStorageReady || filialCertBusy}
+                        disabled={!certStorageReady || filialCertBusy || filialCertSyncBusy}
                         className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
                       />
                     </div>
@@ -510,7 +668,7 @@ export function FiliaisPage() {
                   <button
                     type="button"
                     onClick={uploadFilialCert}
-                    disabled={!certStorageReady || filialCertBusy}
+                    disabled={!certStorageReady || filialCertBusy || filialCertSyncBusy}
                     className="text-sm px-4 py-2 rounded-lg bg-slate-800 dark:bg-slate-700 text-white hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50"
                   >
                     {filialCertBusy ? 'Enviando…' : 'Enviar certificado da filial'}

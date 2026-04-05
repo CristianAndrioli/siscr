@@ -25,7 +25,7 @@ export class FilialRepository extends BaseTenantRepository {
     const { results } = await this.db
       .prepare(
         `
-      SELECT id, nome, cnpj, uf, cidade, ativa, created_at, a1_cert_uploaded_at
+      SELECT id, nome, cnpj, uf, cidade, ativa, created_at, a1_cert_uploaded_at, a1_cert_meta
       FROM filiais
       WHERE empresa_id = ? AND tenant_id = ?
       ORDER BY nome
@@ -40,7 +40,7 @@ export class FilialRepository extends BaseTenantRepository {
     const { results } = await this.db
       .prepare(
         `
-      SELECT f.id, f.nome, f.cnpj, f.uf, f.cidade, f.logradouro, f.numero, f.bairro, f.cep, f.ativa, f.created_at, f.a1_cert_uploaded_at,
+      SELECT f.id, f.nome, f.cnpj, f.uf, f.cidade, f.logradouro, f.numero, f.bairro, f.cep, f.ativa, f.created_at, f.a1_cert_uploaded_at, f.a1_cert_meta,
              e.id as empresa_id, e.razao_social as empresa_nome
       FROM filiais f
       LEFT JOIN empresas e ON e.id = f.empresa_id
@@ -101,10 +101,19 @@ export class FilialRepository extends BaseTenantRepository {
     return row?.a1_r2_object_key ?? null
   }
 
-  async setA1CertObjectKey(filialId: string, objectKey: string | null, uploadedAt: string | null): Promise<void> {
+  async setA1CertStored(filialId: string, objectKey: string, uploadedAt: string, metaJson: string): Promise<void> {
     await this.db
-      .prepare('UPDATE filiais SET a1_r2_object_key = ?, a1_cert_uploaded_at = ? WHERE id = ? AND tenant_id = ?')
-      .bind(objectKey, uploadedAt, filialId, this.tenantId)
+      .prepare(
+        'UPDATE filiais SET a1_r2_object_key = ?, a1_cert_uploaded_at = ?, a1_cert_meta = ? WHERE id = ? AND tenant_id = ?',
+      )
+      .bind(objectKey, uploadedAt, metaJson, filialId, this.tenantId)
+      .run()
+  }
+
+  async updateA1CertMetaJson(filialId: string, metaJson: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE filiais SET a1_cert_meta = ? WHERE id = ? AND tenant_id = ?')
+      .bind(metaJson, filialId, this.tenantId)
       .run()
   }
 }

@@ -3,7 +3,8 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { hashPassword } from '../lib/password'
-import { encryptA1Bundle } from '../lib/certBlob'
+import { decryptA1Bundle, encryptA1Bundle } from '../lib/certBlob'
+import { extractA1CertPublicMeta } from '../lib/pfxMetadata'
 import { EmpresaRepository } from '../repositories/EmpresaRepository'
 import { FilialRepository } from '../repositories/FilialRepository'
 import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
@@ -176,6 +177,14 @@ app.post('/empresas/:id/certificado-a1', async (c) => {
     return c.json({ error: 'Arquivo muito grande (máximo 512 KB).' }, 400)
   }
 
+  let certMeta
+  try {
+    certMeta = extractA1CertPublicMeta(buf, password)
+  } catch (e) {
+    return jsonHttpError(c, e)
+  }
+  const metaJson = JSON.stringify(certMeta)
+
   const encrypted = await encryptA1Bundle(c.env.CERT_BLOB_SECRET, tenant.tenantId, empresaId, buf, password)
 
   const objectKey = `tenants/${tenant.tenantId}/a1/${empresaId}.enc`
@@ -189,9 +198,71 @@ app.post('/empresas/:id/certificado-a1', async (c) => {
   })
 
   const now = new Date().toISOString()
-  await empRepo.setA1CertObjectKey(empresaId, objectKey, now)
+  await empRepo.setA1CertStored(empresaId, objectKey, now, metaJson)
 
-  return c.json({ message: 'Certificado armazenado de forma cifrada.', uploadedAt: now })
+  return c.json({
+    message: 'Certificado armazenado de forma cifrada.',
+    uploadedAt: now,
+    certificate: certMeta,
+  })
+})
+
+// POST /api/tenant/info/empresas/:id/certificado-a1/atualizar-metadados — reextrai metadados do blob já armazenado (admin)
+app.post('/empresas/:id/certificado-a1/atualizar-metadados', async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Apenas administradores podem atualizar os dados do certificado.' }, 403)
+  }
+
+  const tenant = c.get('tenant')
+  const empresaId = c.req.param('id')
+  const empRepo = new EmpresaRepository(c.env.DB_SHARED, tenant.tenantId)
+  const found = await empRepo.findIdByTenant(empresaId)
+  if (!found) {
+    return c.json({ error: 'Empresa não encontrada.' }, 404)
+  }
+
+  if (!c.env.R2_STORAGE || !c.env.CERT_BLOB_SECRET?.trim()) {
+    return c.json(
+      {
+        error:
+          'O armazenamento do certificado não está disponível. Tente novamente mais tarde ou reenvie o arquivo .pfx.',
+        code: 'CERT_STORAGE_UNAVAILABLE',
+      },
+      503,
+    )
+  }
+
+  const objectKey = await empRepo.getA1ObjectKey(empresaId)
+  if (!objectKey) {
+    return c.json({ error: 'Nenhum certificado armazenado para esta empresa.' }, 400)
+  }
+
+  const obj = await c.env.R2_STORAGE.get(objectKey)
+  if (!obj) {
+    return c.json({ error: 'Arquivo do certificado não encontrado no armazenamento.' }, 404)
+  }
+
+  const enc = await obj.arrayBuffer()
+  let pfxBytes: ArrayBuffer
+  let pwd: string
+  try {
+    const bundle = await decryptA1Bundle(c.env.CERT_BLOB_SECRET, tenant.tenantId, empresaId, enc)
+    pfxBytes = bundle.pfxBytes
+    pwd = bundle.password
+  } catch {
+    return c.json({ error: 'Não foi possível ler o certificado armazenado (formato inválido ou chave incorreta).' }, 500)
+  }
+
+  let certMeta
+  try {
+    certMeta = extractA1CertPublicMeta(pfxBytes, pwd)
+  } catch (e) {
+    return jsonHttpError(c, e)
+  }
+
+  await empRepo.updateA1CertMetaJson(empresaId, JSON.stringify(certMeta))
+  return c.json({ message: 'Dados do certificado atualizados.', certificate: certMeta })
 })
 
 // PUT /api/tenant/info/empresas/:id — atualizar empresa
@@ -289,6 +360,14 @@ app.post('/filiais/:id/certificado-a1', async (c) => {
     return c.json({ error: 'Arquivo muito grande (máximo 512 KB).' }, 400)
   }
 
+  let certMeta
+  try {
+    certMeta = extractA1CertPublicMeta(buf, password)
+  } catch (e) {
+    return jsonHttpError(c, e)
+  }
+  const metaJson = JSON.stringify(certMeta)
+
   const scopeKey = `filial:${filialId}`
   const encrypted = await encryptA1Bundle(c.env.CERT_BLOB_SECRET, tenant.tenantId, scopeKey, buf, password)
 
@@ -303,9 +382,75 @@ app.post('/filiais/:id/certificado-a1', async (c) => {
   })
 
   const now = new Date().toISOString()
-  await filRepo.setA1CertObjectKey(filialId, objectKey, now)
+  await filRepo.setA1CertStored(filialId, objectKey, now, metaJson)
 
-  return c.json({ message: 'Certificado armazenado de forma cifrada.', uploadedAt: now })
+  return c.json({
+    message: 'Certificado armazenado de forma cifrada.',
+    uploadedAt: now,
+    certificate: certMeta,
+  })
+})
+
+// POST /api/tenant/info/filiais/:id/certificado-a1/atualizar-metadados
+app.post('/filiais/:id/certificado-a1/atualizar-metadados', async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Apenas administradores podem atualizar os dados do certificado.' }, 403)
+  }
+
+  const tenant = c.get('tenant')
+  const filialId = c.req.param('id')
+  const filRepo = new FilialRepository(c.env.DB_SHARED, tenant.tenantId)
+  const exists = await c.env.DB_SHARED
+    .prepare('SELECT id FROM filiais WHERE id = ? AND tenant_id = ?')
+    .bind(filialId, tenant.tenantId)
+    .first<{ id: string }>()
+  if (!exists) {
+    return c.json({ error: 'Filial não encontrada.' }, 404)
+  }
+
+  if (!c.env.R2_STORAGE || !c.env.CERT_BLOB_SECRET?.trim()) {
+    return c.json(
+      {
+        error:
+          'O armazenamento do certificado não está disponível. Tente novamente mais tarde ou reenvie o arquivo .pfx.',
+        code: 'CERT_STORAGE_UNAVAILABLE',
+      },
+      503,
+    )
+  }
+
+  const objectKey = await filRepo.getA1ObjectKey(filialId)
+  if (!objectKey) {
+    return c.json({ error: 'Nenhum certificado armazenado para esta filial.' }, 400)
+  }
+
+  const obj = await c.env.R2_STORAGE.get(objectKey)
+  if (!obj) {
+    return c.json({ error: 'Arquivo do certificado não encontrado no armazenamento.' }, 404)
+  }
+
+  const scopeKey = `filial:${filialId}`
+  const enc = await obj.arrayBuffer()
+  let pfxBytes: ArrayBuffer
+  let pwd: string
+  try {
+    const bundle = await decryptA1Bundle(c.env.CERT_BLOB_SECRET, tenant.tenantId, scopeKey, enc)
+    pfxBytes = bundle.pfxBytes
+    pwd = bundle.password
+  } catch {
+    return c.json({ error: 'Não foi possível ler o certificado armazenado (formato inválido ou chave incorreta).' }, 500)
+  }
+
+  let certMeta
+  try {
+    certMeta = extractA1CertPublicMeta(pfxBytes, pwd)
+  } catch (e) {
+    return jsonHttpError(c, e)
+  }
+
+  await filRepo.updateA1CertMetaJson(filialId, JSON.stringify(certMeta))
+  return c.json({ message: 'Dados do certificado atualizados.', certificate: certMeta })
 })
 
 // PUT /api/tenant/info/filiais/:id

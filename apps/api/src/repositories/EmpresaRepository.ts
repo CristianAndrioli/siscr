@@ -28,7 +28,7 @@ export class EmpresaRepository extends BaseTenantRepository {
     const { results } = await this.db
       .prepare(
         `
-      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.created_at, e.a1_cert_uploaded_at,
+      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta,
              (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id) as total_filiais
       FROM empresas e
       WHERE e.tenant_id = ?
@@ -94,10 +94,20 @@ export class EmpresaRepository extends BaseTenantRepository {
     return row?.a1_r2_object_key ?? null
   }
 
-  async setA1CertObjectKey(empresaId: string, objectKey: string | null, uploadedAt: string | null): Promise<void> {
+  /** Grava blob A1 + data de envio + metadados públicos do certificado (JSON). */
+  async setA1CertStored(empresaId: string, objectKey: string, uploadedAt: string, metaJson: string): Promise<void> {
     await this.db
-      .prepare('UPDATE empresas SET a1_r2_object_key = ?, a1_cert_uploaded_at = ? WHERE id = ? AND tenant_id = ?')
-      .bind(objectKey, uploadedAt, empresaId, this.tenantId)
+      .prepare(
+        'UPDATE empresas SET a1_r2_object_key = ?, a1_cert_uploaded_at = ?, a1_cert_meta = ? WHERE id = ? AND tenant_id = ?',
+      )
+      .bind(objectKey, uploadedAt, metaJson, empresaId, this.tenantId)
+      .run()
+  }
+
+  async updateA1CertMetaJson(empresaId: string, metaJson: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE empresas SET a1_cert_meta = ? WHERE id = ? AND tenant_id = ?')
+      .bind(metaJson, empresaId, this.tenantId)
       .run()
   }
 
