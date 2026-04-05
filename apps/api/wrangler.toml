@@ -33,11 +33,12 @@ binding = "KV_TENANT_CACHE"
 id = "1119412c979c4f4ba0e4b4c247720c93"
 
 # ──────────────────────────────────────────────
-# R2 — Desativado no staging (ativar quando habilitar R2 no painel)
+# R2 — Certificado A1 cifrado + XMLs NF-e (bucket_name = nome exato no painel R2)
+# Criptografia do .pfx: wrangler secret put CERT_BLOB_SECRET [--env staging]
 # ──────────────────────────────────────────────
-# [[r2_buckets]]
-# binding = "R2_STORAGE"
-# bucket_name = "siscr-storage"
+[[r2_buckets]]
+binding = "R2_STORAGE"
+bucket_name = "siscr-storage"
 
 # ──────────────────────────────────────────────
 # Queues — Tarefas assíncronas (emails, relatórios)
@@ -88,9 +89,9 @@ id = "7ebafa6b64e24c56abea57f8d0998c94"
 binding = "KV_TENANT_CACHE"
 id = "1119412c979c4f4ba0e4b4c247720c93"
 
-# [[env.staging.r2_buckets]]
-# binding = "R2_STORAGE"
-# bucket_name = "siscr-storage-staging"
+[[env.staging.r2_buckets]]
+binding = "R2_STORAGE"
+bucket_name = "siscr-storage-staging"
 
 [[env.staging.queues.producers]]
 binding = "QUEUE_TASKS"

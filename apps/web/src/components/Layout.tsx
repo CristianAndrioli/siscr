@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { usePermissions } from '../hooks/usePermissions';
 import { useTheme } from '../hooks/useTheme';
+import OnboardingEmpresaGate from './OnboardingEmpresaGate';
 
 interface LayoutProps { children: ReactNode }
 type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'estoque' | 'configuracoes';
@@ -241,6 +242,7 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
+      <OnboardingEmpresaGate />
       {/* Sidebar desktop */}
       <div className="hidden lg:flex lg:flex-col lg:w-60 flex-none">
         {sidebar}

@@ -3,6 +3,8 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { hashPassword } from '../lib/password'
+import { encryptA1Bundle } from '../lib/certBlob'
+import { EmpresaRepository } from '../repositories/EmpresaRepository'
 import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
@@ -22,6 +24,18 @@ app.get('/', async (c) => {
   const info = createTenantInfoService(c.env.DB_SHARED, tenant.tenantId)
   const data = await info.getTenant()
   return c.json({ tenant: data, currentUser: user })
+})
+
+// GET /api/tenant/info/onboarding — primeira empresa obrigatória; certificado A1 opcional (R2 + secret)
+app.get('/onboarding', async (c) => {
+  const tenant = c.get('tenant')
+  const repo = new EmpresaRepository(c.env.DB_SHARED, tenant.tenantId)
+  const empresaCount = await repo.count()
+  return c.json({
+    needsEmpresaOnboarding: empresaCount === 0,
+    empresaCount,
+    certificateStorageReady: Boolean(c.env.R2_STORAGE && c.env.CERT_BLOB_SECRET?.trim()),
+  })
 })
 
 // GET /api/tenant/info/empresas — listar empresas do tenant
@@ -51,6 +65,12 @@ const empresaSchema = z.object({
 
 app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
   const tenant = c.get('tenant')
+  const user = c.get('user')
+  const empRepo = new EmpresaRepository(c.env.DB_SHARED, tenant.tenantId)
+  const n = await empRepo.count()
+  if (n === 0 && user.role !== 'admin') {
+    return c.json({ error: 'Somente o administrador pode cadastrar a primeira empresa do ambiente.' }, 403)
+  }
   const data = c.req.valid('json')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
   const id = await svc.createEmpresa(data)
@@ -95,6 +115,84 @@ app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) =>
   }
 })
 
+// POST /api/tenant/info/empresas/:id/certificado-a1 — .pfx/.p12 cifrado e gravado no R2 (opcional no onboarding)
+app.post('/empresas/:id/certificado-a1', async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Apenas administradores podem enviar o certificado digital A1.' }, 403)
+  }
+
+  const tenant = c.get('tenant')
+  const empresaId = c.req.param('id')
+  const empRepo = new EmpresaRepository(c.env.DB_SHARED, tenant.tenantId)
+  const found = await empRepo.findIdByTenant(empresaId)
+  if (!found) {
+    return c.json({ error: 'Empresa não encontrada.' }, 404)
+  }
+
+  if (!c.env.R2_STORAGE || !c.env.CERT_BLOB_SECRET?.trim()) {
+    return c.json(
+      {
+        error:
+          'Armazenamento de certificados não configurado no servidor (R2 + CERT_BLOB_SECRET). Envio disponível após configurar o Worker.',
+        code: 'CERT_STORAGE_UNAVAILABLE',
+      },
+      503,
+    )
+  }
+
+  let formData: FormData
+  try {
+    formData = await c.req.formData()
+  } catch {
+    return c.json({ error: 'Use multipart/form-data com os campos file e password.' }, 400)
+  }
+
+  const fileEntry = formData.get('file')
+  const password = String(formData.get('password') ?? '')
+
+  const isFileBlob =
+    typeof fileEntry === 'object' &&
+    fileEntry !== null &&
+    'arrayBuffer' in fileEntry &&
+    typeof (fileEntry as Blob).arrayBuffer === 'function'
+
+  if (!isFileBlob) {
+    return c.json({ error: 'Arquivo obrigatório (campo file: .pfx ou .p12).' }, 400)
+  }
+  const file = fileEntry as File
+  if (!password) {
+    return c.json({ error: 'Informe a senha do certificado.' }, 400)
+  }
+
+  const name = (file.name || '').toLowerCase()
+  if (!name.endsWith('.pfx') && !name.endsWith('.p12')) {
+    return c.json({ error: 'Envie um arquivo .pfx ou .p12 (certificado A1).' }, 400)
+  }
+
+  const buf = await file.arrayBuffer()
+  if (buf.byteLength > 512 * 1024) {
+    return c.json({ error: 'Arquivo muito grande (máximo 512 KB).' }, 400)
+  }
+
+  const encrypted = await encryptA1Bundle(c.env.CERT_BLOB_SECRET, tenant.tenantId, empresaId, buf, password)
+
+  const objectKey = `tenants/${tenant.tenantId}/a1/${empresaId}.enc`
+  const oldKey = await empRepo.getA1ObjectKey(empresaId)
+  if (oldKey && oldKey !== objectKey) {
+    await c.env.R2_STORAGE.delete(oldKey).catch(() => {})
+  }
+
+  await c.env.R2_STORAGE.put(objectKey, encrypted, {
+    httpMetadata: { contentType: 'application/octet-stream' },
+  })
+
+  const now = new Date().toISOString()
+  await empRepo.setA1CertObjectKey(empresaId, objectKey, now)
+
+  return c.json({ message: 'Certificado armazenado de forma cifrada.', uploadedAt: now })
+})
+
 // PUT /api/tenant/info/empresas/:id — atualizar empresa
 app.put('/empresas/:id', zValidator('json', empresaSchema.partial()), async (c) => {
   const tenant = c.get('tenant')
@@ -108,8 +206,14 @@ app.put('/empresas/:id', zValidator('json', empresaSchema.partial()), async (c) 
 // DELETE /api/tenant/info/empresas/:id
 app.delete('/empresas/:id', async (c) => {
   const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const empRepo = new EmpresaRepository(c.env.DB_SHARED, tenant.tenantId)
+  const certKey = await empRepo.getA1ObjectKey(id)
+  if (certKey && c.env.R2_STORAGE) {
+    await c.env.R2_STORAGE.delete(certKey).catch(() => {})
+  }
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  await svc.deleteEmpresa(c.req.param('id'))
+  await svc.deleteEmpresa(id)
   return c.json({ message: 'Empresa removida.' })
 })
 

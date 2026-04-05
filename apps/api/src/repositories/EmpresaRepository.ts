@@ -78,6 +78,29 @@ export class EmpresaRepository extends BaseTenantRepository {
     return row?.id ?? null
   }
 
+  async count(): Promise<number> {
+    const row = await this.db
+      .prepare('SELECT COUNT(*) AS n FROM empresas WHERE tenant_id = ?')
+      .bind(this.tenantId)
+      .first<{ n: number }>()
+    return row?.n ?? 0
+  }
+
+  async getA1ObjectKey(empresaId: string): Promise<string | null> {
+    const row = await this.db
+      .prepare('SELECT a1_r2_object_key FROM empresas WHERE id = ? AND tenant_id = ?')
+      .bind(empresaId, this.tenantId)
+      .first<{ a1_r2_object_key: string | null }>()
+    return row?.a1_r2_object_key ?? null
+  }
+
+  async setA1CertObjectKey(empresaId: string, objectKey: string | null, uploadedAt: string | null): Promise<void> {
+    await this.db
+      .prepare('UPDATE empresas SET a1_r2_object_key = ?, a1_cert_uploaded_at = ? WHERE id = ? AND tenant_id = ?')
+      .bind(objectKey, uploadedAt, empresaId, this.tenantId)
+      .run()
+  }
+
   async update(id: string, setSql: string, values: unknown[]): Promise<void> {
     await this.db
       .prepare(`UPDATE empresas SET ${setSql} WHERE id = ? AND tenant_id = ?`)

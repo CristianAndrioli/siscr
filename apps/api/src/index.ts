@@ -26,8 +26,10 @@ export type Env = {
   // KV — sessões e cache de tenant routing
   KV_SESSIONS: KVNamespace
   KV_TENANT_CACHE: KVNamespace
-  // R2 — arquivos, XMLs NF-e, PDFs (ativar após habilitar R2 no painel)
+  // R2 — arquivos, XMLs NF-e, PDFs, certificados A1 cifrados
   R2_STORAGE?: R2Bucket
+  /** Secret para AES-GCM do bundle .pfx+senha (wrangler secret put CERT_BLOB_SECRET) */
+  CERT_BLOB_SECRET?: string
   // Queues — tarefas assíncronas
   QUEUE_TASKS: Queue
   // Variáveis de ambiente
