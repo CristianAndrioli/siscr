@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosError, AxiosHeaders, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 
 export type CreateSiscrHttpClientOptions = {
   baseURL: string
@@ -17,6 +17,17 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
 
   instance.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
+      // FormData exige boundary no Content-Type; o default application/json quebra o parse no servidor.
+      if (config.data instanceof FormData) {
+        const h = config.headers
+        if (h instanceof AxiosHeaders) {
+          h.delete('Content-Type')
+        } else if (h && typeof h === 'object') {
+          delete (h as Record<string, unknown>)['Content-Type']
+          delete (h as Record<string, unknown>)['content-type']
+        }
+      }
+
       const token = localStorage.getItem('access_token')
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
