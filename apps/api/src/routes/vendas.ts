@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { auditUserId } from '../lib/audit'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -54,6 +55,7 @@ app.post('/pedidos', zValidator('json', pedidoSchema), async (c) => {
 
   const pedidoId = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   // Calcular total
   const total = data.itens.reduce((acc, item) => {
@@ -71,19 +73,19 @@ app.post('/pedidos', zValidator('json', pedidoSchema), async (c) => {
   const statements = [
     // Inserir pedido
     c.env.DB_SHARED.prepare(`
-      INSERT INTO pedidos_venda (id, tenant_id, empresa_id, filial_id, cliente_id, usuario_id, numero, tipo, status, total, observacoes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO pedidos_venda (id, tenant_id, empresa_id, filial_id, cliente_id, usuario_id, numero, tipo, status, total, observacoes, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId, data.clienteId,
-        user.userId, numero, data.tipo, 'rascunho', total, data.observacoes ?? null, now),
+        user.userId, numero, data.tipo, 'rascunho', total, data.observacoes ?? null, now, now, uid, uid),
 
     // Inserir itens
     ...data.itens.map((item) =>
       c.env.DB_SHARED.prepare(`
-        INSERT INTO itens_pedido (id, tenant_id, pedido_id, produto_id, quantidade, preco_unitario, desconto, subtotal, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO itens_pedido (id, tenant_id, pedido_id, produto_id, quantidade, preco_unitario, desconto, subtotal, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(crypto.randomUUID(), tenant.tenantId, pedidoId, item.produtoId,
           item.quantidade, item.precoUnitario, item.desconto,
-          (item.quantidade * item.precoUnitario) - item.desconto, now)
+          (item.quantidade * item.precoUnitario) - item.desconto, now, now, uid, uid)
     ),
   ]
 
@@ -127,8 +129,8 @@ app.patch('/pedidos/:id/status', async (c) => {
   }
 
   await c.env.DB_SHARED
-    .prepare('UPDATE pedidos_venda SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-    .bind(status, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare('UPDATE pedidos_venda SET status = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?')
+    .bind(status, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: `Pedido atualizado para "${status}".` })

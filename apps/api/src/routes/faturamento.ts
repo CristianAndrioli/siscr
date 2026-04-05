@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { auditUserId } from '../lib/audit'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -82,6 +83,7 @@ app.post('/cotacoes', zValidator('json', cotacaoSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   // Gerar número sequencial simples
   const last = await c.env.DB_SHARED
@@ -94,20 +96,20 @@ app.post('/cotacoes', zValidator('json', cotacaoSchema), async (c) => {
 
   const stmts = [
     c.env.DB_SHARED.prepare(`
-      INSERT INTO cotacoes (id, tenant_id, numero, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO cotacoes (id, tenant_id, numero, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(id, tenant.tenantId, numero, data.pessoaId ?? null, data.validade ?? null,
-        data.observacoes ?? null, data.desconto, valorTotal, data.status, now),
+        data.observacoes ?? null, data.desconto, valorTotal, data.status, now, now, uid, uid),
   ]
 
   for (const item of data.itens) {
     const itemTotal = item.quantidade * item.valorUnitario - item.desconto
     stmts.push(
       c.env.DB_SHARED.prepare(`
-        INSERT INTO cotacao_itens (id, cotacao_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cotacao_itens (id, cotacao_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
-          item.descricao, item.quantidade, item.valorUnitario, item.desconto, itemTotal, item.unidade, now)
+          item.descricao, item.quantidade, item.valorUnitario, item.desconto, itemTotal, item.unidade, now, now, uid, uid)
     )
   }
 
@@ -120,6 +122,7 @@ app.put('/cotacoes/:id', zValidator('json', cotacaoSchema.partial()), async (c) 
   const id = c.req.param('id')
   const data = c.req.valid('json')
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   const stmts: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
 
@@ -132,18 +135,18 @@ app.put('/cotacoes/:id', zValidator('json', cotacaoSchema.partial()), async (c) 
       const itemTotal = item.quantidade! * item.valorUnitario! - (item.desconto ?? 0)
       stmts.push(
         c.env.DB_SHARED.prepare(`
-          INSERT INTO cotacao_itens (id, cotacao_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO cotacao_itens (id, cotacao_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at, updated_at, created_by, updated_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
-            item.descricao!, item.quantidade!, item.valorUnitario!, item.desconto ?? 0, itemTotal, item.unidade ?? 'UN', now)
+            item.descricao!, item.quantidade!, item.valorUnitario!, item.desconto ?? 0, itemTotal, item.unidade ?? 'UN', now, now, uid, uid)
       )
     }
   }
 
   const valorTotal = data.itens ? calcTotal(data.itens as typeof data.itens) - (data.desconto ?? 0) : undefined
 
-  const fields: string[] = ['updated_at = ?']
-  const vals: unknown[] = [now]
+  const fields: string[] = ['updated_at = ?', 'updated_by = ?']
+  const vals: unknown[] = [now, uid]
   if (data.pessoaId !== undefined) { fields.push('pessoa_id = ?'); vals.push(data.pessoaId) }
   if (data.validade !== undefined) { fields.push('validade = ?'); vals.push(data.validade) }
   if (data.observacoes !== undefined) { fields.push('observacoes = ?'); vals.push(data.observacoes) }
@@ -243,6 +246,7 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   // Número sequencial por tipo
   const last = await c.env.DB_SHARED
@@ -259,12 +263,12 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
       INSERT INTO notas_fiscais
         (id, tenant_id, tipo, numero, serie, destinatario_id, natureza_operacao,
          descricao_servico, aliquota_iss, valor_iss, codigo_servico,
-         observacoes, valor_produtos, valor_desconto, valor_total, status, created_at)
-      VALUES (?, ?, ?, ?, '1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rascunho', ?)
+         observacoes, valor_produtos, valor_desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, '1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rascunho', ?, ?, ?, ?)
     `).bind(id, tenant.tenantId, data.tipo, numero, data.destinatarioId ?? null,
         data.naturezaOperacao ?? null, data.descricaoServico ?? null,
         data.aliquotaIss ?? null, valorIss, data.codigoServico ?? null,
-        data.observacoes ?? null, valorProdutos, data.desconto, valorTotal, now),
+        data.observacoes ?? null, valorProdutos, data.desconto, valorTotal, now, now, uid, uid),
   ]
 
   for (const item of data.itens) {
@@ -272,11 +276,11 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     stmts.push(
       c.env.DB_SHARED.prepare(`
         INSERT INTO nota_fiscal_itens
-          (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, cfop, ncm, unidade, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, cfop, ncm, unidade, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
           item.descricao, item.quantidade, item.valorUnitario, item.desconto, itemTotal,
-          item.cfop ?? null, item.ncm ?? null, item.unidade, now)
+          item.cfop ?? null, item.ncm ?? null, item.unidade, now, now, uid, uid)
     )
   }
 
@@ -289,6 +293,7 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
   const id = c.req.param('id')
   const data = c.req.valid('json')
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   const nota = await c.env.DB_SHARED
     .prepare('SELECT status FROM notas_fiscais WHERE id = ? AND tenant_id = ?')
@@ -309,17 +314,17 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
       stmts.push(
         c.env.DB_SHARED.prepare(`
           INSERT INTO nota_fiscal_itens
-            (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, cfop, ncm, unidade, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, cfop, ncm, unidade, created_at, updated_at, created_by, updated_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
             item.descricao!, item.quantidade!, item.valorUnitario!, item.desconto ?? 0, itemTotal,
-            item.cfop ?? null, item.ncm ?? null, item.unidade ?? 'UN', now)
+            item.cfop ?? null, item.ncm ?? null, item.unidade ?? 'UN', now, now, uid, uid)
       )
     }
   }
 
-  const fields = ['updated_at = ?']
-  const vals: unknown[] = [now]
+  const fields = ['updated_at = ?', 'updated_by = ?']
+  const vals: unknown[] = [now, uid]
   if (data.destinatarioId !== undefined) { fields.push('destinatario_id = ?'); vals.push(data.destinatarioId) }
   if (data.naturezaOperacao !== undefined) { fields.push('natureza_operacao = ?'); vals.push(data.naturezaOperacao) }
   if (data.descricaoServico !== undefined) { fields.push('descricao_servico = ?'); vals.push(data.descricaoServico) }
@@ -355,8 +360,8 @@ app.post('/notas/:id/cancelar', async (c) => {
   const { motivo } = await c.req.json<{ motivo?: string }>()
 
   await c.env.DB_SHARED
-    .prepare('UPDATE notas_fiscais SET status = ?, motivo_cancelamento = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-    .bind('cancelada', motivo ?? null, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare('UPDATE notas_fiscais SET status = ?, motivo_cancelamento = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?')
+    .bind('cancelada', motivo ?? null, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Nota cancelada.' })

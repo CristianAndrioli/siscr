@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { auditUserId } from '../lib/audit'
+
 const app = new Hono<{ Bindings: Env }>()
 
 const MODULE_KEY_Z = z.enum(['cadastros', 'financeiro', 'faturamento', 'estoque', 'configuracoes'])
@@ -92,11 +94,15 @@ app.post('/perfis', zValidator('json', createPerfilSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   const stmts = [
     c.env.DB_SHARED
-      .prepare('INSERT INTO tenant_custom_roles (id, tenant_id, nome, created_at) VALUES (?, ?, ?, ?)')
-      .bind(id, tenant.tenantId, data.nome.trim(), now),
+      .prepare(
+        `INSERT INTO tenant_custom_roles (id, tenant_id, nome, created_at, updated_at, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(id, tenant.tenantId, data.nome.trim(), now, now, uid, uid),
   ]
 
   for (const m of data.modulos) {
@@ -104,10 +110,10 @@ app.post('/perfis', zValidator('json', createPerfilSchema), async (c) => {
     stmts.push(
       c.env.DB_SHARED
         .prepare(
-          `INSERT INTO tenant_custom_role_modules (id, tenant_id, custom_role_id, module_key, can_view, can_edit, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO tenant_custom_role_modules (id, tenant_id, custom_role_id, module_key, can_view, can_edit, created_at, updated_at, created_by, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .bind(mid, tenant.tenantId, id, m.moduleKey, m.canView ? 1 : 0, m.canEdit ? 1 : 0, now)
+        .bind(mid, tenant.tenantId, id, m.moduleKey, m.canView ? 1 : 0, m.canEdit ? 1 : 0, now, now, uid, uid)
     )
   }
 
@@ -131,10 +137,11 @@ app.put('/perfis/:id', zValidator('json', createPerfilSchema), async (c) => {
   if (!exists) return c.json({ error: 'Perfil não encontrado.' }, 404)
 
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   await c.env.DB_SHARED
-    .prepare('UPDATE tenant_custom_roles SET nome = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-    .bind(data.nome.trim(), now, id, tenant.tenantId)
+    .prepare('UPDATE tenant_custom_roles SET nome = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?')
+    .bind(data.nome.trim(), now, uid, id, tenant.tenantId)
     .run()
 
   await c.env.DB_SHARED
@@ -148,10 +155,10 @@ app.put('/perfis/:id', zValidator('json', createPerfilSchema), async (c) => {
     stmts.push(
       c.env.DB_SHARED
         .prepare(
-          `INSERT INTO tenant_custom_role_modules (id, tenant_id, custom_role_id, module_key, can_view, can_edit, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO tenant_custom_role_modules (id, tenant_id, custom_role_id, module_key, can_view, can_edit, created_at, updated_at, created_by, updated_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .bind(mid, tenant.tenantId, id, m.moduleKey, m.canView ? 1 : 0, m.canEdit ? 1 : 0, now)
+        .bind(mid, tenant.tenantId, id, m.moduleKey, m.canView ? 1 : 0, m.canEdit ? 1 : 0, now, now, uid, uid)
     )
   }
   if (stmts.length) await c.env.DB_SHARED.batch(stmts)
@@ -167,9 +174,13 @@ app.delete('/perfis/:id', async (c) => {
   const tenant = c.get('tenant')
   const id = c.req.param('id')
 
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
   await c.env.DB_SHARED
-    .prepare('UPDATE users SET custom_role_id = NULL WHERE custom_role_id = ? AND tenant_id = ?')
-    .bind(id, tenant.tenantId)
+    .prepare(
+      'UPDATE users SET custom_role_id = NULL, updated_at = ?, updated_by = ? WHERE custom_role_id = ? AND tenant_id = ?'
+    )
+    .bind(now, uid, id, tenant.tenantId)
     .run()
 
   await c.env.DB_SHARED

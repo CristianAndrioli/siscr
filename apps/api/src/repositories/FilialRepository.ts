@@ -14,6 +14,7 @@ export type FilialInsertRow = {
   cep: string | null
   ativa: number
   createdAt: string
+  auditUserId: string | null
 }
 
 export class FilialRepository extends BaseTenantRepository {
@@ -57,8 +58,8 @@ export class FilialRepository extends BaseTenantRepository {
     await this.db
       .prepare(
         `
-      INSERT INTO filiais (id, tenant_id, empresa_id, nome, cnpj, uf, cidade, logradouro, numero, bairro, cep, ativa, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO filiais (id, tenant_id, empresa_id, nome, cnpj, uf, cidade, logradouro, numero, bairro, cep, ativa, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .bind(
@@ -75,6 +76,9 @@ export class FilialRepository extends BaseTenantRepository {
         row.cep,
         row.ativa,
         row.createdAt,
+        row.createdAt,
+        row.auditUserId,
+        row.auditUserId,
       )
       .run()
   }
@@ -101,19 +105,27 @@ export class FilialRepository extends BaseTenantRepository {
     return row?.a1_r2_object_key ?? null
   }
 
-  async setA1CertStored(filialId: string, objectKey: string, uploadedAt: string, metaJson: string): Promise<void> {
+  async setA1CertStored(
+    filialId: string,
+    objectKey: string,
+    uploadedAt: string,
+    metaJson: string,
+    auditUserId: string | null,
+  ): Promise<void> {
+    const now = new Date().toISOString()
     await this.db
       .prepare(
-        'UPDATE filiais SET a1_r2_object_key = ?, a1_cert_uploaded_at = ?, a1_cert_meta = ? WHERE id = ? AND tenant_id = ?',
+        'UPDATE filiais SET a1_r2_object_key = ?, a1_cert_uploaded_at = ?, a1_cert_meta = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?',
       )
-      .bind(objectKey, uploadedAt, metaJson, filialId, this.tenantId)
+      .bind(objectKey, uploadedAt, metaJson, now, auditUserId, filialId, this.tenantId)
       .run()
   }
 
-  async updateA1CertMetaJson(filialId: string, metaJson: string): Promise<void> {
+  async updateA1CertMetaJson(filialId: string, metaJson: string, auditUserId: string | null): Promise<void> {
+    const now = new Date().toISOString()
     await this.db
-      .prepare('UPDATE filiais SET a1_cert_meta = ? WHERE id = ? AND tenant_id = ?')
-      .bind(metaJson, filialId, this.tenantId)
+      .prepare('UPDATE filiais SET a1_cert_meta = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?')
+      .bind(metaJson, now, auditUserId, filialId, this.tenantId)
       .run()
   }
 }

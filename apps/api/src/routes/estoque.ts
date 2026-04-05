@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { auditUserId } from '../lib/audit'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -70,25 +71,27 @@ app.post('/movimentacoes', zValidator('json', movSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   const qtdDelta = data.tipo === 'saida' ? -data.quantidade : data.quantidade
 
   await c.env.DB_SHARED.batch([
     c.env.DB_SHARED.prepare(`
       INSERT INTO movimentacoes_estoque
-        (id, tenant_id, produto_id, tipo, quantidade, location, motivo, usuario_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, tenant_id, produto_id, tipo, quantidade, location, motivo, usuario_id, created_at, created_by, updated_by, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(id, tenant.tenantId, data.produtoId, data.tipo, data.quantidade,
-        data.location, data.motivo ?? null, user?.userId ?? null, now),
+        data.location, data.motivo ?? null, user?.userId ?? null, now, uid, uid, now),
 
     c.env.DB_SHARED.prepare(`
-      INSERT INTO estoque (id, tenant_id, produto_id, location, quantidade, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO estoque (id, tenant_id, produto_id, location, quantidade, updated_at, created_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id, produto_id, location) DO UPDATE SET
         quantidade = quantidade + ?,
-        updated_at = ?
+        updated_at = ?,
+        updated_by = ?
     `).bind(crypto.randomUUID(), tenant.tenantId, data.produtoId,
-        data.location, data.quantidade, now, qtdDelta, now),
+        data.location, data.quantidade, now, now, uid, uid, qtdDelta, now, uid),
   ])
 
   return c.json({ id, message: 'Movimentação registrada.' }, 201)
@@ -132,6 +135,7 @@ app.post('/transferencias', zValidator('json', transSchema), async (c) => {
   const user = c.get('user')
   const data = c.req.valid('json')
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
   const idSaida = crypto.randomUUID()
   const idEntrada = crypto.randomUUID()
 
@@ -153,34 +157,35 @@ app.post('/transferencias', zValidator('json', transSchema), async (c) => {
     // Movimentação de saída (origem)
     c.env.DB_SHARED.prepare(`
       INSERT INTO movimentacoes_estoque
-        (id, tenant_id, produto_id, tipo, quantidade, location, referencia_id, motivo, usuario_id, created_at)
-      VALUES (?, ?, ?, 'transferencia_saida', ?, ?, ?, ?, ?, ?)
+        (id, tenant_id, produto_id, tipo, quantidade, location, referencia_id, motivo, usuario_id, created_at, created_by, updated_by, updated_at)
+      VALUES (?, ?, ?, 'transferencia_saida', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(idSaida, tenant.tenantId, data.produtoId, data.quantidade,
-        data.localOrigem, data.localDestino, data.motivo ?? null, user?.userId ?? null, now),
+        data.localOrigem, data.localDestino, data.motivo ?? null, user?.userId ?? null, now, uid, uid, now),
 
     // Movimentação de entrada (destino)
     c.env.DB_SHARED.prepare(`
       INSERT INTO movimentacoes_estoque
-        (id, tenant_id, produto_id, tipo, quantidade, location, referencia_id, motivo, usuario_id, created_at)
-      VALUES (?, ?, ?, 'transferencia_entrada', ?, ?, ?, ?, ?, ?)
+        (id, tenant_id, produto_id, tipo, quantidade, location, referencia_id, motivo, usuario_id, created_at, created_by, updated_by, updated_at)
+      VALUES (?, ?, ?, 'transferencia_entrada', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(idEntrada, tenant.tenantId, data.produtoId, data.quantidade,
-        data.localDestino, data.localOrigem, data.motivo ?? null, user?.userId ?? null, now),
+        data.localDestino, data.localOrigem, data.motivo ?? null, user?.userId ?? null, now, uid, uid, now),
 
     // Debitar estoque origem
     c.env.DB_SHARED.prepare(`
-      UPDATE estoque SET quantidade = quantidade - ?, updated_at = ?
+      UPDATE estoque SET quantidade = quantidade - ?, updated_at = ?, updated_by = ?
       WHERE tenant_id = ? AND produto_id = ? AND location = ?
-    `).bind(data.quantidade, now, tenant.tenantId, data.produtoId, data.localOrigem),
+    `).bind(data.quantidade, now, uid, tenant.tenantId, data.produtoId, data.localOrigem),
 
     // Creditar estoque destino (insert or update)
     c.env.DB_SHARED.prepare(`
-      INSERT INTO estoque (id, tenant_id, produto_id, location, quantidade, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO estoque (id, tenant_id, produto_id, location, quantidade, updated_at, created_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(tenant_id, produto_id, location) DO UPDATE SET
         quantidade = quantidade + ?,
-        updated_at = ?
+        updated_at = ?,
+        updated_by = ?
     `).bind(crypto.randomUUID(), tenant.tenantId, data.produtoId,
-        data.localDestino, data.quantidade, now, data.quantidade, now),
+        data.localDestino, data.quantidade, now, now, uid, uid, data.quantidade, now, uid),
   ])
 
   return c.json({ id: idSaida, message: 'Transferência realizada com sucesso.' }, 201)
@@ -208,11 +213,12 @@ app.post('/locais', zValidator('json', localSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   try {
     await c.env.DB_SHARED
-      .prepare('INSERT INTO locais (id, tenant_id, nome, tipo, descricao, ativo, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)')
-      .bind(id, tenant.tenantId, data.nome.toUpperCase(), data.tipo, data.descricao ?? null, now)
+      .prepare('INSERT INTO locais (id, tenant_id, nome, tipo, descricao, ativo, created_at, updated_at, created_by, updated_by) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)')
+      .bind(id, tenant.tenantId, data.nome.toUpperCase(), data.tipo, data.descricao ?? null, now, now, uid, uid)
       .run()
   } catch {
     return c.json({ error: `Já existe um local com o nome "${data.nome}".` }, 409)
@@ -236,8 +242,8 @@ app.put('/locais/:id', zValidator('json', localSchema.partial()), async (c) => {
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
   await c.env.DB_SHARED
-    .prepare(`UPDATE locais SET ${setClauses}, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, now, c.req.param('id'), tenant.tenantId)
+    .prepare(`UPDATE locais SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+    .bind(...values, now, auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Local atualizado.' })

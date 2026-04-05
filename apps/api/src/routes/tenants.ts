@@ -7,6 +7,7 @@ import { decryptA1Bundle, encryptA1Bundle } from '../lib/certBlob'
 import { extractA1CertPublicMeta } from '../lib/pfxMetadata'
 import { EmpresaRepository } from '../repositories/EmpresaRepository'
 import { FilialRepository } from '../repositories/FilialRepository'
+import { auditUserId } from '../lib/audit'
 import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
@@ -75,7 +76,7 @@ app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
   }
   const data = c.req.valid('json')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  const id = await svc.createEmpresa(data)
+  const id = await svc.createEmpresa(data, auditUserId(c))
   return c.json({ id, message: 'Empresa criada com sucesso.' }, 201)
 })
 
@@ -110,7 +111,7 @@ app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) =>
   const data = c.req.valid('json')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
   try {
-    const id = await svc.createFilial(empresaId, data)
+    const id = await svc.createFilial(empresaId, data, auditUserId(c))
     return c.json({ id, message: 'Filial criada com sucesso.' }, 201)
   } catch (e) {
     return jsonHttpError(c, e)
@@ -198,7 +199,7 @@ app.post('/empresas/:id/certificado-a1', async (c) => {
   })
 
   const now = new Date().toISOString()
-  await empRepo.setA1CertStored(empresaId, objectKey, now, metaJson)
+  await empRepo.setA1CertStored(empresaId, objectKey, now, metaJson, auditUserId(c))
 
   return c.json({
     message: 'Certificado armazenado de forma cifrada.',
@@ -261,7 +262,7 @@ app.post('/empresas/:id/certificado-a1/atualizar-metadados', async (c) => {
     return jsonHttpError(c, e)
   }
 
-  await empRepo.updateA1CertMetaJson(empresaId, JSON.stringify(certMeta))
+  await empRepo.updateA1CertMetaJson(empresaId, JSON.stringify(certMeta), auditUserId(c))
   return c.json({ message: 'Dados do certificado atualizados.', certificate: certMeta })
 })
 
@@ -271,7 +272,7 @@ app.put('/empresas/:id', zValidator('json', empresaSchema.partial()), async (c) 
   const data = c.req.valid('json') as Record<string, unknown>
   const id = c.req.param('id')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  await svc.updateEmpresa(id, data)
+  await svc.updateEmpresa(id, data, auditUserId(c))
   return c.json({ message: 'Empresa atualizada.' })
 })
 
@@ -382,7 +383,7 @@ app.post('/filiais/:id/certificado-a1', async (c) => {
   })
 
   const now = new Date().toISOString()
-  await filRepo.setA1CertStored(filialId, objectKey, now, metaJson)
+  await filRepo.setA1CertStored(filialId, objectKey, now, metaJson, auditUserId(c))
 
   return c.json({
     message: 'Certificado armazenado de forma cifrada.',
@@ -449,7 +450,7 @@ app.post('/filiais/:id/certificado-a1/atualizar-metadados', async (c) => {
     return jsonHttpError(c, e)
   }
 
-  await filRepo.updateA1CertMetaJson(filialId, JSON.stringify(certMeta))
+  await filRepo.updateA1CertMetaJson(filialId, JSON.stringify(certMeta), auditUserId(c))
   return c.json({ message: 'Dados do certificado atualizados.', certificate: certMeta })
 })
 
@@ -459,7 +460,7 @@ app.put('/filiais/:id', zValidator('json', filialSchema.partial().extend({ ativa
   const data = c.req.valid('json') as Record<string, unknown> & { ativa?: boolean }
   const id = c.req.param('id')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  await svc.updateFilial(id, data)
+  await svc.updateFilial(id, data, auditUserId(c))
   return c.json({ message: 'Filial atualizada.' })
 })
 
@@ -523,9 +524,10 @@ app.post('/usuarios', zValidator('json', userSchema), async (c) => {
   const now = new Date().toISOString()
   const passwordHash = await hashPassword(data.senha ?? 'Mudar@123')
 
+  const actor = auditUserId(c)
   await c.env.DB_SHARED.prepare(
-    'INSERT INTO users (id, tenant_id, email, nome, password_hash, role, ativo, created_at, custom_role_id) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)'
-  ).bind(id, tenant.tenantId, data.email, data.nome, passwordHash, data.role, now, customRoleId).run()
+    'INSERT INTO users (id, tenant_id, email, nome, password_hash, role, ativo, created_at, custom_role_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)'
+  ).bind(id, tenant.tenantId, data.email, data.nome, passwordHash, data.role, now, customRoleId, actor, actor).run()
 
   return c.json({ id, message: 'Usuário criado.' }, 201)
 })
@@ -562,8 +564,8 @@ app.put('/usuarios/:id', zValidator('json', userUpdateSchema), async (c) => {
   }
   const finalCustom = nextRole === 'admin' ? null : nextCustom
 
-  const fields = ['updated_at = ?']
-  const vals: unknown[] = [now]
+  const fields = ['updated_at = ?', 'updated_by = ?']
+  const vals: unknown[] = [now, auditUserId(c)]
   if (data.nome !== undefined) { fields.push('nome = ?'); vals.push(data.nome) }
   if (data.email !== undefined) { fields.push('email = ?'); vals.push(data.email) }
   if (data.role !== undefined) { fields.push('role = ?'); vals.push(data.role) }

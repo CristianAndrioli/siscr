@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { auditUserId } from '../lib/audit'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -64,19 +65,21 @@ app.post('/receber', zValidator('json', contaSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   await c.env.DB_SHARED
     .prepare(`
       INSERT INTO contas_receber
-        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status, categoria, observacoes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?)
+        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status, categoria, observacoes, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null, data.filialId ?? null,
       data.pessoaId, data.descricao, data.valor, data.vencimento,
       data.categoria ?? null, data.observacoes ?? null,
-      new Date().toISOString(),
+      now, now, uid, uid,
     )
     .run()
 
@@ -99,8 +102,8 @@ app.put('/receber/:id', zValidator('json', contaSchema.partial()), async (c) => 
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
   await c.env.DB_SHARED
-    .prepare(`UPDATE contas_receber SET ${setClauses}, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare(`UPDATE contas_receber SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Atualizado com sucesso.' })
@@ -122,10 +125,10 @@ app.patch('/receber/:id/pagar', async (c) => {
   await c.env.DB_SHARED
     .prepare(`
       UPDATE contas_receber
-      SET status = 'pago', data_pagamento = ?, valor_pago = ?, updated_at = ?
+      SET status = 'pago', data_pagamento = ?, valor_pago = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
     `)
-    .bind(dataPagamento, valorPago, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .bind(dataPagamento, valorPago, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Pagamento registrado.' })
@@ -178,19 +181,21 @@ app.post('/pagar', zValidator('json', contaSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   await c.env.DB_SHARED
     .prepare(`
       INSERT INTO contas_pagar
-        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status, categoria, observacoes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?)
+        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status, categoria, observacoes, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null, data.filialId ?? null,
       data.pessoaId, data.descricao, data.valor, data.vencimento,
       data.categoria ?? null, data.observacoes ?? null,
-      new Date().toISOString(),
+      now, now, uid, uid,
     )
     .run()
 
@@ -213,8 +218,8 @@ app.put('/pagar/:id', zValidator('json', contaSchema.partial()), async (c) => {
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
   await c.env.DB_SHARED
-    .prepare(`UPDATE contas_pagar SET ${setClauses}, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare(`UPDATE contas_pagar SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Atualizado com sucesso.' })
@@ -236,10 +241,10 @@ app.patch('/pagar/:id/pagar', async (c) => {
   await c.env.DB_SHARED
     .prepare(`
       UPDATE contas_pagar
-      SET status = 'pago', data_pagamento = ?, valor_pago = ?, updated_at = ?
+      SET status = 'pago', data_pagamento = ?, valor_pago = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
     `)
-    .bind(dataPagamento, valorPago, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .bind(dataPagamento, valorPago, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Pagamento registrado.' })

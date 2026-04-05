@@ -17,6 +17,8 @@ export type EmpresaInsertRow = {
   uf: string | null
   cep: string | null
   createdAt: string
+  /** Usuário autenticado ao criar (created_by / updated_by). */
+  auditUserId: string | null
 }
 
 export class EmpresaRepository extends BaseTenantRepository {
@@ -45,8 +47,8 @@ export class EmpresaRepository extends BaseTenantRepository {
       .prepare(
         `
       INSERT INTO empresas (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual,
-        email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .bind(
@@ -66,6 +68,9 @@ export class EmpresaRepository extends BaseTenantRepository {
         row.uf,
         row.cep,
         row.createdAt,
+        row.createdAt,
+        row.auditUserId,
+        row.auditUserId,
       )
       .run()
   }
@@ -95,19 +100,27 @@ export class EmpresaRepository extends BaseTenantRepository {
   }
 
   /** Grava blob A1 + data de envio + metadados públicos do certificado (JSON). */
-  async setA1CertStored(empresaId: string, objectKey: string, uploadedAt: string, metaJson: string): Promise<void> {
+  async setA1CertStored(
+    empresaId: string,
+    objectKey: string,
+    uploadedAt: string,
+    metaJson: string,
+    auditUserId: string | null,
+  ): Promise<void> {
+    const now = new Date().toISOString()
     await this.db
       .prepare(
-        'UPDATE empresas SET a1_r2_object_key = ?, a1_cert_uploaded_at = ?, a1_cert_meta = ? WHERE id = ? AND tenant_id = ?',
+        'UPDATE empresas SET a1_r2_object_key = ?, a1_cert_uploaded_at = ?, a1_cert_meta = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?',
       )
-      .bind(objectKey, uploadedAt, metaJson, empresaId, this.tenantId)
+      .bind(objectKey, uploadedAt, metaJson, now, auditUserId, empresaId, this.tenantId)
       .run()
   }
 
-  async updateA1CertMetaJson(empresaId: string, metaJson: string): Promise<void> {
+  async updateA1CertMetaJson(empresaId: string, metaJson: string, auditUserId: string | null): Promise<void> {
+    const now = new Date().toISOString()
     await this.db
-      .prepare('UPDATE empresas SET a1_cert_meta = ? WHERE id = ? AND tenant_id = ?')
-      .bind(metaJson, empresaId, this.tenantId)
+      .prepare('UPDATE empresas SET a1_cert_meta = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?')
+      .bind(metaJson, now, auditUserId, empresaId, this.tenantId)
       .run()
   }
 

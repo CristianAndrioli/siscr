@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { auditUserId } from '../lib/audit'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -43,11 +44,12 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   await c.env.DB_SHARED
     .prepare(`
-      INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
@@ -55,7 +57,7 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
       data.tipo, data.tipoCadastro,
       data.nome, data.cpfCnpj ?? null,
       data.email ?? null, data.telefone ?? null,
-      now, now,
+      now, now, uid, uid,
     )
     .run()
 
@@ -100,8 +102,8 @@ app.put('/pessoas/:id', zValidator('json', pessoaSchema.partial()), async (c) =>
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
   await c.env.DB_SHARED
-    .prepare(`UPDATE pessoas SET ${setClauses}, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare(`UPDATE pessoas SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Atualizado com sucesso.' })
@@ -150,11 +152,12 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   await c.env.DB_SHARED
     .prepare(`
-      INSERT INTO produtos (id, tenant_id, empresa_id, codigo, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO produtos (id, tenant_id, empresa_id, codigo, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
@@ -162,7 +165,7 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
       data.codigo, data.descricao, data.unidade,
       data.precoVenda, data.precoCusto ?? 0,
       data.ncm ?? null, data.ativo ? 1 : 0,
-      now, now,
+      now, now, uid, uid,
     )
     .run()
 
@@ -211,8 +214,8 @@ app.put('/produtos/:id', zValidator('json', produtoSchema.partial()), async (c) 
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
   await c.env.DB_SHARED
-    .prepare(`UPDATE produtos SET ${setClauses}, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare(`UPDATE produtos SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Atualizado com sucesso.' })
@@ -259,18 +262,19 @@ app.post('/servicos', zValidator('json', servicoSchema), async (c) => {
   const data = c.req.valid('json')
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
+  const uid = auditUserId(c)
 
   await c.env.DB_SHARED
     .prepare(`
-      INSERT INTO servicos (id, tenant_id, empresa_id, codigo, descricao, unidade, preco, ativo, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO servicos (id, tenant_id, empresa_id, codigo, descricao, unidade, preco, ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null,
       data.codigo, data.descricao, data.unidade,
       data.preco, data.ativo ? 1 : 0,
-      now, now,
+      now, now, uid, uid,
     )
     .run()
 
@@ -317,8 +321,8 @@ app.put('/servicos/:id', zValidator('json', servicoSchema.partial()), async (c) 
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
   await c.env.DB_SHARED
-    .prepare(`UPDATE servicos SET ${setClauses}, updated_at = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), c.req.param('id'), tenant.tenantId)
+    .prepare(`UPDATE servicos SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
     .run()
 
   return c.json({ message: 'Atualizado com sucesso.' })

@@ -29,21 +29,24 @@ export class EmpresaFilialService {
     return this.empresas.listWithFilialCount()
   }
 
-  async createEmpresa(input: {
-    razaoSocial: string
-    nomeFantasia?: string
-    cnpj: string
-    inscricaoEstadual?: string
-    email?: string
-    telefone?: string
-    logradouro?: string
-    numero?: string
-    complemento?: string
-    bairro?: string
-    cidade?: string
-    uf?: string
-    cep?: string
-  }): Promise<string> {
+  async createEmpresa(
+    input: {
+      razaoSocial: string
+      nomeFantasia?: string
+      cnpj: string
+      inscricaoEstadual?: string
+      email?: string
+      telefone?: string
+      logradouro?: string
+      numero?: string
+      complemento?: string
+      bairro?: string
+      cidade?: string
+      uf?: string
+      cep?: string
+    },
+    auditUserId: string | null,
+  ): Promise<string> {
     const id = crypto.randomUUID()
     const now = new Date().toISOString()
     const row: EmpresaInsertRow = {
@@ -62,15 +65,16 @@ export class EmpresaFilialService {
       uf: input.uf ?? null,
       cep: input.cep ?? null,
       createdAt: now,
+      auditUserId,
     }
     await this.empresas.insert(row)
     return id
   }
 
-  async updateEmpresa(id: string, data: Record<string, unknown>): Promise<void> {
+  async updateEmpresa(id: string, data: Record<string, unknown>, auditUserId: string | null): Promise<void> {
     const now = new Date().toISOString()
-    const fields: string[] = ['updated_at = ?']
-    const vals: unknown[] = [now]
+    const fields: string[] = ['updated_at = ?', 'updated_by = ?']
+    const vals: unknown[] = [now, auditUserId]
     for (const [k, col] of Object.entries(EMPRESA_FIELD_MAP)) {
       if (data[k] !== undefined) {
         fields.push(`${col} = ?`)
@@ -110,6 +114,7 @@ export class EmpresaFilialService {
       bairro?: string
       cep?: string
     },
+    auditUserId: string | null,
   ): Promise<string> {
     await this.ensureEmpresaDoTenant(empresaId)
     const id = crypto.randomUUID()
@@ -127,6 +132,7 @@ export class EmpresaFilialService {
       cep: input.cep ?? null,
       ativa: 1,
       createdAt: now,
+      auditUserId,
     }
     await this.filiais.insert(row)
     return id
@@ -139,10 +145,11 @@ export class EmpresaFilialService {
   async updateFilial(
     id: string,
     data: Record<string, unknown> & { ativa?: boolean },
+    auditUserId: string | null,
   ): Promise<void> {
     const now = new Date().toISOString()
-    const fields: string[] = ['updated_at = ?']
-    const vals: unknown[] = [now]
+    const fields: string[] = ['updated_at = ?', 'updated_by = ?']
+    const vals: unknown[] = [now, auditUserId]
     for (const col of FILIAL_UPDATE_COLS) {
       if (data[col] !== undefined) {
         fields.push(`${col} = ?`)
