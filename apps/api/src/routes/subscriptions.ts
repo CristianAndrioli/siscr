@@ -5,11 +5,39 @@ const app = new Hono<{ Bindings: Env }>()
 
 // ─── Planos públicos ───────────────────────────────────────────
 app.get('/plans', async (c) => {
-  const { results } = await c.env.DB_SHARED
-    .prepare('SELECT id, nome, preco_mensal, preco_anual, max_empresas, max_filiais, max_usuarios, features FROM plans WHERE ativo = 1 ORDER BY preco_mensal')
-    .all()
+  const { results: planRows } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT id, nome, preco_mensal, preco_anual, max_empresas, max_filiais, max_usuarios, features
+       FROM plans WHERE ativo = 1 ORDER BY preco_mensal`,
+    )
+    .all<{
+      id: string
+      nome: string
+      preco_mensal: number
+      preco_anual: number
+      max_empresas: number
+      max_filiais: number
+      max_usuarios: number
+      features: string | null
+    }>()
 
-  return c.json({ plans: results })
+  const { results: charRows } = await c.env.DB_SHARED
+    .prepare(`SELECT plan_id, rotulo, ordem FROM plan_caracteristicas ORDER BY plan_id, ordem`)
+    .all<{ plan_id: string; rotulo: string; ordem: number }>()
+
+  const byPlan = new Map<string, { rotulo: string; ordem: number }[]>()
+  for (const r of charRows ?? []) {
+    const list = byPlan.get(r.plan_id) ?? []
+    list.push({ rotulo: r.rotulo, ordem: r.ordem })
+    byPlan.set(r.plan_id, list)
+  }
+
+  const plans = (planRows ?? []).map((p) => ({
+    ...p,
+    caracteristicas: byPlan.get(p.id) ?? [],
+  }))
+
+  return c.json({ plans })
 })
 
 // ─── Criar sessão de checkout Stripe ──────────────────────────

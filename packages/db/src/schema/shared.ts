@@ -29,6 +29,16 @@ export const plans = sqliteTable('plans', {
   createdAt: text('created_at').notNull(),
 })
 
+/** Textos exibidos na página de planos / assinatura (editáveis via SQL). */
+export const planCaracteristicas = sqliteTable('plan_caracteristicas', {
+  id: text('id').primaryKey(),
+  planId: text('plan_id')
+    .notNull()
+    .references(() => plans.id, { onDelete: 'cascade' }),
+  rotulo: text('rotulo').notNull(),
+  ordem: integer('ordem').notNull().default(0),
+}, (t) => [index('idx_plan_caracteristicas_plan').on(t.planId)])
+
 // ─── Tenants (empresas contratantes do SaaS) ─────────────────────
 export const tenants = sqliteTable('tenants', {
   id: text('id').primaryKey(),

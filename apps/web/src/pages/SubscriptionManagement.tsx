@@ -4,7 +4,8 @@ import api from '../services/api';
 import { authService } from '../services/auth';
 
 interface SubscriptionData {
-  plan_id: string;
+  plan_id: string | null;
+  plan_id_efetivo?: string;
   status: string;
   stripe_customer_id: string | null;
   subscription_expires_at: string | null;
@@ -14,6 +15,33 @@ interface SubscriptionData {
   max_empresas: number;
   max_filiais: number;
   max_usuarios: number;
+  uso?: {
+    empresas: number;
+    filiais: number;
+    usuarios: number;
+  };
+  caracteristicas?: { rotulo: string; ordem: number }[];
+}
+
+function UsoBar({ label, uso, max }: { label: string; uso: number; max: number }) {
+  const pct = max <= 0 ? 0 : Math.min(100, Math.round((uso / max) * 100));
+  const full = uso >= max;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
+        <span>{label}</span>
+        <span className={full ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}>
+          {uso} / {max}
+        </span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${full ? 'bg-amber-500' : 'bg-brand-500'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
@@ -201,9 +229,40 @@ export default function SubscriptionManagement() {
                 >
                   <div className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">{value}</div>
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{label}</div>
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">limite do plano</div>
                 </div>
               ))}
             </div>
+
+            {subscription.uso && (
+              <div className="mb-6 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-4">
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  Uso atual
+                </p>
+                <UsoBar
+                  label="Empresas cadastradas"
+                  uso={subscription.uso.empresas}
+                  max={subscription.max_empresas}
+                />
+                <UsoBar label="Filiais" uso={subscription.uso.filiais} max={subscription.max_filiais} />
+                <UsoBar label="Usuários ativos" uso={subscription.uso.usuarios} max={subscription.max_usuarios} />
+              </div>
+            )}
+
+            {subscription.caracteristicas && subscription.caracteristicas.length > 0 && (
+              <div className="mb-6">
+                <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
+                  Incluso no seu plano
+                </p>
+                <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1.5 list-disc list-inside">
+                  {[...subscription.caracteristicas]
+                    .sort((a, b) => a.ordem - b.ordem)
+                    .map((c) => (
+                      <li key={`${c.ordem}-${c.rotulo}`}>{c.rotulo}</li>
+                    ))}
+                </ul>
+              </div>
+            )}
 
             {subscription.preco_mensal > 0 && (
               <div className="flex items-baseline gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -239,8 +298,8 @@ export default function SubscriptionManagement() {
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-5 max-w-md mx-auto">
                 Faça upgrade para aumentar limites e desbloquear recursos avançados.
               </p>
-              <Link to="/plans" className="btn-primary px-8 py-3">
-                Ver planos disponíveis
+              <Link to="/plans" className="btn-primary px-8 py-3 inline-flex items-center gap-2 justify-center">
+                Ver planos e fazer upgrade
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
@@ -282,6 +341,12 @@ export default function SubscriptionManagement() {
               <p className="text-xs text-slate-400 dark:text-slate-500 text-center mt-3">
                 Redirecionamento para o site seguro do Stripe.
               </p>
+              <Link
+                to="/plans"
+                className="mt-4 block text-center text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline"
+              >
+                Comparar planos e limites
+              </Link>
             </div>
           )}
         </>

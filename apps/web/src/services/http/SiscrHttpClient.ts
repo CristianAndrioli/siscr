@@ -76,6 +76,18 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
         )
       }
 
+      if (
+        error.response?.status === 403 &&
+        code &&
+        (code === 'PLAN_LIMIT_EMPRESAS' || code === 'PLAN_LIMIT_FILIAIS' || code === 'PLAN_LIMIT_USUARIOS')
+      ) {
+        window.dispatchEvent(
+          new CustomEvent('siscr:plan-limit', {
+            detail: error.response?.data,
+          }),
+        )
+      }
+
       return Promise.reject(error)
     },
   )

@@ -8,6 +8,13 @@ import { extractA1CertPublicMeta } from '../lib/pfxMetadata'
 import { EmpresaRepository } from '../repositories/EmpresaRepository'
 import { FilialRepository } from '../repositories/FilialRepository'
 import { auditUserId } from '../lib/audit'
+import {
+  checkCanCreateEmpresa,
+  checkCanCreateFilial,
+  checkCanCreateUsuario,
+  getTenantUsage,
+  resolvePlanForTenant,
+} from '../lib/planLimits'
 import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
@@ -74,6 +81,9 @@ app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
   if (n === 0 && user.role !== 'admin') {
     return c.json({ error: 'Somente o administrador pode cadastrar a primeira empresa do ambiente.' }, 403)
   }
+  const limite = await checkCanCreateEmpresa(c.env.DB_SHARED, tenant.tenantId)
+  if (limite) return c.json(limite, 403)
+
   const data = c.req.valid('json')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
   const id = await svc.createEmpresa(data, auditUserId(c))
@@ -109,6 +119,9 @@ app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) =>
   const tenant = c.get('tenant')
   const empresaId = c.req.param('id')
   const data = c.req.valid('json')
+  const limite = await checkCanCreateFilial(c.env.DB_SHARED, tenant.tenantId)
+  if (limite) return c.json(limite, 403)
+
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
   try {
     const id = await svc.createFilial(empresaId, data, auditUserId(c))
@@ -511,6 +524,9 @@ app.post('/usuarios', zValidator('json', userSchema), async (c) => {
     .bind(data.email, tenant.tenantId).first()
   if (exists) return c.json({ error: 'Já existe um usuário com este e-mail.' }, 400)
 
+  const limite = await checkCanCreateUsuario(c.env.DB_SHARED, tenant.tenantId)
+  if (limite) return c.json(limite, 403)
+
   let customRoleId: string | null = data.customRoleId ?? null
   if (customRoleId) {
     const ok = await c.env.DB_SHARED
@@ -706,19 +722,45 @@ app.post('/subscription/portal', async (c) => {
 app.get('/subscription', async (c) => {
   const tenant = c.get('tenant')
 
-  const data = await c.env.DB_SHARED
-    .prepare(`
-      SELECT t.plan_id, t.status, t.stripe_customer_id, t.subscription_expires_at,
-             p.nome as plan_nome, p.preco_mensal, p.preco_anual,
-             p.max_empresas, p.max_filiais, p.max_usuarios
-      FROM tenants t
-      LEFT JOIN plans p ON p.id = t.plan_id
-      WHERE t.id = ?
-    `)
+  const base = await c.env.DB_SHARED
+    .prepare(
+      `SELECT t.plan_id, t.status, t.stripe_customer_id, t.subscription_expires_at
+       FROM tenants t WHERE t.id = ?`,
+    )
     .bind(tenant.tenantId)
-    .first()
+    .first<{
+      plan_id: string | null
+      status: string
+      stripe_customer_id: string | null
+      subscription_expires_at: string | null
+    }>()
 
-  return c.json({ subscription: data })
+  if (!base) return c.json({ error: 'Tenant não encontrado.' }, 404)
+
+  const plan = await resolvePlanForTenant(c.env.DB_SHARED, tenant.tenantId)
+  const uso = await getTenantUsage(c.env.DB_SHARED, tenant.tenantId)
+
+  const { results: caracteristicas } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT rotulo, ordem FROM plan_caracteristicas WHERE plan_id = ? ORDER BY ordem ASC`,
+    )
+    .bind(plan.id)
+    .all<{ rotulo: string; ordem: number }>()
+
+  return c.json({
+    subscription: {
+      ...base,
+      plan_id_efetivo: plan.id,
+      plan_nome: plan.nome,
+      preco_mensal: plan.preco_mensal,
+      preco_anual: plan.preco_anual,
+      max_empresas: plan.max_empresas,
+      max_filiais: plan.max_filiais,
+      max_usuarios: plan.max_usuarios,
+      uso,
+      caracteristicas: caracteristicas ?? [],
+    },
+  })
 })
 
 export default app
