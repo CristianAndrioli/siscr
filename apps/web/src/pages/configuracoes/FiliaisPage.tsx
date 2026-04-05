@@ -87,6 +87,39 @@ interface Filial {
   a1_cert_meta?: string | null;
 }
 
+/** Garante leitura dos campos A1 mesmo se a API/proxy variar o casing. */
+function normalizeEmpresaRow(row: unknown): Empresa {
+  const r = row as Record<string, unknown> & Partial<Empresa>;
+  const up = r.a1_cert_uploaded_at ?? r.a1CertUploadedAt;
+  const meta = r.a1_cert_meta ?? r.a1CertMeta;
+  return {
+    ...(r as Empresa),
+    a1_cert_uploaded_at: up != null && String(up) !== '' ? String(up) : null,
+    a1_cert_meta:
+      meta == null || meta === ''
+        ? null
+        : typeof meta === 'string'
+          ? meta
+          : JSON.stringify(meta),
+  };
+}
+
+function normalizeFilialRow(row: unknown): Filial {
+  const r = row as Record<string, unknown> & Partial<Filial>;
+  const up = r.a1_cert_uploaded_at ?? r.a1CertUploadedAt;
+  const meta = r.a1_cert_meta ?? r.a1CertMeta;
+  return {
+    ...(r as Filial),
+    a1_cert_uploaded_at: up != null && String(up) !== '' ? String(up) : null,
+    a1_cert_meta:
+      meta == null || meta === ''
+        ? null
+        : typeof meta === 'string'
+          ? meta
+          : JSON.stringify(meta),
+  };
+}
+
 type EmpresaForm = { razaoSocial: string; nomeFantasia: string; cnpj: string; email: string; telefone: string; uf: string; cidade: string; logradouro: string; numero: string; bairro: string; cep: string; };
 type FilialForm = { nome: string; cnpj: string; uf: string; cidade: string; logradouro: string; numero: string; bairro: string; cep: string; ativa: boolean; };
 
@@ -158,8 +191,8 @@ export function FiliaisPage() {
         api.get('/tenant/info/empresas'),
         api.get('/tenant/info/filiais'),
       ]);
-      setEmpresas(eRes.data.empresas ?? []);
-      setFiliais(fRes.data.filiais ?? []);
+      setEmpresas((eRes.data.empresas ?? []).map(normalizeEmpresaRow));
+      setFiliais((fRes.data.filiais ?? []).map(normalizeFilialRow));
     } catch { setError('Erro ao carregar dados.'); }
     finally { setLoading(false); }
   }, []);
@@ -180,14 +213,25 @@ export function FiliaisPage() {
     setShowEmpresaModal(true);
   };
 
-  const openEditEmpresa = (e: Empresa) => {
-    setEmpresaForm({
-      razaoSocial: e.razao_social, nomeFantasia: e.nome_fantasia ?? '', cnpj: e.cnpj ?? '',
-      email: e.email ?? '', telefone: e.telefone ?? '', uf: e.uf ?? 'SC', cidade: e.cidade ?? '',
-      logradouro: e.logradouro ?? '', numero: e.numero ?? '', bairro: e.bairro ?? '', cep: e.cep ?? '',
-    });
-    setEmpresaEditing(e.id); setEmpresaModalError('');
+  const openEditEmpresa = async (e: Empresa) => {
+    setEmpresaModalError('');
     setEmpresaCertFile(null); setEmpresaCertPwd('');
+    let row = normalizeEmpresaRow(e);
+    try {
+      const eRes = await api.get('/tenant/info/empresas');
+      const list = (eRes.data.empresas ?? []).map(normalizeEmpresaRow);
+      setEmpresas(list);
+      const found = list.find((x) => x.id === e.id);
+      if (found) row = found;
+    } catch {
+      /* mantém dados do cartão clicado */
+    }
+    setEmpresaForm({
+      razaoSocial: row.razao_social, nomeFantasia: row.nome_fantasia ?? '', cnpj: row.cnpj ?? '',
+      email: row.email ?? '', telefone: row.telefone ?? '', uf: row.uf ?? 'SC', cidade: row.cidade ?? '',
+      logradouro: row.logradouro ?? '', numero: row.numero ?? '', bairro: row.bairro ?? '', cep: row.cep ?? '',
+    });
+    setEmpresaEditing(row.id);
     setShowEmpresaModal(true);
   };
 
@@ -218,11 +262,22 @@ export function FiliaisPage() {
     setShowFilialModal(true);
   };
 
-  const openEditFilial = (f: Filial) => {
-    setFilialForm({ nome: f.nome, cnpj: f.cnpj ?? '', uf: f.uf ?? 'SC', cidade: f.cidade ?? '',
-      logradouro: f.logradouro ?? '', numero: f.numero ?? '', bairro: f.bairro ?? '', cep: f.cep ?? '', ativa: f.ativa === 1 });
-    setFilialEditing(f.id); setFilialParentId(f.empresa_id); setFilialModalError('');
+  const openEditFilial = async (f: Filial) => {
+    setFilialModalError('');
     setFilialCertFile(null); setFilialCertPwd('');
+    let row = normalizeFilialRow(f);
+    try {
+      const fRes = await api.get('/tenant/info/filiais');
+      const list = (fRes.data.filiais ?? []).map(normalizeFilialRow);
+      setFiliais(list);
+      const found = list.find((x) => x.id === f.id);
+      if (found) row = found;
+    } catch {
+      /* mantém dados do cartão clicado */
+    }
+    setFilialForm({ nome: row.nome, cnpj: row.cnpj ?? '', uf: row.uf ?? 'SC', cidade: row.cidade ?? '',
+      logradouro: row.logradouro ?? '', numero: row.numero ?? '', bairro: row.bairro ?? '', cep: row.cep ?? '', ativa: row.ativa === 1 });
+    setFilialEditing(row.id); setFilialParentId(row.empresa_id);
     setShowFilialModal(true);
   };
 
@@ -513,6 +568,12 @@ export function FiliaisPage() {
                             ? `Certificado enviado em ${fmtDate(uploadedAt)}. Envie outro arquivo para substituir.`
                             : 'Nenhum certificado cadastrado para esta empresa.'}
                         </p>
+                        {!uploadedAt && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed border border-dashed border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-slate-50/80 dark:bg-slate-800/40">
+                            Só aparece como enviado depois de clicar em <strong className="text-slate-700 dark:text-slate-200">Enviar certificado</strong> e a API confirmar (não basta salvar a empresa).
+                            Se você pulou o certificado no onboarding ou o armazenamento ainda não estava configurado, selecione o .pfx/.p12 e a senha abaixo e envie de novo.
+                          </p>
+                        )}
                         {meta && <CertMetaDetails meta={meta} />}
                         {uploadedAt && certStorageReady && (
                           <button
@@ -628,6 +689,11 @@ export function FiliaisPage() {
                             ? `Certificado enviado em ${fmtDate(uploadedAt)}. Envie outro arquivo para substituir.`
                             : 'Nenhum certificado específico desta filial.'}
                         </p>
+                        {!uploadedAt && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed border border-dashed border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 bg-slate-50/80 dark:bg-slate-800/40">
+                            O certificado da filial só é gravado após <strong className="text-slate-700 dark:text-slate-200">Enviar certificado da filial</strong> com arquivo e senha válidos.
+                          </p>
+                        )}
                         {meta && <CertMetaDetails meta={meta} />}
                         {uploadedAt && certStorageReady && (
                           <button
