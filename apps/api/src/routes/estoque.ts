@@ -75,6 +75,20 @@ app.post('/movimentacoes', zValidator('json', movSchema), async (c) => {
 
   const qtdDelta = data.tipo === 'saida' ? -data.quantidade : data.quantidade
 
+  if (data.tipo === 'saida') {
+    const row = await c.env.DB_SHARED
+      .prepare('SELECT quantidade FROM estoque WHERE tenant_id = ? AND produto_id = ? AND location = ?')
+      .bind(tenant.tenantId, data.produtoId, data.location)
+      .first<{ quantidade: number }>()
+    const disp = row?.quantidade ?? 0
+    if (disp < data.quantidade) {
+      return c.json(
+        { error: 'Saldo insuficiente para saída.', disponivel: disp, solicitado: data.quantidade },
+        400,
+      )
+    }
+  }
+
   await c.env.DB_SHARED.batch([
     c.env.DB_SHARED.prepare(`
       INSERT INTO movimentacoes_estoque

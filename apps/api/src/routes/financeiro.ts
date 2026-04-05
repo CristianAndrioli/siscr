@@ -21,12 +21,12 @@ const contaSchema = z.object({
 
 app.get('/receber', async (c) => {
   const tenant = c.get('tenant')
-  const { empresaId, filialId, status, vencidoAte } = c.req.query()
+  const { empresaId, filialId, status, vencidoAte, pedidoId } = c.req.query()
 
   let query = `
     SELECT cr.id, cr.descricao, cr.valor, cr.vencimento, cr.status,
            cr.categoria, cr.observacoes, cr.data_pagamento, cr.valor_pago,
-           cr.created_at, cr.pessoa_id,
+           cr.created_at, cr.pessoa_id, cr.pedido_id,
            p.nome as cliente
     FROM contas_receber cr
     LEFT JOIN pessoas p ON p.id = cr.pessoa_id
@@ -37,6 +37,7 @@ app.get('/receber', async (c) => {
   if (empresaId) { query += ' AND cr.empresa_id = ?'; params.push(empresaId) }
   if (filialId) { query += ' AND cr.filial_id = ?'; params.push(filialId) }
   if (status) { query += ' AND cr.status = ?'; params.push(status) }
+  if (pedidoId) { query += ' AND cr.pedido_id = ?'; params.push(pedidoId) }
   if (vencidoAte) { query += ' AND cr.vencimento <= ? AND cr.status != ?'; params.push(vencidoAte, 'pago') }
 
   query += ' ORDER BY cr.vencimento'
