@@ -5,6 +5,7 @@ import { prettyJSON } from 'hono/pretty-json'
 
 import { tenantMiddleware } from './middleware/tenant'
 import { authMiddleware } from './middleware/auth'
+import { requireEmpresaMatrizMiddleware } from './middleware/requireEmpresaMatriz'
 import { requireTenantModule } from './middleware/moduleGuard'
 
 import authRoutes from './routes/auth'
@@ -81,6 +82,7 @@ app.route('/api/subscriptions', subscriptionRoutes)
 // ─── Middleware de tenant (identifica tenant pelo header/subdomain)
 app.use('/api/tenant/*', tenantMiddleware)
 app.use('/api/tenant/*', authMiddleware)
+app.use('/api/tenant/*', requireEmpresaMatrizMiddleware)
 
 // Permissões por módulo (API) — após autenticação
 app.use('/api/tenant/cadastros', requireTenantModule('cadastros'))

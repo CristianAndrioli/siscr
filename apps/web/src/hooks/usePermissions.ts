@@ -50,6 +50,40 @@ function builtInMatrix(role: string): Record<string, { view: boolean; edit: bool
   return m;
 }
 
+function allModulesDenied(): Record<string, { view: boolean; edit: boolean }> {
+  const m: Record<string, { view: boolean; edit: boolean }> = {};
+  for (const k of MODULE_KEYS) m[k] = { view: false, edit: false };
+  return m;
+}
+
+/**
+ * Mescla a matriz vinda da API/sessão. Objeto vazio `{}` = nenhum módulo (não cair no fallback generoso do perfil).
+ * Perfil personalizado sem matriz no storage = negar tudo (evita tratar como viewer/user padrão).
+ * Só usa builtInMatrix quando não há `modules` nem perfil personalizado (legado).
+ */
+function mergeModulesFromApi(
+  apiModules: Record<string, { view: boolean; edit: boolean }> | undefined,
+  role: string,
+  customRoleId?: string | null,
+): Record<string, { view: boolean; edit: boolean }> {
+  if (apiModules != null && typeof apiModules === 'object') {
+    const m: Record<string, { view: boolean; edit: boolean }> = {};
+    for (const k of MODULE_KEYS) {
+      const cell = apiModules[k];
+      if (cell && typeof cell === 'object') {
+        m[k] = { view: !!cell.view, edit: !!cell.edit };
+      } else {
+        m[k] = { view: false, edit: false };
+      }
+    }
+    return m;
+  }
+  if (customRoleId) {
+    return allModulesDenied();
+  }
+  return builtInMatrix(role);
+}
+
 function matrixToModules(
   matrix: Record<string, { view: boolean; edit: boolean }>
 ): UserPermissions['modules'] {
@@ -70,6 +104,7 @@ function getLocalUser(): {
   id?: string;
   role?: string;
   modules?: Record<string, { view: boolean; edit: boolean }>;
+  customRoleId?: string | null;
   customRoleNome?: string;
 } {
   try {
@@ -105,17 +140,14 @@ export function usePermissions() {
 
   const permissions: UserPermissions = useMemo(() => {
     if (isAdmin) return buildAdminPermissions();
-    const matrix =
-      apiModules && Object.keys(apiModules).length > 0
-        ? apiModules
-        : builtInMatrix(role);
+    const matrix = mergeModulesFromApi(apiModules, role, localUser.customRoleId);
     return {
       role,
       role_display: localUser.customRoleNome || ROLE_LABEL[role] || 'Usuário',
       permissions: [],
       modules: matrixToModules(matrix),
     };
-  }, [isAdmin, role, apiModules, localUser.customRoleNome]);
+  }, [isAdmin, role, apiModules, localUser.customRoleId, localUser.customRoleNome]);
 
   const hasPermission = useCallback(
     (permission: string): boolean => {
@@ -161,6 +193,7 @@ export function usePermissions() {
         email: string;
         nome: string;
         role: string;
+        customRoleId?: string | null;
         modules?: Record<string, { view: boolean; edit: boolean }>;
       };
       localStorage.setItem(
@@ -171,6 +204,7 @@ export function usePermissions() {
           nome: s.nome,
           role: s.role,
           modules: s.modules,
+          customRoleId: s.customRoleId ?? null,
         })
       );
       setVersion((v) => v + 1);

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import api from '../services/api';
 import { authService } from '../services/auth';
 
@@ -8,13 +10,20 @@ type OnboardingStatus = {
   certificateStorageReady: boolean;
 };
 
-type GateMode = 'loading' | 'hidden' | 'admin_wizard' | 'wait_admin';
+type GateMode = 'loading' | 'hidden' | 'admin_wizard' | 'wait_admin' | 'load_error';
 
 const onlyDigits = (s: string) => s.replace(/\D/g, '');
 
 export default function OnboardingEmpresaGate() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<GateMode>('loading');
   const [status, setStatus] = useState<OnboardingStatus | null>(null);
+  const [loadErrorMsg, setLoadErrorMsg] = useState('');
+
+  const doLogout = useCallback(async () => {
+    await authService.logout();
+    navigate('/login');
+  }, [navigate]);
 
   const load = useCallback(async () => {
     if (!authService.isAuthenticated()) {
@@ -31,8 +40,16 @@ export default function OnboardingEmpresaGate() {
       const u = authService.getLocalUser() as { role?: string } | null;
       if (u?.role === 'admin') setMode('admin_wizard');
       else setMode('wait_admin');
-    } catch {
-      setMode('hidden');
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 401) {
+        setMode('hidden');
+        return;
+      }
+      const msg = axios.isAxiosError(e)
+        ? (e.response?.data as { error?: string })?.error
+        : undefined;
+      setLoadErrorMsg(msg || 'Não foi possível verificar o cadastro da empresa. Tente de novo ou saia e entre novamente.');
+      setMode('load_error');
     }
   }, []);
 
@@ -40,11 +57,57 @@ export default function OnboardingEmpresaGate() {
     load();
   }, [load]);
 
-  if (mode === 'loading' || mode === 'hidden') return null;
+  if (mode === 'hidden') return null;
+
+  if (mode === 'loading') {
+    return (
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm pointer-events-auto"
+        aria-busy="true"
+        role="dialog"
+        aria-label="Verificando configuração"
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+          <p className="text-sm text-slate-400">Verificando configuração da empresa…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode === 'load_error') {
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 pointer-events-auto">
+        <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
+          <h2 className="font-display text-xl font-bold text-white">Não foi possível continuar</h2>
+          <p className="mt-3 text-sm text-slate-400">{loadErrorMsg}</p>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('loading');
+                load();
+              }}
+              className="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-500"
+            >
+              Tentar novamente
+            </button>
+            <button
+              type="button"
+              onClick={doLogout}
+              className="rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
+            >
+              Sair da conta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (mode === 'wait_admin') {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 pointer-events-auto">
         <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15 text-2xl">⏳</div>
           <h2 className="font-display text-xl font-bold text-white">Configuração pendente</h2>
@@ -54,6 +117,13 @@ export default function OnboardingEmpresaGate() {
           <p className="mt-4 text-xs text-slate-500">
             Em caso de dúvida, entre em contato com quem criou a conta.
           </p>
+          <button
+            type="button"
+            onClick={doLogout}
+            className="mt-6 w-full rounded-lg border border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800"
+          >
+            Sair da conta
+          </button>
         </div>
       </div>
     );
@@ -62,6 +132,7 @@ export default function OnboardingEmpresaGate() {
   return (
     <OnboardingWizard
       certificateStorageReady={status?.certificateStorageReady ?? false}
+      onLogout={doLogout}
       onFinished={() => {
         setMode('loading');
         load();
@@ -72,9 +143,11 @@ export default function OnboardingEmpresaGate() {
 
 function OnboardingWizard({
   certificateStorageReady,
+  onLogout,
   onFinished,
 }: {
   certificateStorageReady: boolean;
+  onLogout: () => void | Promise<void>;
   onFinished: () => void;
 }) {
   const [step, setStep] = useState(1);
@@ -172,7 +245,7 @@ function OnboardingWizard({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto pointer-events-auto">
       <div className="my-auto w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
         <div className="border-b border-slate-800 px-6 py-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-brand-400">Bem-vindo</p>
@@ -366,8 +439,15 @@ function OnboardingWizard({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 px-6 py-4">
-          <div className="text-xs text-slate-500">
-            Etapa {step} de 3
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-slate-500">Etapa {step} de 3</span>
+            <button
+              type="button"
+              onClick={() => onLogout()}
+              className="text-left text-xs text-slate-500 underline decoration-slate-600 hover:text-slate-300"
+            >
+              Sair da conta
+            </button>
           </div>
           <div className="flex gap-2">
             {step > 1 && (

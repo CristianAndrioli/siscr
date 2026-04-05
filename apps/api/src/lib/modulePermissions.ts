@@ -91,6 +91,7 @@ export type SessionUserPayload = {
   tenantSlug: string
   empresaId: string | null
   filialId: string | null
+  customRoleId: string | null
   modules: ModuleMatrix
 }
 
@@ -116,6 +117,7 @@ export async function buildSessionUserPayload(
     tenantSlug: opts.tenantSlug,
     empresaId: null,
     filialId: null,
+    customRoleId: opts.customRoleId ?? null,
     modules,
   }
 }
