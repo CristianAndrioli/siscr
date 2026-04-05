@@ -31,3 +31,7 @@ logs/
 
 # TypeScript
 *.tsbuildinfo
+
+# Certificados de teste locais (gerar com scripts/test-certs/generate-test-pfx.ps1)
+scripts/test-certs/*.pfx
+scripts/test-certs/*.pem
