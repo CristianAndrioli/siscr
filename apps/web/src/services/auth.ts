@@ -1,5 +1,5 @@
 /**
- * Service de autenticação — API Hono (Cloudflare Workers)
+ * Service de autenticação — API REST (Hono)
  */
 import axios from 'axios';
 import api from './api';

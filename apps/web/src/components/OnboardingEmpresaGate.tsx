@@ -394,14 +394,14 @@ function OnboardingWizard({
                 <div>
                   <span className="text-sm font-semibold text-white">Enviar certificado A1 (.pfx / .p12)</span>
                   <p className="mt-1 text-xs text-slate-500">
-                    Opcional. Será armazenado cifrado no Cloudflare R2 para emissão de NF-e no futuro.
+                    Opcional. Pode enviar agora ou configurar depois no local adequado, para uso na emissão de NF-e quando o recurso estiver ativo.
                   </p>
                 </div>
               </label>
 
               {!certificateStorageReady && (
                 <p className="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200/90">
-                  O armazenamento seguro (R2 + chave no Worker) ainda não está ativo neste ambiente. Pule esta etapa; o certificado poderá ser enviado depois quando a infraestrutura estiver configurada.
+                  O envio do certificado ainda não está disponível aqui. Pule esta etapa — você poderá configurá-lo depois no local adequado (por exemplo, nas configurações da empresa).
                 </p>
               )}
 

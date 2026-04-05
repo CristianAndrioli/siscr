@@ -97,7 +97,7 @@ const faqs = [
   },
   {
     q: 'Os dados ficam em servidor brasileiro?',
-    a: 'A Cloudflare usa os data centers mais próximos do usuário automaticamente.',
+    a: 'A plataforma utiliza infraestrutura distribuída para oferecer bom desempenho conforme a região de acesso.',
   },
   {
     q: 'Posso migrar de plano depois?',

@@ -29,7 +29,7 @@ const features = [
   {
     icon: '⚡',
     title: 'Serverless e veloz',
-    desc: 'Infraestrutura 100% no edge da Cloudflare. Resposta em milissegundos de qualquer lugar.',
+    desc: 'Infraestrutura em nuvem de alta performance. Resposta rápida de qualquer lugar.',
   },
 ];
 
@@ -73,7 +73,7 @@ export default function Home() {
         <div className="relative max-w-4xl mx-auto text-center animate-slide-up">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-brand-500/30 bg-brand-500/10 text-brand-300 text-sm font-medium mb-8">
             <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse-slow" />
-            ERP SaaS • 100% na Cloudflare • Custo zero para começar
+            ERP SaaS • Na nuvem • Custo zero para começar
           </div>
 
           <h1 className="font-display text-5xl md:text-7xl font-extrabold text-white leading-[1.05] tracking-tight mb-6">
@@ -83,7 +83,7 @@ export default function Home() {
 
           <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
             Gestão completa para empresas com múltiplas filiais. Estoque, financeiro, fiscal e vendas
-            em uma plataforma serverless ultrarrápida.
+            em uma plataforma moderna e ultrarrápida.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -196,7 +196,7 @@ export default function Home() {
           </div>
 
           <p className="text-slate-500 text-sm mt-8 text-center">
-            Todos os planos incluem SSL, backups automáticos e infraestrutura global na Cloudflare.
+            Todos os planos incluem SSL, backups automáticos e infraestrutura em nuvem.
           </p>
         </div>
       </section>
