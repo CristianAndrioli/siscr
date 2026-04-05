@@ -1,16 +1,37 @@
-# React + Vite
+# SISCR Web — frontend (React + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicação **React 19** com **TypeScript**, **Vite** e **Tailwind**, implantada em **Cloudflare Pages** a partir do diretório `apps/web`.
 
-Currently, two official plugins are available:
+## Staging
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **URL pública:** [https://staging.siscr-web.pages.dev/](https://staging.siscr-web.pages.dev/)
+- A API de staging é definida no build via variável **`VITE_API_URL`** (no CI aponta para o Worker `siscr-api-staging` — ver `.github/workflows/deploy-staging.yml`).
 
-## React Compiler
+## Desenvolvimento local
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Na raiz do monorepo:
 
-## Expanding the ESLint configuration
+```bash
+pnpm install
+pnpm dev:web
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Por padrão o Vite sobe em `http://localhost:5173`. Crie `apps/web/.env` (ou `.env.local`) se precisar:
+
+```env
+VITE_API_URL=http://localhost:8787
+```
+
+Para subir a API localmente, use na raiz `pnpm dev:api` (Worker com D1 local via Wrangler).
+
+## Build de produção / Pages
+
+```bash
+pnpm --filter=@siscr/web run build
+```
+
+O artefato fica em `apps/web/dist`. O deploy para Cloudflare Pages é feito pelo workflow do repositório (não é necessário Docker).
+
+## Documentação do monorepo
+
+Arquitetura completa, banco **D1 compartilhado**, multi-tenant, migrações e deploy: **[README.md na raiz do repositório](../../README.md)**.

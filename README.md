@@ -1,74 +1,117 @@
-# SISCR — ERP SaaS Multi-Tenant (Cloudflare)
+# SISCR — ERP SaaS multi-tenant (Cloudflare)
 
-> Branch: `cloudflare` — Migração completa para Cloudflare Workers + D1 + Pages.
-> Stack 100% serverless, sem servidor, custo zero para começar.
+Monorepo **100% serverless** na Cloudflare: **Workers** (API), **Pages** (frontend), **D1** (SQLite), **KV**, **Queues** e **Cron**. Não há stack local com Docker nem servidor Node “de longa duração”: desenvolvimento usa Wrangler + Vite apontando para D1 local ou remoto.
+
+**Branch de staging / integração contínua:** `cloudflare`
+
+---
+
+## Acesso ao ambiente de staging
+
+| Camada | URL |
+|--------|-----|
+| **Frontend (Cloudflare Pages)** | [https://staging.siscr-web.pages.dev/](https://staging.siscr-web.pages.dev/) |
+| **API (Cloudflare Worker)** | `https://siscr-api-staging.lucaspercisi.workers.dev` |
+
+O build de produção do frontend é feito com `VITE_API_URL` apontando para essa API (ver `.github/workflows/deploy-staging.yml`).
+
+---
 
 ## Stack
 
 | Camada | Tecnologia |
-|---|---|
+|--------|------------|
 | Frontend | React 19 + TypeScript + Vite + Tailwind CSS → **Cloudflare Pages** |
 | Backend | **Hono** (TypeScript) → **Cloudflare Workers** |
-| Banco de Dados | **Cloudflare D1** (SQLite, isolamento por tenant_id) |
-| Cache / Sessões | **Cloudflare KV** |
-| Arquivos / XMLs | **Cloudflare R2** |
-| Tarefas Assíncronas | **Cloudflare Queues** |
+| Banco de dados | **Cloudflare D1** (SQLite) — **um banco compartilhado** por ambiente, isolamento **lógico** por `tenant_id` |
+| Cache / sessões | **Cloudflare KV** |
+| Arquivos / XMLs | **Cloudflare R2** (opcional conforme `wrangler.toml`) |
+| Tarefas assíncronas | **Cloudflare Queues** |
 | Agendamento | **Cloudflare Cron Triggers** |
 | ORM | **Drizzle ORM** |
 | Pagamentos | **Stripe** |
 | Monorepo | **Turborepo + pnpm** |
 
-## Estrutura do Projeto
+---
+
+## Arquitetura atual (visão geral)
+
+```mermaid
+flowchart TB
+  subgraph clients [Clientes]
+    Browser[Navegador / Pages]
+  end
+  subgraph cf [Cloudflare]
+    Pages[Cloudflare Pages - React]
+    Worker[Hono Worker - API]
+    D1[(D1 - banco compartilhado)]
+    KV[(KV - sessões e cache de tenant)]
+    Q[Queues]
+    Cron[Cron Triggers]
+  end
+  Browser --> Pages
+  Pages -->|HTTPS + VITE_API_URL| Worker
+  Worker --> D1
+  Worker --> KV
+  Worker --> Q
+  Cron --> Worker
+```
+
+### Banco compartilhado (D1)
+
+- Existe **um** database D1 por “faixa” de ambiente (ex.: `siscr-shared-staging` no staging), configurado em `apps/api/wrangler.toml`.
+- **Todos os tenants** convivem no **mesmo** arquivo SQLite lógico; o isolamento é feito por **colunas de escopo** (em geral `tenant_id` nas tabelas de negócio) e por middleware que resolve o tenant atual (header `X-Tenant-Slug` em dev, subdomínio em produção).
+- **Migrações** ficam em `packages/db/migrations/shared/` e são aplicadas com Wrangler (`--local` para SQLite em disco no dev, `--remote` para o D1 na Cloudflare).
+- Vantagens: um único pipeline de migração, backup/snapshot por database, custo previsível. A responsabilidade de **nunca misturar dados entre tenants** está nas queries e no middleware da API.
+
+### Outros serviços
+
+- **KV:** sessões de autenticação e cache de roteamento de tenant.
+- **Queues:** trabalhos assíncronos (e-mails, relatórios, etc.).
+- **Cron:** rotinas agendadas disparadas no Worker.
+
+---
+
+## Estrutura do projeto
 
 ```
 siscr/
 ├── apps/
-│   ├── web/          # Frontend React → Cloudflare Pages
-│   └── api/          # Backend Hono → Cloudflare Workers
+│   ├── web/                 # Frontend React → Cloudflare Pages
+│   └── api/                 # Backend Hono → Cloudflare Workers
 │       ├── src/
-│       │   ├── index.ts           # Entry point do Worker
-│       │   ├── middleware/
-│       │   │   ├── tenant.ts      # Identifica tenant (header/subdomínio)
-│       │   │   └── auth.ts        # JWT + sessões no KV
-│       │   └── routes/
-│       │       ├── auth.ts        # Login, signup, logout
-│       │       ├── tenants.ts     # Empresas e filiais
-│       │       ├── cadastros.ts   # Pessoas, produtos, serviços
-│       │       ├── estoque.ts     # Posição + movimentações
-│       │       ├── financeiro.ts  # Contas a receber/pagar
-│       │       ├── faturamento.ts # NF-e, NFSe
-│       │       ├── vendas.ts      # Pedidos e orçamentos
-│       │       └── stripe-webhook.ts
-│       └── wrangler.toml
+│       │   ├── index.ts
+│       │   ├── lib/         # Ex.: matriz de permissões por módulo
+│       │   ├── middleware/  # tenant, auth, guards de módulo
+│       │   └── routes/      # auth, tenants, cadastros, estoque, financeiro, faturamento, vendas, permissoes, stripe, ...
+│       └── wrangler.toml    # D1, KV, Queues, env staging/production
 ├── packages/
 │   ├── db/
-│   │   ├── src/schema/shared.ts   # Schema Drizzle (todas as tabelas)
-│   │   └── migrations/shared/     # Migrations SQL para D1
+│   │   ├── src/schema/      # Schema Drizzle
+│   │   └── migrations/shared/   # SQL aplicado no D1 compartilhado
 │   └── shared/
-│       └── src/types/index.ts     # Tipos compartilhados
+│       └── src/types/
 ├── .github/workflows/
-│   ├── deploy-staging.yml         # Auto-deploy na branch cloudflare
-│   └── deploy-production.yml      # Deploy via tag (v*)
+│   ├── deploy-staging.yml       # Push em `cloudflare` → migrate D1 + Worker + Pages
+│   └── deploy-production.yml    # Deploy produção (tags / fluxo definido no repo)
 ├── turbo.json
 ├── pnpm-workspace.yaml
 └── package.json
 ```
 
-## Arquitetura Multi-Tenant
+---
+
+## Multi-tenant (resumo)
 
 ```
-Tenant (Grupo Empresa)
-  └── D1 compartilhado (tenant_id em cada linha)
-        ├── Empresa A (CNPJ 01)
-        │     ├── Filial - Matriz SP
-        │     └── Filial - RJ
-        └── Empresa B (CNPJ 02)
-              └── Filial - Única
+Tenant (grupo empresa)
+  └── Mesmo D1 compartilhado (cada linha de negócio com tenant_id)
+        ├── Empresa A …
+        └── Empresa B …
 ```
 
-Identificação do tenant:
 - **Desenvolvimento:** header `X-Tenant-Slug: meugrupo`
-- **Produção:** subdomínio `meugrupo.seudominio.com.br`
+- **Produção (planejado):** subdomínio `meugrupo.seudominio.com.br` (ajustar DNS e `ALLOWED_ORIGINS` / `FRONTEND_URL` no Worker)
 
 ---
 
@@ -76,12 +119,12 @@ Identificação do tenant:
 
 - [Node.js 20+](https://nodejs.org/)
 - [pnpm 9+](https://pnpm.io/installation)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/): `npm install -g wrangler`
-- Conta Cloudflare (gratuita em [cloudflare.com](https://cloudflare.com))
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) (via `pnpm` no projeto ou global)
+- Conta Cloudflare
 
 ---
 
-## Configuração Inicial (primeira vez)
+## Configuração inicial (primeira vez na máquina)
 
 ### 1. Instalar dependências
 
@@ -92,108 +135,95 @@ pnpm install
 ### 2. Autenticar no Cloudflare
 
 ```bash
-wrangler login
+cd apps/api
+npx wrangler login
 ```
 
-### 3. Criar os recursos no Cloudflare (staging)
+### 3. Recursos na Cloudflare (staging)
+
+Se ainda não existirem no seu account, crie D1, KV, fila, etc., e preencha os IDs em `apps/api/wrangler.toml`. O repositório de referência já contém IDs de staging; para um fork novo, use comandos como:
 
 ```bash
-# Criar banco D1
-wrangler d1 create siscr-shared-staging
-
-# Criar namespaces KV
-wrangler kv namespace create KV_SESSIONS --preview
-wrangler kv namespace create KV_TENANT_CACHE --preview
-
-# Criar bucket R2
-wrangler r2 bucket create siscr-storage-staging
-
-# Criar fila
-wrangler queues create siscr-tasks-staging
+npx wrangler d1 create siscr-shared-staging
+npx wrangler kv namespace create KV_SESSIONS
+npx wrangler kv namespace create KV_TENANT_CACHE
+npx wrangler queues create siscr-tasks-staging
 ```
 
-> Após criar cada recurso, copie os IDs gerados e cole no `apps/api/wrangler.toml`
-> nos campos marcados como `PLACEHOLDER_*`.
+(R2 e outros itens seguem o que estiver ativo no `wrangler.toml`.)
 
-### 4. Aplicar migration no banco local
+### 4. Migrações do D1
 
 ```bash
-# Rodar D1 localmente (sem precisar do Cloudflare)
+# Banco local (SQLite em .wrangler/state) — desenvolvimento
 pnpm --filter=@siscr/api run db:migrate:shared
+
+# Banco remoto na Cloudflare (staging)
+pnpm --filter=@siscr/api run db:migrate:shared:remote
+# equivalente a: wrangler d1 migrations apply siscr-shared-staging --remote
 ```
 
-### 5. Configurar secrets
+### 5. Secrets do Worker (staging)
 
 ```bash
 cd apps/api
-
-# Chave secreta de autenticação (gere uma string aleatória)
-wrangler secret put BETTER_AUTH_SECRET --env staging
-
-# Stripe (modo teste)
-wrangler secret put STRIPE_SECRET_KEY --env staging
-wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
+npx wrangler secret put BETTER_AUTH_SECRET --env staging
+npx wrangler secret put STRIPE_SECRET_KEY --env staging
+npx wrangler secret put STRIPE_WEBHOOK_SECRET --env staging
 ```
 
-### 6. Iniciar em modo desenvolvimento
+### 6. Desenvolvimento local
 
 ```bash
-# Terminal 1 — API (Worker)
+# Terminal 1 — API (Worker + D1 local)
 pnpm dev:api
-# Disponível em: http://localhost:8787
+# http://localhost:8787
 
-# Terminal 2 — Frontend
+# Terminal 2 — frontend
 pnpm dev:web
-# Disponível em: http://localhost:5173
+# http://localhost:5173
 ```
 
+Configure `VITE_API_URL` no `.env` do `apps/web` se precisar apontar para a API de staging em vez de `localhost`.
+
 ---
 
-## Deploy para Staging (teste sem instalar na máquina)
+## Deploy de staging
 
-O deploy de staging acontece **automaticamente** a cada push na branch `cloudflare`:
+Push na branch **`cloudflare`** dispara o workflow que:
+
+1. Aplica migrações no D1 remoto `siscr-shared-staging`
+2. Faz deploy do Worker (`wrangler deploy --env staging`)
+3. Builda o frontend com a URL da API de staging
+4. Publica o `dist` no projeto Cloudflare Pages **siscr-web** (branch `staging`)
+
+**URLs após o pipeline:**
+
+- Frontend: **https://staging.siscr-web.pages.dev/**
+- API: **https://siscr-api-staging.lucaspercisi.workers.dev**
+
+---
+
+## Secrets no GitHub Actions
+
+`Settings → Secrets and variables → Actions`
+
+| Secret | Uso |
+|--------|-----|
+| `CLOUDFLARE_API_TOKEN` | Token com permissão para Workers, D1 e Pages |
+| `CLOUDFLARE_ACCOUNT_ID` | ID da conta Cloudflare |
+
+---
+
+## Testar multi-tenant localmente
 
 ```bash
-git push origin cloudflare
-```
-
-O GitHub Actions vai:
-1. Aplicar migrations no D1 staging
-2. Fazer deploy do Worker (API)
-3. Fazer build do frontend
-4. Fazer deploy do frontend no Cloudflare Pages
-
-**URLs após deploy:**
-- Frontend: `https://staging.siscr-web.pages.dev`
-- API: `https://siscr-api-staging.SEU_ACCOUNT_ID.workers.dev`
-
----
-
-## Secrets necessários no GitHub
-
-Vá em: `GitHub → Repositório → Settings → Secrets and variables → Actions`
-
-| Secret | Como obter |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | [Painel Cloudflare → My Profile → API Tokens → Create Token](https://dash.cloudflare.com/profile/api-tokens) → usar template "Edit Cloudflare Workers" |
-| `CLOUDFLARE_ACCOUNT_ID` | [Painel Cloudflare → lado direito da tela → Account ID](https://dash.cloudflare.com/) |
-
----
-
-## Desenvolvimento local — Como testar multi-tenant
-
-No desenvolvimento local, identifique o tenant pelo header:
-
-```bash
-# Testar health
 curl http://localhost:8787/api/health
 
-# Login (tenant identificado pelo body)
 curl -X POST http://localhost:8787/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@teste.com", "password": "senha123", "tenantSlug": "meugrupo"}'
+  -d '{"email":"admin@teste.com","password":"senha123","tenantSlug":"meugrupo"}'
 
-# Requisição autenticada (tenant pelo header)
 curl http://localhost:8787/api/tenant/cadastros/pessoas \
   -H "X-Tenant-Slug: meugrupo" \
   -H "Authorization: Bearer SEU_TOKEN"
@@ -201,42 +231,35 @@ curl http://localhost:8787/api/tenant/cadastros/pessoas \
 
 ---
 
-## Endpoints da API
+## Endpoints da API (resumo)
 
 ### Públicos
+
 | Método | Rota | Descrição |
-|---|---|---|
+|--------|------|-----------|
 | GET | `/api/health` | Health check |
 | POST | `/api/auth/login` | Login |
-| POST | `/api/auth/signup` | Criar conta (tenant + admin) |
+| POST | `/api/auth/signup` | Criar conta |
 | POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/me` | Usuário atual |
-| GET | `/api/subscriptions/plans` | Listar planos |
+| GET | `/api/auth/me` | Sessão / usuário atual |
+| GET | `/api/subscriptions/plans` | Planos |
 | POST | `/api/webhooks/stripe` | Webhook Stripe |
 
-### Autenticados (requerem `Authorization: Bearer TOKEN` + `X-Tenant-Slug`)
-| Método | Rota | Descrição |
-|---|---|---|
-| GET | `/api/tenant/info` | Dados do tenant |
-| GET/POST | `/api/tenant/info/empresas` | Empresas do grupo |
-| GET/POST | `/api/tenant/info/empresas/:id/filiais` | Filiais de uma empresa |
-| GET/POST | `/api/tenant/cadastros/pessoas` | Clientes, fornecedores |
-| GET/POST | `/api/tenant/cadastros/produtos` | Produtos |
-| GET | `/api/tenant/estoque` | Posição de estoque |
-| POST | `/api/tenant/estoque/movimentacao` | Entrada/saída de estoque |
-| GET/POST | `/api/tenant/financeiro/receber` | Contas a receber |
-| GET/POST | `/api/tenant/financeiro/pagar` | Contas a pagar |
-| GET | `/api/tenant/financeiro/dashboard` | Resumo financeiro |
-| GET/POST | `/api/tenant/vendas/pedidos` | Pedidos de venda |
-| GET | `/api/tenant/faturamento/notas` | Notas fiscais |
+### Autenticados (`Authorization` + `X-Tenant-Slug` onde aplicável)
+
+Incluem rotas em `/api/tenant/...` para cadastros, estoque, financeiro, faturamento, vendas, configurações de tenant, **perfis de permissão personalizados** (`/api/tenant/permissoes/...`), etc. Rotas mutáveis podem exigir permissão de **edição** por módulo (ver código em `apps/api/src/middleware/moduleGuard.ts`).
 
 ---
 
-## Custos estimados (Cloudflare)
+## Custos (ordem de grandeza, Cloudflare)
 
-| Escala | Tenants | Custo/mês |
-|---|---|---|
-| Desenvolvimento / Staging | qualquer | **$0** |
-| Produção pequena (< 50 tenants) | 50 | **$5** |
-| Produção média (50–200 tenants) | 200 | **~$16** |
-| Produção grande (200–1.000 tenants) | 1.000 | **~$80** |
+| Cenário | Custo típico |
+|---------|----------------|
+| Dev / staging moderado | Freemium / baixo |
+| Produção pequena | Consulte [preços Cloudflare](https://www.cloudflare.com/plans/) (Workers, D1, Pages) |
+
+---
+
+## Legado (Docker e scripts antigos)
+
+Versões anteriores do projeto podem ter usado **Docker Compose**, scripts shell e banco **por container**. **O fluxo atual é só Cloudflare + pnpm + Wrangler**: não há `docker-compose` nem serviço de API persistente fora do Worker. Use sempre os comandos deste README e o `wrangler.toml` como fonte da verdade para nomes de D1 e bindings.
