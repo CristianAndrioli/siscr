@@ -174,11 +174,11 @@ app.delete('/cotacoes/:id', async (c) => {
 
 app.get('/notas', async (c) => {
   const tenant = c.get('tenant')
-  const { tipo, status, busca } = c.req.query()
+  const { tipo, status, busca, pedidoId } = c.req.query()
 
   let query = `
     SELECT nf.id, nf.numero, nf.serie, nf.tipo, nf.status, nf.valor_total,
-           nf.data_emissao, nf.chave_acesso, nf.created_at,
+           nf.data_emissao, nf.chave_acesso, nf.created_at, nf.pedido_id,
            p.nome as destinatario
     FROM notas_fiscais nf
     LEFT JOIN pessoas p ON p.id = nf.destinatario_id
@@ -187,6 +187,7 @@ app.get('/notas', async (c) => {
   const params: unknown[] = [tenant.tenantId]
   if (tipo) { query += ' AND nf.tipo = ?'; params.push(tipo) }
   if (status) { query += ' AND nf.status = ?'; params.push(status) }
+  if (pedidoId) { query += ' AND nf.pedido_id = ?'; params.push(pedidoId) }
   if (busca) { query += ' AND (p.nome LIKE ? OR CAST(nf.numero AS TEXT) LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
   query += ' ORDER BY nf.created_at DESC LIMIT 100'
 
@@ -232,6 +233,10 @@ const nfItemSchema = z.object({
 const nfSchema = z.object({
   tipo: z.enum(['nfe', 'nfse']).default('nfe'),
   destinatarioId: z.string().uuid().optional(),
+  /** Preenche empresa, filial e destinatário (se omitidos) a partir do pedido. */
+  pedidoId: z.string().uuid().optional(),
+  empresaId: z.string().uuid().optional(),
+  filialId: z.string().uuid().optional(),
   naturezaOperacao: z.string().optional(),
   descricaoServico: z.string().optional(),
   aliquotaIss: z.number().min(0).max(100).optional(),
@@ -248,6 +253,24 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
   const now = new Date().toISOString()
   const uid = auditUserId(c)
 
+  let empresaId: string | null = data.empresaId ?? null
+  let filialId: string | null = data.filialId ?? null
+  let pedidoId: string | null = data.pedidoId ?? null
+  let destinatarioId: string | null = data.destinatarioId ?? null
+
+  if (data.pedidoId) {
+    const ped = await c.env.DB_SHARED
+      .prepare(
+        'SELECT empresa_id, filial_id, cliente_id FROM pedidos_venda WHERE id = ? AND tenant_id = ?',
+      )
+      .bind(data.pedidoId, tenant.tenantId)
+      .first<{ empresa_id: string; filial_id: string; cliente_id: string }>()
+    if (!ped) return c.json({ error: 'Pedido não encontrado.' }, 404)
+    if (!empresaId) empresaId = ped.empresa_id
+    if (!filialId) filialId = ped.filial_id
+    if (!destinatarioId) destinatarioId = ped.cliente_id
+  }
+
   // Número sequencial por tipo
   const last = await c.env.DB_SHARED
     .prepare('SELECT numero FROM notas_fiscais WHERE tenant_id = ? AND tipo = ? ORDER BY created_at DESC LIMIT 1')
@@ -261,14 +284,33 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
   const stmts = [
     c.env.DB_SHARED.prepare(`
       INSERT INTO notas_fiscais
-        (id, tenant_id, tipo, numero, serie, destinatario_id, natureza_operacao,
+        (id, tenant_id, empresa_id, filial_id, pedido_id, tipo, numero, serie, destinatario_id, natureza_operacao,
          descricao_servico, aliquota_iss, valor_iss, codigo_servico,
          observacoes, valor_produtos, valor_desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, '1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rascunho', ?, ?, ?, ?)
-    `).bind(id, tenant.tenantId, data.tipo, numero, data.destinatarioId ?? null,
-        data.naturezaOperacao ?? null, data.descricaoServico ?? null,
-        data.aliquotaIss ?? null, valorIss, data.codigoServico ?? null,
-        data.observacoes ?? null, valorProdutos, data.desconto, valorTotal, now, now, uid, uid),
+      VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rascunho', ?, ?, ?, ?)
+    `).bind(
+      id,
+      tenant.tenantId,
+      empresaId,
+      filialId,
+      pedidoId,
+      data.tipo,
+      numero,
+      destinatarioId,
+      data.naturezaOperacao ?? null,
+      data.descricaoServico ?? null,
+      data.aliquotaIss ?? null,
+      valorIss,
+      data.codigoServico ?? null,
+      data.observacoes ?? null,
+      valorProdutos,
+      data.desconto,
+      valorTotal,
+      now,
+      now,
+      uid,
+      uid,
+    ),
   ]
 
   for (const item of data.itens) {
@@ -325,6 +367,9 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
 
   const fields = ['updated_at = ?', 'updated_by = ?']
   const vals: unknown[] = [now, uid]
+  if (data.pedidoId !== undefined) { fields.push('pedido_id = ?'); vals.push(data.pedidoId) }
+  if (data.empresaId !== undefined) { fields.push('empresa_id = ?'); vals.push(data.empresaId) }
+  if (data.filialId !== undefined) { fields.push('filial_id = ?'); vals.push(data.filialId) }
   if (data.destinatarioId !== undefined) { fields.push('destinatario_id = ?'); vals.push(data.destinatarioId) }
   if (data.naturezaOperacao !== undefined) { fields.push('natureza_operacao = ?'); vals.push(data.naturezaOperacao) }
   if (data.descricaoServico !== undefined) { fields.push('descricao_servico = ?'); vals.push(data.descricaoServico) }

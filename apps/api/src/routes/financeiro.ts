@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
+import { csvAttachment, rowsToCsv } from '../lib/csv'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -21,7 +22,9 @@ const contaSchema = z.object({
 
 app.get('/receber', async (c) => {
   const tenant = c.get('tenant')
-  const { empresaId, filialId, status, vencidoAte, pedidoId } = c.req.query()
+  const q = c.req.query()
+  const { empresaId, filialId, status, vencidoAte, pedidoId } = q
+  const exportFmt = q.export
 
   let query = `
     SELECT cr.id, cr.descricao, cr.valor, cr.vencimento, cr.status,
@@ -43,6 +46,25 @@ app.get('/receber', async (c) => {
   query += ' ORDER BY cr.vencimento'
 
   const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
+
+  if (exportFmt === 'csv') {
+    const cols = [
+      'id',
+      'descricao',
+      'valor',
+      'vencimento',
+      'status',
+      'categoria',
+      'pessoa_id',
+      'pedido_id',
+      'cliente',
+      'data_pagamento',
+      'valor_pago',
+    ]
+    const rows = (results ?? []).map((r) => r as Record<string, unknown>)
+    return csvAttachment(rowsToCsv(rows, cols), 'contas_receber.csv')
+  }
+
   return c.json({ contas: results })
 })
 

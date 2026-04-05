@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
+import { csvAttachment, rowsToCsv } from '../lib/csv'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -10,7 +11,9 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.get('/', async (c) => {
   const tenant = c.get('tenant')
-  const { produtoId, location, busca } = c.req.query()
+  const q = c.req.query()
+  const { produtoId, location, busca } = q
+  const exportFmt = q.export
 
   let query = `
     SELECT e.id, e.produto_id, p.descricao as produto, p.codigo as codigo,
@@ -28,6 +31,13 @@ app.get('/', async (c) => {
   query += ' ORDER BY p.descricao, e.location'
 
   const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
+
+  if (exportFmt === 'csv') {
+    const cols = ['id', 'produto_id', 'produto', 'codigo', 'unidade', 'location', 'quantidade', 'updated_at']
+    const rows = (results ?? []).map((r) => r as Record<string, unknown>)
+    return csvAttachment(rowsToCsv(rows, cols), 'estoque.csv')
+  }
+
   return c.json({ estoque: results })
 })
 
