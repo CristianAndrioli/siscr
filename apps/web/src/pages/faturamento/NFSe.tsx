@@ -115,6 +115,21 @@ export function NFSePage() {
     setModalMode(null); setMotivoCancel(''); load();
   };
 
+  const handleFaturar = async () => {
+    if (!selectedNota) return;
+    if (!window.confirm('Confirma o faturamento desta NFS-e?')) return;
+    setSaving(true); setModalError('');
+    try {
+      await notasService.faturar(selectedNota.id);
+      setModalMode(null);
+      load();
+    } catch (err: any) {
+      setModalError(err?.response?.data?.error || 'Erro ao faturar nota.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const filtered = notas.filter(n => {
     const matchBusca = !busca || n.destinatario?.toLowerCase().includes(busca.toLowerCase()) || String(n.numero ?? '').includes(busca) || n.descricao_servico?.toLowerCase().includes(busca.toLowerCase());
     const matchStatus = !statusFiltro || n.status === statusFiltro;
@@ -353,10 +368,26 @@ export function NFSePage() {
               </p>
             )}
 
-            <div className="flex gap-3 pt-2">
+            {modalError && (
+              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{modalError}</div>
+            )}
+
+            <div className="flex gap-3 pt-2 flex-wrap">
               <button onClick={() => setModalMode(null)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Fechar</button>
               {selectedNota.status !== 'emitida' && selectedNota.status !== 'cancelada' && (
-                <button onClick={() => { setMotivoCancel(''); setModalMode('cancel'); }} className="px-4 py-2.5 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors">Cancelar NFS-e</button>
+                <>
+                  <button
+                    onClick={handleFaturar}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {saving ? 'Faturando...' : 'Faturar NFS-e'}
+                  </button>
+                  <button onClick={() => { setMotivoCancel(''); setModalMode('cancel'); }} className="px-4 py-2.5 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors">Cancelar</button>
+                </>
               )}
             </div>
           </div>

@@ -158,6 +158,10 @@ export const notasService = {
   cancelar: async (id: string, motivo?: string): Promise<void> => {
     await api.post(`${BASE}/notas/${id}/cancelar`, { motivo });
   },
+  faturar: async (id: string): Promise<{ message: string; itens_baixados: number }> => {
+    const res = await api.post(`${BASE}/notas/${id}/faturar`);
+    return res.data;
+  },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/notas/${id}`);
   },

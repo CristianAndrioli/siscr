@@ -412,6 +412,66 @@ app.post('/notas/:id/cancelar', async (c) => {
   return c.json({ message: 'Nota cancelada.' })
 })
 
+// ─── Faturar nota (rascunho → emitida + baixa de estoque) ────────
+app.post('/notas/:id/faturar', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+
+  // Buscar a nota com seus itens
+  const nota = await c.env.DB_SHARED
+    .prepare('SELECT id, tipo, status FROM notas_fiscais WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first<{ id: string; tipo: string; status: string }>()
+
+  if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
+  if (nota.status === 'emitida') return c.json({ error: 'Nota já foi faturada.' }, 400)
+  if (nota.status === 'cancelada') return c.json({ error: 'Não é possível faturar uma nota cancelada.' }, 400)
+
+  const { results: itens } = await c.env.DB_SHARED
+    .prepare('SELECT produto_id, quantidade, descricao FROM nf_itens WHERE nota_id = ? AND produto_id IS NOT NULL')
+    .bind(id)
+    .all<{ produto_id: string; quantidade: number; descricao: string }>()
+
+  // Montar batch: atualizar nota + movimentações de saída (apenas NF-e com produto_id)
+  const stmts: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
+
+  stmts.push(
+    c.env.DB_SHARED
+      .prepare('UPDATE notas_fiscais SET status = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?')
+      .bind('emitida', now, uid, id, tenant.tenantId)
+  )
+
+  // Baixa de estoque apenas para NF-e com produtos vinculados
+  if (nota.tipo === 'nfe' && itens.length > 0) {
+    for (const item of itens) {
+      const movId = crypto.randomUUID()
+      stmts.push(
+        c.env.DB_SHARED
+          .prepare(`
+            INSERT INTO movimentacoes_estoque
+              (id, tenant_id, empresa_id, tipo, produto_id, quantidade, observacao, referencia_id, referencia_tipo, created_at, updated_at, created_by, updated_by)
+            SELECT ?, ?, empresa_id, 'saida', ?, ?, ?, ?, 'nota_fiscal', ?, ?, ?, ?
+            FROM notas_fiscais WHERE id = ?
+          `)
+          .bind(
+            movId, tenant.tenantId,
+            item.produto_id, item.quantidade,
+            `Faturamento NF-e — ${item.descricao}`,
+            id,
+            now, now, uid, uid,
+            id,
+          )
+      )
+    }
+  }
+
+  await c.env.DB_SHARED.batch(stmts)
+
+  return c.json({ message: 'Nota faturada com sucesso.', itens_baixados: nota.tipo === 'nfe' ? itens.length : 0 })
+})
+
 // GET XML (mantido para futura integração)
 app.get('/notas/:id/xml', async (c) => {
   const tenant = c.get('tenant')
