@@ -430,7 +430,7 @@ app.post('/notas/:id/faturar', async (c) => {
   if (nota.status === 'cancelada') return c.json({ error: 'Não é possível faturar uma nota cancelada.' }, 400)
 
   const { results: itens } = await c.env.DB_SHARED
-    .prepare('SELECT produto_id, quantidade, descricao FROM nf_itens WHERE nota_id = ? AND produto_id IS NOT NULL')
+    .prepare('SELECT produto_id, quantidade, descricao FROM nota_fiscal_itens WHERE nota_fiscal_id = ? AND produto_id IS NOT NULL')
     .bind(id)
     .all<{ produto_id: string; quantidade: number; descricao: string }>()
 
