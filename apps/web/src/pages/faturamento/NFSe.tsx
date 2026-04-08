@@ -21,8 +21,8 @@ const STATUS_LABEL: Record<NFStatus, string> = {
 interface Servico { id: string; descricao: string; preco: number; }
 
 type ModalMode = 'new' | 'view' | 'cancel' | 'faturar' | null;
-
 type FaturarStep = { label: string; status: 'pending' | 'running' | 'done' | 'error' };
+interface CondicaoPagamento { parcelas: number; vencimento: string; intervalo_dias: number; }
 
 export function NFSePage() {
   const [notas, setNotas] = useState<NotaFiscal[]>([]);
@@ -37,6 +37,12 @@ export function NFSePage() {
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [faturarSteps, setFaturarSteps] = useState<FaturarStep[]>([]);
   const [faturarDone, setFaturarDone] = useState(false);
+  const [condicao, setCondicao] = useState<CondicaoPagamento>({
+    parcelas: 1,
+    vencimento: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    intervalo_dias: 30,
+  });
+  const [faturarConfirmando, setFaturarConfirmando] = useState(false);
   const [motivoCancel, setMotivoCancel] = useState('');
   const [destinatarioId, setDestinatarioId] = useState('');
   const [destinatarioNome, setDestinatarioNome] = useState('');
@@ -121,39 +127,50 @@ export function NFSePage() {
 
   const iniciarFaturamento = () => {
     setFaturarDone(false);
+    setFaturarConfirmando(false);
     setModalError('');
-    setFaturarSteps([
-      { label: 'Validando nota de serviço', status: 'pending' },
-      { label: 'Emitindo NFS-e', status: 'pending' },
-      { label: 'Registrando lançamento financeiro', status: 'pending' },
-      { label: 'Finalizando', status: 'pending' },
-    ]);
+    setCondicao({
+      parcelas: 1,
+      vencimento: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+      intervalo_dias: 30,
+    });
+    setFaturarSteps([]);
     setModalMode('faturar');
   };
 
   const setStep = (idx: number, status: FaturarStep['status']) =>
     setFaturarSteps(prev => prev.map((s, i) => i === idx ? { ...s, status } : s));
 
+  const confirmarFaturamento = () => {
+    setFaturarConfirmando(true);
+    setFaturarSteps([
+      { label: 'Validando nota de serviço', status: 'pending' },
+      { label: 'Emitindo NFS-e', status: 'pending' },
+      { label: `Gerando ${condicao.parcelas}x em Contas a Receber`, status: 'pending' },
+      { label: 'Finalizando', status: 'pending' },
+    ]);
+    handleFaturar();
+  };
+
   const handleFaturar = async () => {
     if (!selectedNota) return;
     setSaving(true); setModalError('');
     try {
       setStep(0, 'running');
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 500));
       setStep(0, 'done');
 
       setStep(1, 'running');
-      const res = await notasService.faturar(selectedNota.id);
+      const res = await notasService.faturar(selectedNota.id, condicao);
       setStep(1, 'done');
 
       setStep(2, 'running');
       await new Promise(r => setTimeout(r, 400));
       setFaturarSteps(prev => prev.map((s, i) => i === 2 ? {
-        ...s,
-        status: 'done',
-        label: res.conta_receber_criada
-          ? 'Conta a receber lançada (venc. +30 dias)'
-          : 'Sem destinatário — conta a receber não criada',
+        ...s, status: 'done',
+        label: res.parcelas_criadas > 0
+          ? `${res.parcelas_criadas} parcela(s) lançada(s) em Contas a Receber`
+          : 'Sem destinatário — Contas a Receber não gerado',
       } : s));
 
       setStep(3, 'running');
@@ -433,87 +450,153 @@ export function NFSePage() {
         </div>
       )}
 
-      {/* Modal Faturar — passo a passo inline */}
+      {/* Modal Faturar */}
       {modalMode === 'faturar' && selectedNota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-5">
-            <div className="text-center">
-              {faturarDone ? (
-                <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-7 h-7 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              ) : (
-                <div className="w-14 h-14 rounded-full bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-7 h-7 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                  </svg>
-                </div>
-              )}
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                {faturarDone ? 'NFS-e Faturada!' : 'Faturando NFS-e...'}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                {faturarDone ? `NFS-e ${String(selectedNota.numero ?? '').padStart(6, '0')} emitida com sucesso.` : 'Aguarde enquanto processamos a emissão.'}
-              </p>
-            </div>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-5">
 
-            <div className="space-y-3">
-              {faturarSteps.map((step, idx) => (
-                <div key={idx} className="flex items-center gap-3">
-                  <div className="flex-none w-6 h-6 flex items-center justify-center">
-                    {step.status === 'done' && (
-                      <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            {/* ── Fase 1: Condição de pagamento ── */}
+            {!faturarConfirmando && (
+              <>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Condição de Pagamento</h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Defina como o valor da NFS-e será parcelado em Contas a Receber.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Parcelas</label>
+                    <select
+                      value={condicao.parcelas}
+                      onChange={e => setCondicao(c => ({ ...c, parcelas: Number(e.target.value) }))}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                        <option key={n} value={n}>{n}x</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">1º Vencimento</label>
+                    <input
+                      type="date"
+                      value={condicao.vencimento}
+                      onChange={e => setCondicao(c => ({ ...c, vencimento: e.target.value }))}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Intervalo</label>
+                    <select
+                      value={condicao.intervalo_dias}
+                      onChange={e => setCondicao(c => ({ ...c, intervalo_dias: Number(e.target.value) }))}
+                      className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      <option value={7}>7 dias</option>
+                      <option value={14}>14 dias</option>
+                      <option value={30}>30 dias</option>
+                      <option value={60}>60 dias</option>
+                      <option value={90}>90 dias</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Preview das parcelas */}
+                {condicao.parcelas > 0 && (selectedNota.valor_total ?? 0) > 0 && (
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 space-y-1.5">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Preview das parcelas</p>
+                    {Array.from({ length: condicao.parcelas }).map((_, i) => {
+                      const valorTotal = selectedNota.valor_total ?? 0;
+                      const valorParcela = Math.floor((valorTotal / condicao.parcelas) * 100) / 100;
+                      const valorFinal = i === condicao.parcelas - 1
+                        ? Math.round((valorTotal - valorParcela * (condicao.parcelas - 1)) * 100) / 100
+                        : valorParcela;
+                      const [y, m, d] = condicao.vencimento.split('-').map(Number);
+                      const venc = new Date(Date.UTC(y, m - 1, d + i * condicao.intervalo_dias));
+                      return (
+                        <div key={i} className="flex justify-between text-xs">
+                          <span className="text-slate-500 dark:text-slate-400">{i + 1}/{condicao.parcelas} — {venc.toLocaleDateString('pt-BR')}</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-200">
+                            {valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 flex justify-between text-xs font-bold text-slate-700 dark:text-slate-100">
+                      <span>Total</span>
+                      <span>{(selectedNota.valor_total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button onClick={() => setModalMode('view')} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    Voltar
+                  </button>
+                  <button onClick={confirmarFaturamento} className="flex-1 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors">
+                    Confirmar Faturamento
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── Fase 2: Progresso ── */}
+            {faturarConfirmando && (
+              <>
+                <div className="text-center">
+                  {faturarDone ? (
+                    <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-7 h-7 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                    )}
-                    {step.status === 'running' && (
-                      <svg className="animate-spin w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24">
+                    </div>
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center mx-auto mb-3">
+                      <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                    )}
-                    {step.status === 'error' && (
-                      <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    {step.status === 'pending' && (
-                      <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />
-                    )}
-                  </div>
-                  <span className={`text-sm ${
-                    step.status === 'done' ? 'text-slate-700 dark:text-slate-200' :
-                    step.status === 'running' ? 'text-brand-600 dark:text-brand-400 font-medium' :
-                    step.status === 'error' ? 'text-red-600 dark:text-red-400' :
-                    'text-slate-400 dark:text-slate-500'
-                  }`}>{step.label}</span>
+                    </div>
+                  )}
+                  <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                    {faturarDone ? 'NFS-e Faturada!' : 'Processando...'}
+                  </h2>
+                  {faturarDone && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      NFS-e {String(selectedNota.numero ?? '').padStart(6, '0')} emitida com sucesso.
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
 
-            {modalError && (
-              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{modalError}</div>
+                <div className="space-y-3">
+                  {faturarSteps.map((step, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="flex-none w-6 h-6 flex items-center justify-center">
+                        {step.status === 'done' && <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                        {step.status === 'running' && <svg className="animate-spin w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
+                        {step.status === 'error' && <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>}
+                        {step.status === 'pending' && <div className="w-4 h-4 rounded-full border-2 border-slate-300 dark:border-slate-600" />}
+                      </div>
+                      <span className={`text-sm ${step.status === 'done' ? 'text-slate-700 dark:text-slate-200' : step.status === 'running' ? 'text-brand-600 dark:text-brand-400 font-medium' : step.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {modalError && (
+                  <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{modalError}</div>
+                )}
+
+                {(faturarDone || modalError) && (
+                  <button onClick={() => { setModalMode(null); setModalError(''); }} className="w-full px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors">
+                    Fechar
+                  </button>
+                )}
+              </>
             )}
-
-            <div className="flex gap-3 pt-1">
-              {!saving && !faturarDone && (
-                <button onClick={() => setModalMode('view')} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                  Voltar
-                </button>
-              )}
-              {!saving && !faturarDone && !modalError && (
-                <button onClick={handleFaturar} className="flex-1 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors">
-                  Confirmar Faturamento
-                </button>
-              )}
-              {(faturarDone || modalError) && (
-                <button onClick={() => { setModalMode(null); setModalError(''); }} className="flex-1 px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors">
-                  Fechar
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}

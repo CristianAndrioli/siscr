@@ -412,12 +412,16 @@ app.post('/notas/:id/cancelar', async (c) => {
   return c.json({ message: 'Nota cancelada.' })
 })
 
-// ─── Faturar nota (rascunho → emitida + baixa de estoque) ────────
+// ─── Faturar nota (rascunho → emitida + baixa de estoque + parcelas) ─────────
 app.post('/notas/:id/faturar', async (c) => {
   const tenant = c.get('tenant')
   const id = c.req.param('id')
   const now = new Date().toISOString()
   const uid = auditUserId(c)
+
+  // Condição de pagamento enviada pelo frontend
+  type BodyType = { parcelas?: number; vencimento?: string; intervalo_dias?: number }
+  const body: BodyType = await c.req.json<BodyType>().catch(() => ({}))
 
   // Buscar a nota com todos os dados necessários
   const nota = await c.env.DB_SHARED
@@ -474,30 +478,54 @@ app.post('/notas/:id/faturar', async (c) => {
     }
   }
 
-  // Criar lançamento em Contas a Receber (se houver destinatário)
-  let contaReceberCriada = false
+  // Gerar parcelas em Contas a Receber (se houver destinatário e valor)
+  let parcelasCriadas = 0
   if (nota.destinatario_id && (nota.valor_total ?? 0) > 0) {
-    const crId = crypto.randomUUID()
+    const totalParcelas = Math.max(1, Math.min(body.parcelas ?? 1, 36))
+    const intervaloDias = Math.max(1, body.intervalo_dias ?? 30)
+    const primeiroVenc = body.vencimento
+      ?? new Date(Date.now() + intervaloDias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
     const numeroFormatado = nota.numero ? String(nota.numero).padStart(6, '0') : 'S/N'
-    const descricao = nota.tipo === 'nfse'
+    const descricaoBase = nota.tipo === 'nfse'
       ? `NFS-e ${numeroFormatado} — ${nota.descricao_servico ?? 'Serviço prestado'}`
       : `NF-e ${numeroFormatado} — ${nota.natureza_operacao ?? 'Venda de mercadorias'}`
-    // vencimento padrão: 30 dias
-    const vencimento = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-    stmts.push(
-      c.env.DB_SHARED.prepare(`
-        INSERT OR IGNORE INTO contas_receber
-          (id, tenant_id, empresa_id, pessoa_id, descricao, valor, vencimento,
-           status, categoria, nota_fiscal_id, created_at, updated_at, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', 'Faturamento', ?, ?, ?, ?, ?)
-      `).bind(
-        crId, tenant.tenantId, nota.empresa_id ?? null,
-        nota.destinatario_id, descricao, nota.valor_total,
-        vencimento, id, now, now, uid, uid,
+    const valorTotal = nota.valor_total ?? 0
+    // distribui o resto da divisão na última parcela
+    const valorParcela = Math.floor((valorTotal / totalParcelas) * 100) / 100
+    const valorUltima = Math.round((valorTotal - valorParcela * (totalParcelas - 1)) * 100) / 100
+
+    const [baseYear, baseMonth, baseDay] = primeiroVenc.split('-').map(Number)
+
+    for (let p = 1; p <= totalParcelas; p++) {
+      // calcular vencimento de cada parcela
+      const daysOffset = (p - 1) * intervaloDias
+      const vencDate = new Date(Date.UTC(baseYear, baseMonth - 1, baseDay + daysOffset))
+      const vencimento = vencDate.toISOString().slice(0, 10)
+      const valor = p === totalParcelas ? valorUltima : valorParcela
+      const descricao = totalParcelas > 1
+        ? `${descricaoBase} (${p}/${totalParcelas})`
+        : descricaoBase
+
+      // nota_fiscal_id + parcela garante unicidade (INSERT OR IGNORE evita duplicatas)
+      const crId = crypto.randomUUID()
+      stmts.push(
+        c.env.DB_SHARED.prepare(`
+          INSERT OR IGNORE INTO contas_receber
+            (id, tenant_id, empresa_id, pessoa_id, descricao, valor, vencimento,
+             status, categoria, nota_fiscal_id, parcela, total_parcelas,
+             created_at, updated_at, created_by, updated_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', 'Faturamento', ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          crId, tenant.tenantId, nota.empresa_id ?? null,
+          nota.destinatario_id, descricao, valor, vencimento,
+          id, p, totalParcelas,
+          now, now, uid, uid,
+        )
       )
-    )
-    contaReceberCriada = true
+    }
+    parcelasCriadas = totalParcelas
   }
 
   await c.env.DB_SHARED.batch(stmts)
@@ -505,7 +533,8 @@ app.post('/notas/:id/faturar', async (c) => {
   return c.json({
     message: 'Nota faturada com sucesso.',
     itens_baixados: nota.tipo === 'nfe' ? itens.length : 0,
-    conta_receber_criada: contaReceberCriada,
+    conta_receber_criada: parcelasCriadas > 0,
+    parcelas_criadas: parcelasCriadas,
   })
 })
 
