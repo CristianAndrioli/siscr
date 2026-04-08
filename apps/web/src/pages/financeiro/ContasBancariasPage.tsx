@@ -49,7 +49,7 @@ const EMPTY: ContaBancariaForm = {
 export function ContasBancariasPage() {
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<ContaBancaria | null>(null);
   const [form, setForm] = useState<ContaBancariaForm>({ ...EMPTY });
@@ -58,9 +58,14 @@ export function ContasBancariasPage() {
 
   const load = () => {
     setLoading(true);
+    setLoadError('');
     bancarioService.listContas()
-      .then(setContas)
-      .catch(() => setError('Erro ao carregar contas bancárias.'))
+      .then(data => { setContas(data ?? []); })
+      .catch((err) => {
+        const msg = err?.response?.data?.error ?? err?.message ?? 'Erro desconhecido';
+        setLoadError(msg);
+        setContas([]);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -109,8 +114,10 @@ export function ContasBancariasPage() {
       }
       setShowModal(false);
       load();
-    } catch {
-      setFormError('Erro ao salvar. Verifique os dados.');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      const msg = e?.response?.data?.error ?? e?.message ?? 'Erro ao salvar.';
+      setFormError(msg);
     } finally {
       setSaving(false);
     }
@@ -122,7 +129,7 @@ export function ContasBancariasPage() {
       await bancarioService.deleteConta(id);
       load();
     } catch {
-      setError('Erro ao desativar conta.');
+      setFormError('Erro ao desativar conta.');
     }
   };
 
@@ -147,8 +154,8 @@ export function ContasBancariasPage() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg text-xs font-mono">{loadError}</div>
       )}
 
       {/* Card de total */}

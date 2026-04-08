@@ -15,22 +15,36 @@ declare module 'hono' {
 export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next) => {
   const CACHE_TTL = 300 // 5 minutos
 
-  // 1. Extrair slug do tenant (header ou subdomínio)
-  let slug = c.req.header('X-Tenant-Slug')
+  // 1. Header explícito tem prioridade
+  let slug = c.req.header('X-Tenant-Slug')?.trim() || null
 
+  // 2. Fallback: extrair slug do Bearer token (sessão no KV)
+  if (!slug) {
+    const authHeader = c.req.header('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const session = await c.env.KV_SESSIONS.get(`session:${token}`, 'json') as { tenantSlug?: string; tenantId?: string } | null
+      if (session?.tenantSlug) {
+        slug = session.tenantSlug
+      }
+    }
+  }
+
+  // 3. Último recurso: subdomínio (para custom domains tipo tenant.app.com)
   if (!slug) {
     const host = c.req.header('host') ?? ''
     const parts = host.split('.')
-    if (parts.length >= 3) {
+    // Só usa subdomain se parecer um slug de tenant (não contém "workers" ou "pages")
+    if (parts.length >= 3 && !host.includes('workers.dev') && !host.includes('pages.dev')) {
       slug = parts[0]
     }
   }
 
   if (!slug) {
-    return c.json({ error: 'Tenant não identificado. Informe o header X-Tenant-Slug.' }, 400)
+    return c.json({ error: 'Tenant não identificado. Informe o header X-Tenant-Slug ou faça login.' }, 400)
   }
 
-  // 2. Verificar cache KV
+  // 4. Verificar cache KV
   const cacheKey = `tenant:${slug}`
   const cached = await c.env.KV_TENANT_CACHE.get(cacheKey, 'json') as TenantContext | null
 
@@ -39,7 +53,7 @@ export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, ne
     return next()
   }
 
-  // 3. Buscar no banco — sem db_id (usamos row-level isolation com tenant_id)
+  // 5. Buscar no banco
   const result = await c.env.DB_SHARED
     .prepare('SELECT id, slug FROM tenants WHERE slug = ? AND status = ?')
     .bind(slug, 'active')
@@ -54,7 +68,7 @@ export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, ne
     tenantSlug: result.slug,
   }
 
-  // 4. Salvar no cache KV
+  // 6. Salvar no cache KV
   await c.env.KV_TENANT_CACHE.put(cacheKey, JSON.stringify(tenant), { expirationTtl: CACHE_TTL })
 
   c.set('tenant', tenant)
