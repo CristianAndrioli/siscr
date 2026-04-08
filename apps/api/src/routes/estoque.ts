@@ -48,7 +48,7 @@ app.get('/movimentacoes', async (c) => {
   const { produtoId, tipo, location, busca } = c.req.query()
 
   let query = `
-    SELECT m.id, m.produto_id, p.descricao as produto, p.codigo as codigo,
+    SELECT m.id, m.codigo, m.produto_id, p.descricao as produto, p.codigo as produto_codigo,
            m.tipo, m.quantidade, m.location, m.motivo, m.referencia_id, m.created_at
     FROM movimentacoes_estoque m
     LEFT JOIN produtos p ON p.id = m.produto_id

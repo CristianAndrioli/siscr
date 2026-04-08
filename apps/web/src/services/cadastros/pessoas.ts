@@ -2,6 +2,7 @@ import api from '../api';
 
 export interface Pessoa {
   id: string;
+  codigo?: number;
   tipo: 'PF' | 'PJ';
   tipo_cadastro: 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora';
   nome: string;

@@ -2,6 +2,7 @@ import api from './api';
 
 export interface ContaReceber {
   id: string;
+  codigo?: number;
   descricao: string;
   valor: number;
   vencimento: string;
@@ -17,6 +18,7 @@ export interface ContaReceber {
 
 export interface ContaPagar {
   id: string;
+  codigo?: number;
   descricao: string;
   valor: number;
   vencimento: string;

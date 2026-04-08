@@ -10,7 +10,6 @@ export interface Servico {
 }
 
 export interface ServicoForm {
-  codigo: string;
   descricao: string;
   unidade: string;
   preco: number;

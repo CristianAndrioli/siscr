@@ -151,6 +151,13 @@ export function PessoasDetail() {
       {/* Modo visualização */}
       {!isNew && !isEditing && record && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+          {record.codigo && (
+            <div className="mb-4">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-xs font-mono font-semibold">
+                # {record.codigo}
+              </span>
+            </div>
+          )}
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
             {[
               { label: 'Tipo', value: record.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },

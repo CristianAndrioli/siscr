@@ -27,7 +27,7 @@ app.get('/receber', async (c) => {
   const exportFmt = q.export
 
   let query = `
-    SELECT cr.id, cr.descricao, cr.valor, cr.vencimento, cr.status,
+    SELECT cr.id, cr.codigo, cr.descricao, cr.valor, cr.vencimento, cr.status,
            cr.categoria, cr.observacoes, cr.data_pagamento, cr.valor_pago,
            cr.created_at, cr.pessoa_id, cr.pedido_id,
            p.nome as cliente
@@ -49,6 +49,7 @@ app.get('/receber', async (c) => {
 
   if (exportFmt === 'csv') {
     const cols = [
+      'codigo',
       'id',
       'descricao',
       'valor',
@@ -164,7 +165,7 @@ app.get('/pagar', async (c) => {
   const { empresaId, filialId, status } = c.req.query()
 
   let query = `
-    SELECT cp.id, cp.descricao, cp.valor, cp.vencimento, cp.status,
+    SELECT cp.id, cp.codigo, cp.descricao, cp.valor, cp.vencimento, cp.status,
            cp.categoria, cp.observacoes, cp.data_pagamento, cp.valor_pago,
            cp.created_at, cp.pessoa_id,
            p.nome as fornecedor

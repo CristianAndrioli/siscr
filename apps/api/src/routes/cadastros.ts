@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
+import { nextCodigo } from '../lib/nextCodigo'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -23,7 +24,7 @@ app.get('/pessoas', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, filialId, tipo, tipoCadastro, busca } = c.req.query()
 
-  let query = `SELECT id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at
+  let query = `SELECT id, codigo, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at
                FROM pessoas WHERE tenant_id = ?`
   const params: unknown[] = [tenant.tenantId]
 
@@ -121,7 +122,6 @@ app.delete('/pessoas/:id', async (c) => {
 // ─── Produtos ─────────────────────────────────────────────────────
 
 const produtoSchema = z.object({
-  codigo: z.string().min(1),
   descricao: z.string().min(2),
   unidade: z.string().default('UN'),
   precoVenda: z.number().nonnegative(),
@@ -153,6 +153,7 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const uid = auditUserId(c)
+  const codigo = await nextCodigo(c.env.DB_SHARED, 'produtos', tenant.tenantId)
 
   await c.env.DB_SHARED
     .prepare(`
@@ -162,14 +163,14 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null,
-      data.codigo, data.descricao, data.unidade,
+      codigo, data.descricao, data.unidade,
       data.precoVenda, data.precoCusto ?? 0,
       data.ncm ?? null, data.ativo ? 1 : 0,
       now, now, uid, uid,
     )
     .run()
 
-  return c.json({ id, message: 'Produto cadastrado com sucesso.' }, 201)
+  return c.json({ id, codigo, message: 'Produto cadastrado com sucesso.' }, 201)
 })
 
 app.get('/produtos/:id', async (c) => {
@@ -188,7 +189,7 @@ app.put('/produtos/:id', zValidator('json', produtoSchema.partial()), async (c) 
   const data = c.req.valid('json')
 
   const fieldMap: Record<string, string> = {
-    codigo: 'codigo',
+    // codigo é gerenciado pelo sistema — não pode ser alterado pelo usuário
     descricao: 'descricao',
     unidade: 'unidade',
     precoVenda: 'preco_venda',
@@ -233,7 +234,6 @@ app.delete('/produtos/:id', async (c) => {
 // ─── Serviços ─────────────────────────────────────────────────────
 
 const servicoSchema = z.object({
-  codigo: z.string().min(1),
   descricao: z.string().min(2),
   unidade: z.string().default('UN'),
   preco: z.number().nonnegative(),
@@ -263,6 +263,7 @@ app.post('/servicos', zValidator('json', servicoSchema), async (c) => {
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const uid = auditUserId(c)
+  const codigo = await nextCodigo(c.env.DB_SHARED, 'servicos', tenant.tenantId)
 
   await c.env.DB_SHARED
     .prepare(`
@@ -272,13 +273,13 @@ app.post('/servicos', zValidator('json', servicoSchema), async (c) => {
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null,
-      data.codigo, data.descricao, data.unidade,
+      codigo, data.descricao, data.unidade,
       data.preco, data.ativo ? 1 : 0,
       now, now, uid, uid,
     )
     .run()
 
-  return c.json({ id, message: 'Serviço cadastrado com sucesso.' }, 201)
+  return c.json({ id, codigo, message: 'Serviço cadastrado com sucesso.' }, 201)
 })
 
 app.get('/servicos/:id', async (c) => {
@@ -297,7 +298,7 @@ app.put('/servicos/:id', zValidator('json', servicoSchema.partial()), async (c) 
   const data = c.req.valid('json')
 
   const fieldMap: Record<string, string> = {
-    codigo: 'codigo',
+    // codigo é gerenciado pelo sistema — não pode ser alterado pelo usuário
     descricao: 'descricao',
     unidade: 'unidade',
     preco: 'preco',

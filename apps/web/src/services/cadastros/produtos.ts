@@ -12,7 +12,6 @@ export interface Produto {
 }
 
 export interface ProdutoForm {
-  codigo: string;
   descricao: string;
   unidade: string;
   precoVenda: number;
