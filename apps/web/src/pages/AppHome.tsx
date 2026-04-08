@@ -31,6 +31,8 @@ interface FinDash {
   pagar: { pendente: number; vencido: number; qtd_vencido: number } | null;
   proximosVencimentosCR: { id: string; descricao: string; valor: number; vencimento: string; cliente: string }[];
   proximosVencimentosCP: { id: string; descricao: string; valor: number; vencimento: string; fornecedor: string }[];
+  contas_bancarias: { id: string; nome: string; tipo: string; banco_nome?: string; saldo_atual: number }[];
+  total_disponivel: number;
 }
 
 // ─── Componentes auxiliares ───────────────────────────────────────
@@ -134,9 +136,11 @@ function AppHome() {
               icon={<svg className="w-6 h-6 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6L9 12.75l4.286-4.286a11.948 11.948 0 014.306 6.43l.776 2.898m0 0l3.182-5.511m-3.182 5.51l-5.511-3.181" /></svg>}
             />
             <KpiCard
-              label="Saldo Previsto"
-              value={fmtBRL(saldo)}
-              sub="Receber − Pagar"
+              label={dash?.contas_bancarias?.length ? 'Saldo em Caixa' : 'Saldo Previsto'}
+              value={fmtBRL(dash?.contas_bancarias?.length ? (dash.total_disponivel ?? 0) : saldo)}
+              sub={dash?.contas_bancarias?.length
+                ? `${dash.contas_bancarias.length} conta${dash.contas_bancarias.length !== 1 ? 's' : ''}`
+                : 'Receber − Pagar'}
               color={saldo >= 0
                 ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200'
                 : 'bg-orange-50 dark:bg-orange-950 border-orange-200 dark:border-orange-800 text-orange-800 dark:text-orange-200'}
@@ -149,6 +153,42 @@ function AppHome() {
               color="bg-violet-50 dark:bg-violet-950 border-violet-200 dark:border-violet-800 text-violet-800 dark:text-violet-200"
               icon={<svg className="w-6 h-6 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" /></svg>}
             />
+          </div>
+        )}
+
+        {/* Saldos por conta bancária */}
+        {!loading && (dash?.contas_bancarias?.length ?? 0) > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {dash!.contas_bancarias.map(cb => (
+              <Link
+                key={cb.id}
+                to="/financeiro/contas-bancarias"
+                className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-brand-300 dark:hover:border-brand-700 rounded-xl px-4 py-3 transition-all"
+              >
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                  {cb.nome}
+                </p>
+                {cb.banco_nome && <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{cb.banco_nome}</p>}
+                <p className={`text-base font-bold mt-1 ${(cb.saldo_atual ?? 0) >= 0 ? 'text-slate-800 dark:text-slate-100' : 'text-red-600 dark:text-red-400'}`}>
+                  {fmtBRL(cb.saldo_atual ?? 0)}
+                </p>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {!loading && (dash?.contas_bancarias?.length ?? 0) === 0 && (
+          <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3">
+            <svg className="w-4 h-4 text-slate-400 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+            </svg>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Nenhuma conta bancária cadastrada.{' '}
+              <Link to="/financeiro/contas-bancarias" className="text-brand-600 dark:text-brand-400 font-medium hover:underline">
+                Cadastrar agora
+              </Link>{' '}
+              para controle real de fluxo de caixa.
+            </p>
           </div>
         )}
 
@@ -212,6 +252,12 @@ function AppHome() {
                 label="Cadastrar Pessoa"
                 desc="Cliente, fornecedor ou parceiro"
                 icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" /></svg>}
+              />
+              <QuickAction
+                to="/financeiro/contas-bancarias"
+                label="Contas Bancárias"
+                desc="Saldos e movimentos"
+                icon={<svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>}
               />
             </div>
           </div>
