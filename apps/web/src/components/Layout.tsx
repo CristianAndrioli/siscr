@@ -169,6 +169,7 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="financeiro" label="Financeiro" iconD={icons.money}>
             <SubLink to="/financeiro/contas-receber" label="Contas a Receber" />
             <SubLink to="/financeiro/contas-pagar" label="Contas a Pagar" />
+            <SubLink to="/financeiro/contas-bancarias" label="Contas Bancárias" />
             <SubLink to="/financeiro/dashboard" label="Dashboard" />
           </SubMenu>
         )}
