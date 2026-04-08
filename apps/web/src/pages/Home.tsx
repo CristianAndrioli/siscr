@@ -77,24 +77,24 @@ const testimonials = [
 
 const plans = [
   {
-    name: 'Free', price: 'R$ 0', period: 'para sempre',
+    name: 'Free', price: 'R$ 0', period: 'demonstração',
     features: ['1 empresa', '2 filiais', '3 usuários', 'Módulos essenciais', 'Suporte comunidade'],
-    cta: 'Começar grátis', highlight: false,
+    cta: 'Criar conta grátis', highlight: false, ctaLink: '/signup?plan=free',
   },
   {
     name: 'Básico', price: 'R$ 99', period: '/mês',
     features: ['1 empresa', '3 filiais', '5 usuários', 'Todos os módulos', 'NF-e e NFSe', 'Suporte e-mail'],
-    cta: 'Assinar Básico', highlight: false,
+    cta: 'Assinar Básico', highlight: false, ctaLink: '/plans',
   },
   {
     name: 'Pro', price: 'R$ 249', period: '/mês',
     features: ['3 empresas', '10 filiais', '20 usuários', 'Todos os módulos', 'NF-e e NFSe', 'Suporte prioritário', 'API de integração'],
-    cta: 'Assinar Pro', highlight: true,
+    cta: 'Assinar Pro', highlight: true, ctaLink: '/plans',
   },
   {
     name: 'Enterprise', price: 'R$ 499', period: '/mês',
     features: ['Ilimitado', 'Filiais ilimitadas', 'Usuários ilimitados', 'Todos os módulos', 'NF-e e NFSe', 'Suporte 24/7', 'SLA 99.9%', 'Onboarding dedicado'],
-    cta: 'Falar com vendas', highlight: false,
+    cta: 'Falar com vendas', highlight: false, ctaLink: '/plans',
   },
 ];
 
@@ -367,7 +367,7 @@ export default function Home() {
                   ))}
                 </ul>
                 <Link
-                  to="/plans"
+                  to={plan.ctaLink}
                   className={`block w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all ${plan.highlight ? 'bg-white text-brand-700 hover:bg-slate-50' : 'bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 border border-brand-600/30'}`}
                 >
                   {plan.cta}
