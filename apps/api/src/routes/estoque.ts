@@ -128,7 +128,7 @@ app.get('/transferencias', async (c) => {
   const { busca } = c.req.query()
 
   let query = `
-    SELECT m.id, m.produto_id, p.descricao as produto, p.codigo as codigo,
+    SELECT m.id, m.codigo, m.produto_id, p.descricao as produto, p.codigo as produto_codigo,
            m.quantidade, m.location as local_origem,
            m.referencia_id as local_destino,
            m.motivo, m.created_at

@@ -27,9 +27,10 @@ export interface Movimentacao {
 
 export interface Transferencia {
   id: string;
+  codigo?: number;
   produto_id: string;
   produto: string;
-  codigo: string;
+  produto_codigo: string;
   quantidade: number;
   local_origem: string;
   local_destino: string;

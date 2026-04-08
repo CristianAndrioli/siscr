@@ -144,7 +144,7 @@ export function Transferencias() {
 
   const filtered = transferencias.filter(t =>
     !busca || t.produto?.toLowerCase().includes(busca.toLowerCase()) ||
-    t.codigo?.toLowerCase().includes(busca.toLowerCase()) ||
+    t.produto_codigo?.toLowerCase().includes(busca.toLowerCase()) ||
     t.local_origem?.toLowerCase().includes(busca.toLowerCase()) ||
     t.local_destino?.toLowerCase().includes(busca.toLowerCase())
   );
@@ -195,7 +195,7 @@ export function Transferencias() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  {['Produto', 'Origem', '', 'Destino', 'Qtd.', 'Motivo', 'Data'].map((h, i) => (
+                  {['#', 'Produto', 'Origem', '', 'Destino', 'Qtd.', 'Motivo', 'Data'].map((h, i) => (
                     <th key={i} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -203,9 +203,10 @@ export function Transferencias() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filtered.map(t => (
                   <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{t.codigo ?? '—'}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-800 dark:text-slate-100">{t.produto || '—'}</div>
-                      <div className="text-xs text-slate-400 font-mono">{t.codigo}</div>
+                      <div className="text-xs text-slate-400 font-mono">{t.produto_codigo}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">{t.local_origem || '—'}</span>
