@@ -141,7 +141,7 @@ export function ContasPagarList() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  {['Descrição', 'Fornecedor', 'Valor', 'Vencimento', 'Status', ''].map(h => (
+                  {['#', 'Descrição', 'Fornecedor', 'Valor', 'Vencimento', 'Status', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -155,6 +155,7 @@ export function ContasPagarList() {
                       onClick={() => navigate(`/financeiro/contas-pagar/${conta.id}`)}
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
                     >
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{conta.codigo ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{conta.descricao}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{conta.fornecedor || '—'}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-100">{fmt(conta.valor)}</td>

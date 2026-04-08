@@ -115,6 +115,7 @@ export function PessoasList() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
               <tr>
+                <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300 w-16">#</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Nome</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300">Tipo</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600 dark:text-slate-300">CPF/CNPJ</th>
@@ -130,6 +131,7 @@ export function PessoasList() {
                   className="hover:bg-slate-50 dark:hover:bg-slate-700/40 cursor-pointer transition-colors"
                   onClick={() => navigate(`/cadastros/pessoas/${p.id}`)}
                 >
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{p.codigo ?? '—'}</td>
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{p.nome}</td>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">

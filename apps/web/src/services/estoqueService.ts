@@ -13,9 +13,10 @@ export interface ItemEstoque {
 
 export interface Movimentacao {
   id: string;
+  codigo?: number;
   produto_id: string;
   produto: string;
-  codigo: string;
+  produto_codigo: string;
   tipo: 'entrada' | 'saida' | 'ajuste' | 'transferencia_saida' | 'transferencia_entrada';
   quantidade: number;
   location: string;
@@ -38,6 +39,7 @@ export interface Transferencia {
 
 export interface Local {
   id: string;
+  codigo?: number;
   tenant_id: string;
   nome: string;
   tipo: string;

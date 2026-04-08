@@ -134,7 +134,12 @@ export function LocaisPage() {
             <div key={local.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col gap-2 hover:border-brand-300 dark:hover:border-brand-600 transition-colors">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-slate-800 dark:text-slate-100 text-base truncate">{local.nome}</p>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    {local.codigo && (
+                      <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">#{local.codigo}</span>
+                    )}
+                    <p className="font-bold text-slate-800 dark:text-slate-100 text-base truncate">{local.nome}</p>
+                  </div>
                   {local.descricao && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{local.descricao}</p>}
                 </div>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap ${tipoStyle(local.tipo)}`}>

@@ -200,7 +200,7 @@ export function MovimentacoesList() {
   };
 
   const filtered = movs.filter(m => {
-    const matchBusca = !busca || m.produto?.toLowerCase().includes(busca.toLowerCase()) || m.codigo?.toLowerCase().includes(busca.toLowerCase());
+    const matchBusca = !busca || m.produto?.toLowerCase().includes(busca.toLowerCase()) || m.produto_codigo?.toLowerCase().includes(busca.toLowerCase());
     const matchTipo = !tipoFiltro || m.tipo === tipoFiltro;
     return matchBusca && matchTipo;
   });
@@ -266,7 +266,7 @@ export function MovimentacoesList() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  {['Produto', 'Tipo', 'Qtd.', 'Local', 'Motivo', 'Data'].map(h => (
+                  {['#', 'Produto', 'Tipo', 'Qtd.', 'Local', 'Motivo', 'Data'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -274,9 +274,10 @@ export function MovimentacoesList() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filtered.map(m => (
                   <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{m.codigo ?? '—'}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-slate-800 dark:text-slate-100">{m.produto || '—'}</div>
-                      <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">{m.codigo}</div>
+                      <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">{m.produto_codigo}</div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${TIPO_STYLE[m.tipo] ?? ''}`}>
