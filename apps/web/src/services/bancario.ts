@@ -35,7 +35,7 @@ export interface MovimentoBancario {
   origem_id?: string;
 }
 
-const BASE = '/api/tenant/bancario';
+const BASE = '/tenant/bancario';
 
 export const bancarioService = {
   listContas: async (): Promise<ContaBancaria[]> => {
