@@ -143,12 +143,18 @@ export function NFSePage() {
       setStep(0, 'done');
 
       setStep(1, 'running');
-      await notasService.faturar(selectedNota.id);
+      const res = await notasService.faturar(selectedNota.id);
       setStep(1, 'done');
 
       setStep(2, 'running');
-      await new Promise(r => setTimeout(r, 500));
-      setStep(2, 'done');
+      await new Promise(r => setTimeout(r, 400));
+      setFaturarSteps(prev => prev.map((s, i) => i === 2 ? {
+        ...s,
+        status: 'done',
+        label: res.conta_receber_criada
+          ? 'Conta a receber lançada (venc. +30 dias)'
+          : 'Sem destinatário — conta a receber não criada',
+      } : s));
 
       setStep(3, 'running');
       await new Promise(r => setTimeout(r, 300));

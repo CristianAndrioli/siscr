@@ -125,6 +125,7 @@ export function NFVendaPage() {
       { label: 'Validando nota fiscal', status: 'pending' },
       { label: 'Emitindo nota', status: 'pending' },
       { label: 'Baixando estoque dos itens', status: 'pending' },
+      { label: 'Lançando em Contas a Receber', status: 'pending' },
       { label: 'Finalizando', status: 'pending' },
     ]);
     setModalMode('faturar');
@@ -147,20 +148,31 @@ export function NFVendaPage() {
 
       setStep(2, 'running');
       const res = await notasService.faturar(selectedNota.id);
-      setStep(2, 'done');
+      setStep(2, res.itens_baixados > 0 ? 'done' : 'done');
+      setFaturarSteps(prev => prev.map((s, i) => i === 2 ? {
+        ...s,
+        status: 'done',
+        label: res.itens_baixados > 0
+          ? `${res.itens_baixados} item(ns) com baixa de estoque`
+          : 'Sem produtos vinculados — estoque não alterado',
+      } : s));
 
       setStep(3, 'running');
-      await new Promise(r => setTimeout(r, 400));
-      setStep(3, 'done');
+      await new Promise(r => setTimeout(r, 300));
+      setFaturarSteps(prev => prev.map((s, i) => i === 3 ? {
+        ...s,
+        status: 'done',
+        label: res.conta_receber_criada
+          ? 'Conta a receber lançada (venc. +30 dias)'
+          : 'Sem destinatário — conta a receber não criada',
+      } : s));
+
+      setStep(4, 'running');
+      await new Promise(r => setTimeout(r, 300));
+      setStep(4, 'done');
 
       setFaturarDone(true);
       load();
-
-      if (res.itens_baixados === 0) {
-        setFaturarSteps(prev => prev.map((s, i) => i === 2 ? { ...s, label: 'Sem itens com produto vinculado — estoque não alterado' } : s));
-      } else {
-        setFaturarSteps(prev => prev.map((s, i) => i === 2 ? { ...s, label: `${res.itens_baixados} item(ns) com baixa de estoque gerada` } : s));
-      }
     } catch (err: any) {
       setFaturarSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' } : s));
       setModalError(err?.response?.data?.error || 'Erro ao faturar nota.');

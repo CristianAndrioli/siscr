@@ -419,11 +419,18 @@ app.post('/notas/:id/faturar', async (c) => {
   const now = new Date().toISOString()
   const uid = auditUserId(c)
 
-  // Buscar a nota com seus itens
+  // Buscar a nota com todos os dados necessários
   const nota = await c.env.DB_SHARED
-    .prepare('SELECT id, tipo, status FROM notas_fiscais WHERE id = ? AND tenant_id = ?')
+    .prepare(`SELECT id, tipo, status, empresa_id, destinatario_id,
+                     valor_total, natureza_operacao, descricao_servico, numero
+              FROM notas_fiscais WHERE id = ? AND tenant_id = ?`)
     .bind(id, tenant.tenantId)
-    .first<{ id: string; tipo: string; status: string }>()
+    .first<{
+      id: string; tipo: string; status: string; empresa_id: string | null
+      destinatario_id: string | null; valor_total: number
+      natureza_operacao: string | null; descricao_servico: string | null
+      numero: number | null
+    }>()
 
   if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
   if (nota.status === 'emitida') return c.json({ error: 'Nota já foi faturada.' }, 400)
@@ -467,9 +474,39 @@ app.post('/notas/:id/faturar', async (c) => {
     }
   }
 
+  // Criar lançamento em Contas a Receber (se houver destinatário)
+  let contaReceberCriada = false
+  if (nota.destinatario_id && (nota.valor_total ?? 0) > 0) {
+    const crId = crypto.randomUUID()
+    const numeroFormatado = nota.numero ? String(nota.numero).padStart(6, '0') : 'S/N'
+    const descricao = nota.tipo === 'nfse'
+      ? `NFS-e ${numeroFormatado} — ${nota.descricao_servico ?? 'Serviço prestado'}`
+      : `NF-e ${numeroFormatado} — ${nota.natureza_operacao ?? 'Venda de mercadorias'}`
+    // vencimento padrão: 30 dias
+    const vencimento = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    stmts.push(
+      c.env.DB_SHARED.prepare(`
+        INSERT OR IGNORE INTO contas_receber
+          (id, tenant_id, empresa_id, pessoa_id, descricao, valor, vencimento,
+           status, categoria, nota_fiscal_id, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pendente', 'Faturamento', ?, ?, ?, ?, ?)
+      `).bind(
+        crId, tenant.tenantId, nota.empresa_id ?? null,
+        nota.destinatario_id, descricao, nota.valor_total,
+        vencimento, id, now, now, uid, uid,
+      )
+    )
+    contaReceberCriada = true
+  }
+
   await c.env.DB_SHARED.batch(stmts)
 
-  return c.json({ message: 'Nota faturada com sucesso.', itens_baixados: nota.tipo === 'nfe' ? itens.length : 0 })
+  return c.json({
+    message: 'Nota faturada com sucesso.',
+    itens_baixados: nota.tipo === 'nfe' ? itens.length : 0,
+    conta_receber_criada: contaReceberCriada,
+  })
 })
 
 // GET XML (mantido para futura integração)
