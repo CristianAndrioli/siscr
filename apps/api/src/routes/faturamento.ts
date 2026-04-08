@@ -451,8 +451,8 @@ app.post('/notas/:id/faturar', async (c) => {
         c.env.DB_SHARED
           .prepare(`
             INSERT INTO movimentacoes_estoque
-              (id, tenant_id, empresa_id, tipo, produto_id, quantidade, observacao, referencia_id, referencia_tipo, created_at, updated_at, created_by, updated_by)
-            SELECT ?, ?, empresa_id, 'saida', ?, ?, ?, ?, 'nota_fiscal', ?, ?, ?, ?
+              (id, tenant_id, empresa_id, tipo, produto_id, quantidade, motivo, referencia_id, created_at, updated_at, created_by, updated_by)
+            SELECT ?, ?, empresa_id, 'saida', ?, ?, ?, ?, ?, ?, ?, ?
             FROM notas_fiscais WHERE id = ?
           `)
           .bind(
