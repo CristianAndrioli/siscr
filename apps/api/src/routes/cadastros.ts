@@ -16,6 +16,15 @@ const pessoaSchema = z.object({
   cpfCnpj: z.string().min(11).max(18).optional(),
   email: z.string().email().optional(),
   telefone: z.string().optional(),
+  // endereço
+  cep: z.string().optional(),
+  logradouro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  uf: z.string().length(2).optional(),
+  // vínculo
   empresaId: z.string().uuid().optional(),
   filialId: z.string().uuid().optional(),
 })
@@ -49,8 +58,9 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
 
   await c.env.DB_SHARED
     .prepare(`
-      INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone,
+        cep, logradouro, numero, complemento, bairro, cidade, uf, ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
@@ -58,6 +68,8 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
       data.tipo, data.tipoCadastro,
       data.nome, data.cpfCnpj ?? null,
       data.email ?? null, data.telefone ?? null,
+      data.cep ?? null, data.logradouro ?? null, data.numero ?? null,
+      data.complemento ?? null, data.bairro ?? null, data.cidade ?? null, data.uf ?? null,
       now, now, uid, uid,
     )
     .run()
@@ -87,6 +99,13 @@ app.put('/pessoas/:id', zValidator('json', pessoaSchema.partial()), async (c) =>
     cpfCnpj: 'cpf_cnpj',
     email: 'email',
     telefone: 'telefone',
+    cep: 'cep',
+    logradouro: 'logradouro',
+    numero: 'numero',
+    complemento: 'complemento',
+    bairro: 'bairro',
+    cidade: 'cidade',
+    uf: 'uf',
     empresaId: 'empresa_id',
     filialId: 'filial_id',
   }

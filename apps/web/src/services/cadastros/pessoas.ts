@@ -9,6 +9,14 @@ export interface Pessoa {
   cpf_cnpj?: string;
   email?: string;
   telefone?: string;
+  // endereço
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
   ativo: number;
   created_at: string;
 }
@@ -20,6 +28,14 @@ export interface PessoaForm {
   cpfCnpj?: string;
   email?: string;
   telefone?: string;
+  // endereço
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
 }
 
 export const pessoasService = {

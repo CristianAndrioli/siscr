@@ -21,7 +21,38 @@ const EMPTY: PessoaForm = {
   cpfCnpj: '',
   email: '',
   telefone: '',
+  cep: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  cidade: '',
+  uf: '',
 };
+
+const INPUT_CLS =
+  'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500';
+
+interface ViaCEP {
+  logradouro: string;
+  bairro: string;
+  localidade: string;
+  uf: string;
+  erro?: boolean;
+}
+
+async function fetchViaCEP(cep: string): Promise<ViaCEP | null> {
+  const digits = cep.replace(/\D/g, '');
+  if (digits.length !== 8) return null;
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
+    const data: ViaCEP = await res.json();
+    if (data.erro) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
 
 export function PessoasDetail() {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +64,7 @@ export function PessoasDetail() {
   const [isEditing, setIsEditing] = useState(isNew);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [loadingCep, setLoadingCep] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -48,6 +80,13 @@ export function PessoasDetail() {
           cpfCnpj: data.cpf_cnpj ?? '',
           email: data.email ?? '',
           telefone: data.telefone ?? '',
+          cep: data.cep ?? '',
+          logradouro: data.logradouro ?? '',
+          numero: data.numero ?? '',
+          complemento: data.complemento ?? '',
+          bairro: data.bairro ?? '',
+          cidade: data.cidade ?? '',
+          uf: data.uf ?? '',
         });
       })
       .catch(() => setError('Erro ao carregar registro.'))
@@ -56,6 +95,22 @@ export function PessoasDetail() {
 
   const set = (field: keyof PessoaForm, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleCepBlur = async () => {
+    if (!form.cep) return;
+    setLoadingCep(true);
+    const data = await fetchViaCEP(form.cep);
+    if (data) {
+      setForm(prev => ({
+        ...prev,
+        logradouro: data.logradouro || prev.logradouro,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        uf: data.uf || prev.uf,
+      }));
+    }
+    setLoadingCep(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +123,6 @@ export function PessoasDetail() {
       } else {
         await pessoasService.update(id!, form);
         setIsEditing(false);
-        // recarregar
         const updated = await pessoasService.get(id!);
         setRecord(updated);
       }
@@ -99,6 +153,8 @@ export function PessoasDetail() {
       </div>
     );
   }
+
+  const hasAddress = record && (record.cep || record.logradouro || record.cidade);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -150,108 +206,239 @@ export function PessoasDetail() {
 
       {/* Modo visualização */}
       {!isNew && !isEditing && record && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
-          {record.codigo && (
-            <div className="mb-4">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-xs font-mono font-semibold">
-                # {record.codigo}
-              </span>
-            </div>
-          )}
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-            {[
-              { label: 'Tipo', value: record.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
-              { label: 'Categoria', value: TIPO_CADASTRO_OPTS.find(o => o.value === record.tipo_cadastro)?.label ?? record.tipo_cadastro },
-              { label: 'Nome', value: record.nome },
-              { label: 'CPF/CNPJ', value: record.cpf_cnpj ?? '—' },
-              { label: 'E-mail', value: record.email ?? '—' },
-              { label: 'Telefone', value: record.telefone ?? '—' },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
-                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+            {record.codigo && (
+              <div className="mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-xs font-mono font-semibold">
+                  # {record.codigo}
+                </span>
               </div>
-            ))}
-          </dl>
+            )}
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Dados Gerais</p>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              {[
+                { label: 'Tipo', value: record.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
+                { label: 'Categoria', value: TIPO_CADASTRO_OPTS.find(o => o.value === record.tipo_cadastro)?.label ?? record.tipo_cadastro },
+                { label: 'Nome', value: record.nome },
+                { label: 'CPF/CNPJ', value: record.cpf_cnpj ?? '—' },
+                { label: 'E-mail', value: record.email ?? '—' },
+                { label: 'Telefone', value: record.telefone ?? '—' },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Endereço</p>
+            {hasAddress ? (
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">CEP</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.cep ?? '—'}</dd>
+                </div>
+                <div className="sm:col-span-2">
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Logradouro</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">
+                    {[record.logradouro, record.numero, record.complemento].filter(Boolean).join(', ') || '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Bairro</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.bairro ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Cidade / UF</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">
+                    {[record.cidade, record.uf].filter(Boolean).join(' — ') || '—'}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-slate-400 dark:text-slate-500">Endereço não informado.</p>
+            )}
+          </div>
         </div>
       )}
 
       {/* Formulário (novo ou edição) */}
       {(isNew || isEditing) && (
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Tipo <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.tipo}
-                onChange={e => set('tipo', e.target.value)}
-                required
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                {TIPO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Categoria <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.tipoCadastro}
-                onChange={e => set('tipoCadastro', e.target.value)}
-                required
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                {TIPO_CADASTRO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Nome <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={form.nome}
-                onChange={e => set('nome', e.target.value)}
-                required
-                placeholder="Nome completo ou razão social"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CPF/CNPJ</label>
-              <input
-                type="text"
-                value={form.cpfCnpj}
-                onChange={e => set('cpfCnpj', e.target.value)}
-                placeholder="000.000.000-00"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
-              <input
-                type="text"
-                value={form.telefone}
-                onChange={e => set('telefone', e.target.value)}
-                placeholder="(48) 99999-9999"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
-                placeholder="contato@empresa.com.br"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Dados Gerais */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Dados Gerais</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Tipo <span className="text-red-500">*</span>
+                </label>
+                <select value={form.tipo} onChange={e => set('tipo', e.target.value)} required className={INPUT_CLS}>
+                  {TIPO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Categoria <span className="text-red-500">*</span>
+                </label>
+                <select value={form.tipoCadastro} onChange={e => set('tipoCadastro', e.target.value)} required className={INPUT_CLS}>
+                  {TIPO_CADASTRO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Nome <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.nome}
+                  onChange={e => set('nome', e.target.value)}
+                  required
+                  placeholder="Nome completo ou razão social"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CPF/CNPJ</label>
+                <input
+                  type="text"
+                  value={form.cpfCnpj}
+                  onChange={e => set('cpfCnpj', e.target.value)}
+                  placeholder="000.000.000-00"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
+                <input
+                  type="text"
+                  value={form.telefone}
+                  onChange={e => set('telefone', e.target.value)}
+                  placeholder="(48) 99999-9999"
+                  className={INPUT_CLS}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">E-mail</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={e => set('email', e.target.value)}
+                  placeholder="contato@empresa.com.br"
+                  className={INPUT_CLS}
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+          {/* Endereço */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Endereço</p>
+            <div className="grid grid-cols-1 sm:grid-cols-6 gap-5">
+              {/* CEP */}
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CEP</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={form.cep}
+                    onChange={e => set('cep', e.target.value)}
+                    onBlur={handleCepBlur}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    className={INPUT_CLS}
+                  />
+                  {loadingCep && (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <svg className="animate-spin w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-400">Preenchimento automático ao sair do campo</p>
+              </div>
+
+              {/* Logradouro */}
+              <div className="sm:col-span-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Logradouro</label>
+                <input
+                  type="text"
+                  value={form.logradouro}
+                  onChange={e => set('logradouro', e.target.value)}
+                  placeholder="Rua, Av., etc."
+                  className={INPUT_CLS}
+                />
+              </div>
+
+              {/* Número */}
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Número</label>
+                <input
+                  type="text"
+                  value={form.numero}
+                  onChange={e => set('numero', e.target.value)}
+                  placeholder="123"
+                  className={INPUT_CLS}
+                />
+              </div>
+
+              {/* Complemento */}
+              <div className="sm:col-span-4">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Complemento</label>
+                <input
+                  type="text"
+                  value={form.complemento}
+                  onChange={e => set('complemento', e.target.value)}
+                  placeholder="Apto, sala, bloco..."
+                  className={INPUT_CLS}
+                />
+              </div>
+
+              {/* Bairro */}
+              <div className="sm:col-span-3">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Bairro</label>
+                <input
+                  type="text"
+                  value={form.bairro}
+                  onChange={e => set('bairro', e.target.value)}
+                  placeholder="Bairro"
+                  className={INPUT_CLS}
+                />
+              </div>
+
+              {/* Cidade */}
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cidade</label>
+                <input
+                  type="text"
+                  value={form.cidade}
+                  onChange={e => set('cidade', e.target.value)}
+                  placeholder="Florianópolis"
+                  className={INPUT_CLS}
+                />
+              </div>
+
+              {/* UF */}
+              <div className="sm:col-span-1">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">UF</label>
+                <input
+                  type="text"
+                  value={form.uf}
+                  onChange={e => set('uf', e.target.value.toUpperCase())}
+                  placeholder="SC"
+                  maxLength={2}
+                  className={INPUT_CLS}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={() => isNew ? navigate('/cadastros/pessoas') : setIsEditing(false)}
