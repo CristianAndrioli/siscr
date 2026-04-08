@@ -156,21 +156,26 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
   const uid = auditUserId(c)
   const codigo = await nextCodigo(c.env.DB_SHARED, 'produtos', tenant.tenantId)
 
-  await c.env.DB_SHARED
-    .prepare(`
-      INSERT INTO produtos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    .bind(
-      id, tenant.tenantId,
-      data.empresaId ?? null,
-      codigo, data.sku ?? null,
-      data.descricao, data.unidade,
-      data.precoVenda, data.precoCusto ?? 0,
-      data.ncm ?? null, data.ativo ? 1 : 0,
-      now, now, uid, uid,
-    )
-    .run()
+  try {
+    await c.env.DB_SHARED
+      .prepare(`
+        INSERT INTO produtos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(
+        id, tenant.tenantId,
+        data.empresaId ?? null,
+        codigo, data.sku ?? null,
+        data.descricao, data.unidade,
+        data.precoVenda, data.precoCusto ?? 0,
+        data.ncm ?? null, data.ativo ? 1 : 0,
+        now, now, uid, uid,
+      )
+      .run()
+  } catch {
+    if (data.sku) return c.json({ error: `SKU "${data.sku}" já está em uso por outro produto.` }, 409)
+    throw new Error('Erro ao cadastrar produto.')
+  }
 
   return c.json({ id, codigo, message: 'Produto cadastrado com sucesso.' }, 201)
 })
@@ -217,10 +222,15 @@ app.put('/produtos/:id', zValidator('json', produtoSchema.partial()), async (c) 
 
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
-  await c.env.DB_SHARED
-    .prepare(`UPDATE produtos SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
-    .run()
+  try {
+    await c.env.DB_SHARED
+      .prepare(`UPDATE produtos SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+      .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
+      .run()
+  } catch {
+    if (data.sku) return c.json({ error: `SKU "${data.sku}" já está em uso por outro produto.` }, 409)
+    throw new Error('Erro ao atualizar produto.')
+  }
 
   return c.json({ message: 'Atualizado com sucesso.' })
 })
@@ -269,20 +279,25 @@ app.post('/servicos', zValidator('json', servicoSchema), async (c) => {
   const uid = auditUserId(c)
   const codigo = await nextCodigo(c.env.DB_SHARED, 'servicos', tenant.tenantId)
 
-  await c.env.DB_SHARED
-    .prepare(`
-      INSERT INTO servicos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco, ativo, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    .bind(
-      id, tenant.tenantId,
-      data.empresaId ?? null,
-      codigo, data.sku ?? null,
-      data.descricao, data.unidade,
-      data.preco, data.ativo ? 1 : 0,
-      now, now, uid, uid,
-    )
-    .run()
+  try {
+    await c.env.DB_SHARED
+      .prepare(`
+        INSERT INTO servicos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco, ativo, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(
+        id, tenant.tenantId,
+        data.empresaId ?? null,
+        codigo, data.sku ?? null,
+        data.descricao, data.unidade,
+        data.preco, data.ativo ? 1 : 0,
+        now, now, uid, uid,
+      )
+      .run()
+  } catch {
+    if (data.sku) return c.json({ error: `SKU "${data.sku}" já está em uso por outro serviço.` }, 409)
+    throw new Error('Erro ao cadastrar serviço.')
+  }
 
   return c.json({ id, codigo, message: 'Serviço cadastrado com sucesso.' }, 201)
 })
@@ -327,10 +342,15 @@ app.put('/servicos/:id', zValidator('json', servicoSchema.partial()), async (c) 
 
   if (!setClauses) return c.json({ error: 'Nenhum campo para atualizar.' }, 400)
 
-  await c.env.DB_SHARED
-    .prepare(`UPDATE servicos SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
-    .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
-    .run()
+  try {
+    await c.env.DB_SHARED
+      .prepare(`UPDATE servicos SET ${setClauses}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+      .bind(...values, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
+      .run()
+  } catch {
+    if (data.sku) return c.json({ error: `SKU "${data.sku}" já está em uso por outro serviço.` }, 409)
+    throw new Error('Erro ao atualizar serviço.')
+  }
 
   return c.json({ message: 'Atualizado com sucesso.' })
 })
