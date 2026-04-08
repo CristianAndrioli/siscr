@@ -79,6 +79,8 @@ export interface DashboardData {
   };
   proximosVencimentosCR: { id: string; descricao: string; valor: number; vencimento: string; cliente: string }[];
   proximosVencimentosCP: { id: string; descricao: string; valor: number; vencimento: string; fornecedor: string }[];
+  contas_bancarias: { id: string; nome: string; tipo: string; banco_nome?: string; saldo_atual: number }[];
+  total_disponivel: number;
 }
 
 const BASE = '/tenant/financeiro';
@@ -102,8 +104,8 @@ export const contasReceberService = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/receber/${id}`);
   },
-  marcarPago: async (id: string, dataPagamento: string, valorPago: number): Promise<void> => {
-    await api.patch(`${BASE}/receber/${id}/pagar`, { dataPagamento, valorPago });
+  marcarPago: async (id: string, dataPagamento: string, valorPago: number, contaBancariaId?: string): Promise<void> => {
+    await api.patch(`${BASE}/receber/${id}/pagar`, { dataPagamento, valorPago, contaBancariaId });
   },
 };
 
@@ -126,8 +128,8 @@ export const contasPagarService = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/pagar/${id}`);
   },
-  marcarPago: async (id: string, dataPagamento: string, valorPago: number): Promise<void> => {
-    await api.patch(`${BASE}/pagar/${id}/pagar`, { dataPagamento, valorPago });
+  marcarPago: async (id: string, dataPagamento: string, valorPago: number, contaBancariaId?: string): Promise<void> => {
+    await api.patch(`${BASE}/pagar/${id}/pagar`, { dataPagamento, valorPago, contaBancariaId });
   },
 };
 

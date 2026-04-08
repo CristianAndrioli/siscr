@@ -31,6 +31,7 @@ import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
 import ContasPagarDetail from './pages/financeiro/ContasPagarDetail';
 import FinanceiroDashboard from './pages/financeiro/FinanceiroDashboard';
+import ContasBancariasPage from './pages/financeiro/ContasBancariasPage';
 import Configuracoes from './pages/Configuracoes';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
 import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
@@ -126,6 +127,7 @@ function App() {
         <Route path="/financeiro/contas-receber/:id" element={<ProtectedRoute><Layout><ContasReceberDetail /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-pagar" element={<ProtectedRoute><Layout><ContasPagarList /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-pagar/:id" element={<ProtectedRoute><Layout><ContasPagarDetail /></Layout></ProtectedRoute>} />
+        <Route path="/financeiro/contas-bancarias" element={<ProtectedRoute><Layout><ContasBancariasPage /></Layout></ProtectedRoute>} />
 
         {/* Faturamento */}
         <Route path="/faturamento/cotacoes" element={<ProtectedRoute><Layout><CotacoesPage /></Layout></ProtectedRoute>} />

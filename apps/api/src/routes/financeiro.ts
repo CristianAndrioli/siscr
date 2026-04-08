@@ -157,18 +157,45 @@ app.delete('/receber/:id', async (c) => {
 
 app.patch('/receber/:id/pagar', async (c) => {
   const tenant = c.get('tenant')
-  const { dataPagamento, valorPago } = await c.req.json<{ dataPagamento: string; valorPago: number }>()
+  const { dataPagamento, valorPago, contaBancariaId } = await c.req.json<{
+    dataPagamento: string
+    valorPago: number
+    contaBancariaId?: string
+  }>()
 
-  await c.env.DB_SHARED
-    .prepare(`
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+  const id = c.req.param('id')
+
+  // Busca o título para montar a descrição do movimento
+  const titulo = await c.env.DB_SHARED
+    .prepare('SELECT descricao, pessoa_id FROM contas_receber WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId).first<{ descricao: string }>()
+
+  const stmts = [
+    c.env.DB_SHARED.prepare(`
       UPDATE contas_receber
-      SET status = 'pago', data_pagamento = ?, valor_pago = ?, updated_at = ?, updated_by = ?
+      SET status = 'pago', data_pagamento = ?, valor_pago = ?,
+          conta_bancaria_id = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
-    `)
-    .bind(dataPagamento, valorPago, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
-    .run()
+    `).bind(dataPagamento, valorPago, contaBancariaId ?? null, now, uid, id, tenant.tenantId),
+  ]
 
-  return c.json({ message: 'Pagamento registrado.' })
+  // Gera movimento bancário se informou conta
+  if (contaBancariaId) {
+    const mbId = crypto.randomUUID()
+    stmts.push(
+      c.env.DB_SHARED.prepare(`
+        INSERT INTO movimentos_bancarios
+          (id, tenant_id, conta_bancaria_id, tipo, valor, data, descricao, origem_tipo, origem_id, created_at, created_by)
+        VALUES (?, ?, ?, 'credito', ?, ?, ?, 'contas_receber', ?, ?, ?)
+      `).bind(mbId, tenant.tenantId, contaBancariaId, valorPago, dataPagamento,
+        titulo?.descricao ?? 'Recebimento', id, now, uid)
+    )
+  }
+
+  await c.env.DB_SHARED.batch(stmts)
+  return c.json({ message: 'Recebimento registrado.', movimento_gerado: !!contaBancariaId })
 })
 
 // ─── Contas a Pagar ───────────────────────────────────────────────
@@ -280,18 +307,43 @@ app.delete('/pagar/:id', async (c) => {
 
 app.patch('/pagar/:id/pagar', async (c) => {
   const tenant = c.get('tenant')
-  const { dataPagamento, valorPago } = await c.req.json<{ dataPagamento: string; valorPago: number }>()
+  const { dataPagamento, valorPago, contaBancariaId } = await c.req.json<{
+    dataPagamento: string
+    valorPago: number
+    contaBancariaId?: string
+  }>()
 
-  await c.env.DB_SHARED
-    .prepare(`
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+  const id = c.req.param('id')
+
+  const titulo = await c.env.DB_SHARED
+    .prepare('SELECT descricao FROM contas_pagar WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId).first<{ descricao: string }>()
+
+  const stmts = [
+    c.env.DB_SHARED.prepare(`
       UPDATE contas_pagar
-      SET status = 'pago', data_pagamento = ?, valor_pago = ?, updated_at = ?, updated_by = ?
+      SET status = 'pago', data_pagamento = ?, valor_pago = ?,
+          conta_bancaria_id = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
-    `)
-    .bind(dataPagamento, valorPago, new Date().toISOString(), auditUserId(c), c.req.param('id'), tenant.tenantId)
-    .run()
+    `).bind(dataPagamento, valorPago, contaBancariaId ?? null, now, uid, id, tenant.tenantId),
+  ]
 
-  return c.json({ message: 'Pagamento registrado.' })
+  if (contaBancariaId) {
+    const mbId = crypto.randomUUID()
+    stmts.push(
+      c.env.DB_SHARED.prepare(`
+        INSERT INTO movimentos_bancarios
+          (id, tenant_id, conta_bancaria_id, tipo, valor, data, descricao, origem_tipo, origem_id, created_at, created_by)
+        VALUES (?, ?, ?, 'debito', ?, ?, ?, 'contas_pagar', ?, ?, ?)
+      `).bind(mbId, tenant.tenantId, contaBancariaId, valorPago, dataPagamento,
+        titulo?.descricao ?? 'Pagamento', id, now, uid)
+    )
+  }
+
+  await c.env.DB_SHARED.batch(stmts)
+  return c.json({ message: 'Pagamento registrado.', movimento_gerado: !!contaBancariaId })
 })
 
 // ─── Dashboard ────────────────────────────────────────────────────
@@ -340,11 +392,30 @@ app.get('/dashboard', async (c) => {
     `).bind(tenant.tenantId).all(),
   ])
 
+  // Saldos bancários
+  const { results: contasBancarias } = await c.env.DB_SHARED.prepare(`
+    SELECT cb.id, cb.nome, cb.tipo, cb.banco_nome,
+      COALESCE(cb.saldo_inicial, 0)
+        + COALESCE(SUM(CASE WHEN mb.tipo = 'credito' THEN mb.valor ELSE 0 END), 0)
+        - COALESCE(SUM(CASE WHEN mb.tipo = 'debito'  THEN mb.valor ELSE 0 END), 0)
+      AS saldo_atual
+    FROM contas_bancarias cb
+    LEFT JOIN movimentos_bancarios mb ON mb.conta_bancaria_id = cb.id
+    WHERE cb.tenant_id = ? AND cb.ativo = 1
+    GROUP BY cb.id
+    ORDER BY cb.tipo, cb.nome
+  `).bind(tenant.tenantId).all()
+
+  const totalDisponivel = (contasBancarias as Array<{ saldo_atual: number }>)
+    .reduce((sum, r) => sum + (r.saldo_atual ?? 0), 0)
+
   return c.json({
     receber,
     pagar,
     proximosVencimentosCR: vencerEm7.results,
     proximosVencimentosCP: vencerPagar7.results,
+    contas_bancarias: contasBancarias,
+    total_disponivel: totalDisponivel,
   })
 })
 

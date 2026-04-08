@@ -15,6 +15,7 @@ import subscriptionRoutes from './routes/subscriptions'
 import cadastrosRoutes from './routes/cadastros'
 import estoqueRoutes from './routes/estoque'
 import financeiroRoutes from './routes/financeiro'
+import bancarioRoutes from './routes/bancario'
 import faturamentoRoutes from './routes/faturamento'
 import vendasRoutes from './routes/vendas'
 import stripeWebhookRoutes from './routes/stripe-webhook'
@@ -88,6 +89,7 @@ app.use('/api/tenant/*', requireEmpresaMatrizMiddleware)
 app.use('/api/tenant/cadastros', requireTenantModule('cadastros'))
 app.use('/api/tenant/estoque', requireTenantModule('estoque'))
 app.use('/api/tenant/financeiro', requireTenantModule('financeiro'))
+app.use('/api/tenant/bancario', requireTenantModule('financeiro'))
 app.use('/api/tenant/faturamento', requireTenantModule('faturamento'))
 app.use('/api/tenant/vendas', requireTenantModule('faturamento'))
 
@@ -97,6 +99,7 @@ app.route('/api/tenant/permissoes', permissoesRoutes)
 app.route('/api/tenant/cadastros', cadastrosRoutes)
 app.route('/api/tenant/estoque', estoqueRoutes)
 app.route('/api/tenant/financeiro', financeiroRoutes)
+app.route('/api/tenant/bancario', bancarioRoutes)
 app.route('/api/tenant/faturamento', faturamentoRoutes)
 app.route('/api/tenant/vendas', vendasRoutes)
 

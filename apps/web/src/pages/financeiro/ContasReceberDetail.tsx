@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { contasReceberService, type ContaReceber, type ContaForm } from '../../services/financeiro';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
+import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0);
@@ -45,10 +46,12 @@ export function ContasReceberDetail() {
   const [error, setError] = useState('');
   // Modal "marcar como pago"
   const [showPagarModal, setShowPagarModal] = useState(false);
-  const [pagarData, setPagarData] = useState({ dataPagamento: new Date().toISOString().slice(0, 10), valorPago: 0 });
+  const [pagarData, setPagarData] = useState({ dataPagamento: new Date().toISOString().slice(0, 10), valorPago: 0, contaBancariaId: '' });
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
 
   useEffect(() => {
     pessoasService.list({ search: '' }).then(setPessoas).catch(() => {});
+    bancarioService.listContas().then(setContasBancarias).catch(() => {});
     if (!isNew) {
       contasReceberService.get(id!)
         .then(data => {
@@ -115,7 +118,7 @@ export function ContasReceberDetail() {
   const handlePagar = async () => {
     setSaving(true);
     try {
-      await contasReceberService.marcarPago(id!, pagarData.dataPagamento, pagarData.valorPago);
+      await contasReceberService.marcarPago(id!, pagarData.dataPagamento, pagarData.valorPago, pagarData.contaBancariaId || undefined);
       const updated = await contasReceberService.get(id!);
       setRecord(updated);
       setShowPagarModal(false);
@@ -453,11 +456,14 @@ export function ContasReceberDetail() {
         </form>
       )}
 
-      {/* Modal — Marcar como Pago */}
+      {/* Modal — Registrar Recebimento */}
       {showPagarModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Registrar Recebimento</h2>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Registrar Recebimento</h2>
+              {record && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{record.descricao}</p>}
+            </div>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data de recebimento</label>
@@ -478,6 +484,36 @@ export function ContasReceberDetail() {
                   onChange={e => setPagarData(prev => ({ ...prev, valorPago: parseFloat(e.target.value) || 0 }))}
                   className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Conta bancária
+                  <span className="text-slate-400 font-normal ml-1">(onde entrou o dinheiro)</span>
+                </label>
+                {contasBancarias.length === 0 ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-3 py-2 rounded-lg">
+                    Nenhuma conta bancária cadastrada.{' '}
+                    <a href="/financeiro/contas-bancarias" className="underline font-medium">Cadastrar agora</a>
+                  </p>
+                ) : (
+                  <select
+                    value={pagarData.contaBancariaId}
+                    onChange={e => setPagarData(prev => ({ ...prev, contaBancariaId: e.target.value }))}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Não informar conta</option>
+                    {contasBancarias.map(cb => (
+                      <option key={cb.id} value={cb.id}>
+                        {cb.nome}{cb.banco_nome ? ` · ${cb.banco_nome}` : ''} — {fmt(cb.saldo_atual ?? 0)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {!pagarData.contaBancariaId && (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    Sem conta: o título será marcado como pago, mas o saldo bancário não será atualizado.
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-3 pt-2">
