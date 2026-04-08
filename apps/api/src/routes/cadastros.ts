@@ -122,6 +122,7 @@ app.delete('/pessoas/:id', async (c) => {
 // ─── Produtos ─────────────────────────────────────────────────────
 
 const produtoSchema = z.object({
+  sku: z.string().optional(),
   descricao: z.string().min(2),
   unidade: z.string().default('UN'),
   precoVenda: z.number().nonnegative(),
@@ -135,11 +136,11 @@ app.get('/produtos', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, busca } = c.req.query()
 
-  let query = 'SELECT id, codigo, descricao, unidade, preco_venda, preco_custo, ncm, ativo FROM produtos WHERE tenant_id = ?'
+  let query = 'SELECT id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm, ativo FROM produtos WHERE tenant_id = ?'
   const params: unknown[] = [tenant.tenantId]
 
   if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
-  if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
+  if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
 
   query += ' ORDER BY descricao LIMIT 100'
 
@@ -157,13 +158,14 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
 
   await c.env.DB_SHARED
     .prepare(`
-      INSERT INTO produtos (id, tenant_id, empresa_id, codigo, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO produtos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null,
-      codigo, data.descricao, data.unidade,
+      codigo, data.sku ?? null,
+      data.descricao, data.unidade,
       data.precoVenda, data.precoCusto ?? 0,
       data.ncm ?? null, data.ativo ? 1 : 0,
       now, now, uid, uid,
@@ -190,6 +192,7 @@ app.put('/produtos/:id', zValidator('json', produtoSchema.partial()), async (c) 
 
   const fieldMap: Record<string, string> = {
     // codigo é gerenciado pelo sistema — não pode ser alterado pelo usuário
+    sku: 'sku',
     descricao: 'descricao',
     unidade: 'unidade',
     precoVenda: 'preco_venda',
@@ -234,6 +237,7 @@ app.delete('/produtos/:id', async (c) => {
 // ─── Serviços ─────────────────────────────────────────────────────
 
 const servicoSchema = z.object({
+  sku: z.string().optional(),
   descricao: z.string().min(2),
   unidade: z.string().default('UN'),
   preco: z.number().nonnegative(),
@@ -245,11 +249,11 @@ app.get('/servicos', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, busca } = c.req.query()
 
-  let query = 'SELECT id, codigo, descricao, unidade, preco, ativo FROM servicos WHERE tenant_id = ?'
+  let query = 'SELECT id, codigo, sku, descricao, unidade, preco, ativo FROM servicos WHERE tenant_id = ?'
   const params: unknown[] = [tenant.tenantId]
 
   if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
-  if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
+  if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
 
   query += ' ORDER BY descricao'
 
@@ -267,13 +271,14 @@ app.post('/servicos', zValidator('json', servicoSchema), async (c) => {
 
   await c.env.DB_SHARED
     .prepare(`
-      INSERT INTO servicos (id, tenant_id, empresa_id, codigo, descricao, unidade, preco, ativo, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO servicos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco, ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null,
-      codigo, data.descricao, data.unidade,
+      codigo, data.sku ?? null,
+      data.descricao, data.unidade,
       data.preco, data.ativo ? 1 : 0,
       now, now, uid, uid,
     )
@@ -299,6 +304,7 @@ app.put('/servicos/:id', zValidator('json', servicoSchema.partial()), async (c) 
 
   const fieldMap: Record<string, string> = {
     // codigo é gerenciado pelo sistema — não pode ser alterado pelo usuário
+    sku: 'sku',
     descricao: 'descricao',
     unidade: 'unidade',
     preco: 'preco',

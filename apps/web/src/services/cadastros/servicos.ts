@@ -3,6 +3,7 @@ import api from '../api';
 export interface Servico {
   id: string;
   codigo: string;
+  sku?: string;
   descricao: string;
   unidade: string;
   preco: number;
@@ -10,6 +11,7 @@ export interface Servico {
 }
 
 export interface ServicoForm {
+  sku?: string;
   descricao: string;
   unidade: string;
   preco: number;

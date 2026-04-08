@@ -5,6 +5,7 @@ import { produtosService, type Produto, type ProdutoForm } from '../../services/
 const UNIDADES = ['UN', 'CX', 'KG', 'LT', 'MT', 'PC', 'PAR', 'RL', 'SC', 'TON'];
 
 const EMPTY: ProdutoForm = {
+  sku: '',
   descricao: '',
   unidade: 'UN',
   precoVenda: 0,
@@ -32,6 +33,7 @@ export function ProdutosDetail() {
       .then(data => {
         setRecord(data);
         setForm({
+          sku: data.sku ?? '',
           descricao: data.descricao,
           unidade: data.unidade,
           precoVenda: data.preco_venda,
@@ -146,6 +148,7 @@ export function ProdutosDetail() {
           </div>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
             {[
+              { label: 'SKU (Stock Keeping Unit)', value: record.sku || '—' },
               { label: 'Unidade', value: record.unidade },
               { label: 'Descrição', value: record.descricao },
               { label: 'NCM', value: record.ncm ?? '—' },
@@ -174,6 +177,18 @@ export function ProdutosDetail() {
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                SKU <span className="text-xs font-normal text-slate-400">(Stock Keeping Unit — opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={form.sku ?? ''}
+                onChange={e => set('sku', e.target.value)}
+                placeholder="Ex: MESA-G-NAT, REF-001"
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Unidade <span className="text-red-500">*</span>

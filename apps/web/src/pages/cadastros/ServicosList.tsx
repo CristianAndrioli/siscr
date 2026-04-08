@@ -120,7 +120,10 @@ export function ServicosList() {
                   onClick={() => navigate(`/cadastros/servicos/${s.id}`)}
                 >
                   <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{s.codigo}</td>
-                  <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{s.descricao}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-slate-800 dark:text-slate-100">{s.descricao}</div>
+                    {s.sku && <div className="text-xs text-slate-400 dark:text-slate-500 font-mono mt-0.5">SKU: {s.sku}</div>}
+                  </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{s.unidade}</td>
                   <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-200">
                     {s.preco?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}

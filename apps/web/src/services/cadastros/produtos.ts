@@ -3,6 +3,7 @@ import api from '../api';
 export interface Produto {
   id: string;
   codigo: string;
+  sku?: string;
   descricao: string;
   unidade: string;
   preco_venda: number;
@@ -12,6 +13,7 @@ export interface Produto {
 }
 
 export interface ProdutoForm {
+  sku?: string;
   descricao: string;
   unidade: string;
   precoVenda: number;
