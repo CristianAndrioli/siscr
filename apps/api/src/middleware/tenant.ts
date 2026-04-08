@@ -16,7 +16,9 @@ export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, ne
   const CACHE_TTL = 300 // 5 minutos
 
   // 1. Header explícito tem prioridade
-  let slug = c.req.header('X-Tenant-Slug')?.trim() || null
+  const rawSlugHeader = c.req.header('X-Tenant-Slug')
+  let slug = rawSlugHeader?.trim() || null
+  console.log(`[tenant] path=${c.req.path} X-Tenant-Slug="${rawSlugHeader ?? '(none)'}"`)
 
   // 2. Fallback: extrair slug do Bearer token (sessão no KV)
   if (!slug) {
