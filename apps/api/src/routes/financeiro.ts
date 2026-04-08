@@ -16,6 +16,12 @@ const contaSchema = z.object({
   observacoes: z.string().optional(),
   empresaId: z.string().uuid().optional(),
   filialId: z.string().uuid().optional(),
+  // Issue #8 — campos financeiros
+  nr_documento: z.string().optional(),
+  especie: z.string().optional(),
+  data_emissao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  data_lancamento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  moeda: z.string().length(3).optional(),
 })
 
 // ─── Contas a Receber ─────────────────────────────────────────────
@@ -95,14 +101,19 @@ app.post('/receber', zValidator('json', contaSchema), async (c) => {
   await c.env.DB_SHARED
     .prepare(`
       INSERT INTO contas_receber
-        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status, categoria, observacoes, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?)
+        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
+         categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda,
+         created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null, data.filialId ?? null,
       data.pessoaId, data.descricao, data.valor, data.vencimento,
       data.categoria ?? null, data.observacoes ?? null,
+      data.nr_documento ?? null, data.especie ?? 'DM',
+      data.data_emissao ?? null, data.data_lancamento ?? now.slice(0, 10),
+      data.moeda ?? 'BRL',
       now, now, uid, uid,
     )
     .run()
@@ -118,6 +129,8 @@ app.put('/receber/:id', zValidator('json', contaSchema.partial()), async (c) => 
     pessoaId: 'pessoa_id', descricao: 'descricao', valor: 'valor',
     vencimento: 'vencimento', categoria: 'categoria', observacoes: 'observacoes',
     empresaId: 'empresa_id', filialId: 'filial_id',
+    nr_documento: 'nr_documento', especie: 'especie',
+    data_emissao: 'data_emissao', data_lancamento: 'data_lancamento', moeda: 'moeda',
   }
 
   const setClauses = Object.keys(data).filter(k => k in fieldMap).map(k => `${fieldMap[k]} = ?`).join(', ')
@@ -211,14 +224,19 @@ app.post('/pagar', zValidator('json', contaSchema), async (c) => {
   await c.env.DB_SHARED
     .prepare(`
       INSERT INTO contas_pagar
-        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status, categoria, observacoes, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?)
+        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
+         categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda,
+         created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
       data.empresaId ?? null, data.filialId ?? null,
       data.pessoaId, data.descricao, data.valor, data.vencimento,
       data.categoria ?? null, data.observacoes ?? null,
+      data.nr_documento ?? null, data.especie ?? 'DM',
+      data.data_emissao ?? null, data.data_lancamento ?? now.slice(0, 10),
+      data.moeda ?? 'BRL',
       now, now, uid, uid,
     )
     .run()
@@ -234,6 +252,8 @@ app.put('/pagar/:id', zValidator('json', contaSchema.partial()), async (c) => {
     pessoaId: 'pessoa_id', descricao: 'descricao', valor: 'valor',
     vencimento: 'vencimento', categoria: 'categoria', observacoes: 'observacoes',
     empresaId: 'empresa_id', filialId: 'filial_id',
+    nr_documento: 'nr_documento', especie: 'especie',
+    data_emissao: 'data_emissao', data_lancamento: 'data_lancamento', moeda: 'moeda',
   }
 
   const setClauses = Object.keys(data).filter(k => k in fieldMap).map(k => `${fieldMap[k]} = ?`).join(', ')

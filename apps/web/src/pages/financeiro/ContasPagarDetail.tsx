@@ -16,7 +16,20 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const CATEGORIAS = ['Fornecedor', 'Aluguel', 'Salário', 'Imposto', 'Serviço', 'Financiamento', 'Outros'];
-const EMPTY: ContaForm = { pessoaId: '', descricao: '', valor: 0, vencimento: '', categoria: '', observacoes: '' };
+const ESPECIES = ['DM', 'DS', 'NP', 'NS', 'LC', 'CH', 'BO', 'DP', 'RC', 'OUT'];
+const ESPECIES_LABEL: Record<string, string> = {
+  DM: 'DM - Duplicata Mercantil', DS: 'DS - Duplicata de Serviço',
+  NP: 'NP - Nota Promissória', NS: 'NS - Nota de Seguro',
+  LC: 'LC - Letra de Câmbio', CH: 'CH - Cheque',
+  BO: 'BO - Boleto', DP: 'DP - Duplicata Rural',
+  RC: 'RC - Recibo', OUT: 'OUT - Outros',
+};
+const MOEDAS = ['BRL', 'USD', 'EUR'];
+const EMPTY: ContaForm = {
+  pessoaId: '', descricao: '', valor: 0, vencimento: '',
+  categoria: '', observacoes: '', nr_documento: '',
+  especie: 'DM', data_emissao: '', data_lancamento: new Date().toISOString().slice(0, 10), moeda: 'BRL',
+};
 
 export function ContasPagarDetail() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +59,11 @@ export function ContasPagarDetail() {
             vencimento: data.vencimento,
             categoria: data.categoria ?? '',
             observacoes: data.observacoes ?? '',
+            nr_documento: data.nr_documento ?? '',
+            especie: data.especie ?? 'DM',
+            data_emissao: data.data_emissao ?? '',
+            data_lancamento: data.data_lancamento ?? new Date().toISOString().slice(0, 10),
+            moeda: data.moeda ?? 'BRL',
           });
           setPagarData(prev => ({ ...prev, valorPago: data.valor }));
         })
@@ -184,108 +202,210 @@ export function ContasPagarDetail() {
               </span>
             </div>
           )}
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-            {[
-              { label: 'Fornecedor', value: record.fornecedor || '—' },
-              { label: 'Categoria', value: record.categoria || '—' },
-              { label: 'Valor', value: fmt(record.valor) },
-              { label: 'Vencimento', value: fmtDate(record.vencimento) },
-              { label: 'Valor Pago', value: record.valor_pago ? fmt(record.valor_pago) : '—' },
-              { label: 'Data Pagamento', value: fmtDate(record.data_pagamento) },
-              { label: 'Observações', value: record.observacoes || '—' },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
-                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Identificação</p>
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
+                {[
+                  { label: 'Nr. Documento', value: record.nr_documento || '—' },
+                  { label: 'Espécie', value: ESPECIES_LABEL[record.especie ?? ''] ?? record.especie ?? '—' },
+                  { label: 'Moeda', value: record.moeda || 'BRL' },
+                  { label: 'Categoria', value: record.categoria || '—' },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                    <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Datas</p>
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
+                {[
+                  { label: 'Emissão', value: fmtDate(record.data_emissao) },
+                  { label: 'Lançamento', value: fmtDate(record.data_lancamento) },
+                  { label: 'Vencimento', value: fmtDate(record.vencimento) },
+                  { label: 'Pagamento', value: fmtDate(record.data_pagamento) },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                    <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Valores</p>
+              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+                {[
+                  { label: 'Fornecedor', value: record.fornecedor || '—' },
+                  { label: 'Valor', value: fmt(record.valor) },
+                  { label: 'Valor Pago', value: record.valor_pago ? fmt(record.valor_pago) : '—' },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
+                    <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            {record.observacoes && (
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Observações</dt>
+                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.observacoes}</dd>
               </div>
-            ))}
-          </dl>
+            )}
+          </div>
         </div>
       )}
 
       {/* Formulário */}
       {(isNew || isEditing) && (
         <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {/* Fornecedor / Pessoa */}
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Fornecedor / Pessoa <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.pessoaId}
-                onChange={e => set('pessoaId', e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Selecione...</option>
-                {pessoas.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome}</option>
-                ))}
-              </select>
-              {pessoas.length === 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                  Nenhuma pessoa cadastrada. <a href="/cadastros/pessoas/novo" className="underline">Cadastrar pessoa</a>
-                </p>
-              )}
-            </div>
-
-            {/* Descrição */}
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Descrição <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={form.descricao}
-                onChange={e => set('descricao', e.target.value)}
-                placeholder="Ex.: Aluguel do galpão"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-            </div>
-
-            {/* Valor */}
+          <div className="space-y-6">
+            {/* ── Seção: Identificação ── */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Valor (R$) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={form.valor || ''}
-                onChange={e => set('valor', parseFloat(e.target.value) || 0)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Identificação</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Fornecedor / Pessoa <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={form.pessoaId}
+                    onChange={e => set('pessoaId', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Selecione...</option>
+                    {pessoas.map(p => (
+                      <option key={p.id} value={p.id}>{p.nome}</option>
+                    ))}
+                  </select>
+                  {pessoas.length === 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      Nenhuma pessoa cadastrada. <a href="/cadastros/pessoas/novo" className="underline">Cadastrar pessoa</a>
+                    </p>
+                  )}
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Descrição <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.descricao}
+                    onChange={e => set('descricao', e.target.value)}
+                    placeholder="Ex.: Aluguel do galpão"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nr. Documento</label>
+                  <input
+                    type="text"
+                    value={form.nr_documento ?? ''}
+                    onChange={e => set('nr_documento', e.target.value)}
+                    placeholder="Ex.: 000123"
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Espécie</label>
+                  <select
+                    value={form.especie ?? 'DM'}
+                    onChange={e => set('especie', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    {ESPECIES.map(e => <option key={e} value={e}>{ESPECIES_LABEL[e]}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
+                  <select
+                    value={form.categoria}
+                    onChange={e => set('categoria', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Sem categoria</option>
+                    {CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Moeda</label>
+                  <select
+                    value={form.moeda ?? 'BRL'}
+                    onChange={e => set('moeda', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    {MOEDAS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
 
-            {/* Vencimento */}
+            {/* ── Seção: Datas e Valores ── */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Vencimento <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={form.vencimento}
-                onChange={e => set('vencimento', e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Datas e Valores</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Valor <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.valor || ''}
+                    onChange={e => set('valor', parseFloat(e.target.value) || 0)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Vencimento <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={form.vencimento}
+                    onChange={e => set('vencimento', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Emissão</label>
+                  <input
+                    type="date"
+                    value={form.data_emissao ?? ''}
+                    onChange={e => set('data_emissao', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Lançamento</label>
+                  <input
+                    type="date"
+                    value={form.data_lancamento ?? ''}
+                    onChange={e => set('data_lancamento', e.target.value)}
+                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Categoria */}
+            {/* ── Observações ── */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Categoria</label>
-              <select
-                value={form.categoria}
-                onChange={e => set('categoria', e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              >
-                <option value="">Sem categoria</option>
-                {CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-            </div>
-
-            {/* Observações */}
-            <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Observações</label>
               <textarea
                 rows={3}

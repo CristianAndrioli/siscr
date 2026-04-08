@@ -14,6 +14,15 @@ export interface ContaReceber {
   pessoa_id: string;
   cliente?: string;
   created_at: string;
+  // Issue #8
+  nr_documento?: string;
+  especie?: string;
+  data_emissao?: string;
+  data_lancamento?: string;
+  moeda?: string;
+  parcela?: number;
+  total_parcelas?: number;
+  nota_fiscal_id?: string;
 }
 
 export interface ContaPagar {
@@ -30,6 +39,12 @@ export interface ContaPagar {
   pessoa_id: string;
   fornecedor?: string;
   created_at: string;
+  // Issue #8
+  nr_documento?: string;
+  especie?: string;
+  data_emissao?: string;
+  data_lancamento?: string;
+  moeda?: string;
 }
 
 export interface ContaForm {
@@ -39,6 +54,12 @@ export interface ContaForm {
   vencimento: string;
   categoria?: string;
   observacoes?: string;
+  // Issue #8
+  nr_documento?: string;
+  especie?: string;
+  data_emissao?: string;
+  data_lancamento?: string;
+  moeda?: string;
 }
 
 export interface DashboardData {
