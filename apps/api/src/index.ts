@@ -21,6 +21,7 @@ import vendasRoutes from './routes/vendas'
 import stripeWebhookRoutes from './routes/stripe-webhook'
 import cronRoutes from './routes/cron'
 import queueRoutes from './routes/queue'
+import logsRoutes from './routes/logs'
 
 export type Env = {
   // D1 — banco compartilhado (tenants, planos, billing)
@@ -102,6 +103,7 @@ app.route('/api/tenant/financeiro', financeiroRoutes)
 app.route('/api/tenant/bancario', bancarioRoutes)
 app.route('/api/tenant/faturamento', faturamentoRoutes)
 app.route('/api/tenant/vendas', vendasRoutes)
+app.route('/api/tenant/logs', logsRoutes)
 
 // ─── Rotas internas (Cron + Queue handlers) ───────────────────
 app.route('/__cron', cronRoutes)

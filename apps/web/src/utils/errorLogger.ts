@@ -1,44 +1,20 @@
-/** Sistema de log de erros do frontend. Armazena no localStorage. */
+/** Sistema de log de erros — envia para o banco via API (fire-and-forget). */
+import api from '../services/api';
 
 export interface ErrorLogEntry {
   id: string;
   timestamp: string;
-  /** Mensagem amigável exibida ao usuário */
-  friendlyMessage: string;
-  /** Detalhes técnicos (stack, mensagem da API, status HTTP, etc.) */
-  technical: string;
-  /** URL da página onde ocorreu */
-  url: string;
-  /** Contexto adicional (nome da tela, ação) */
-  context?: string;
+  friendly_message: string;
+  technical?: string | null;
+  url?: string | null;
+  context?: string | null;
+  created_at: string;
 }
 
-const STORAGE_KEY = 'siscr_error_log';
-const MAX_ENTRIES = 100;
-
-function load(): ErrorLogEntry[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
-  } catch {
-    return [];
-  }
-}
-
-function save(entries: ErrorLogEntry[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
-  } catch {
-    // localStorage cheio ou indisponível — ignora
-  }
-}
-
-/**
- * Extrai uma descrição técnica legível de qualquer tipo de erro.
- */
-export function extractTechnical(err: unknown): string {
+/** Extrai a parte técnica legível (sem stack trace). */
+function extractTechnical(err: unknown): string {
   if (!err) return 'Erro desconhecido';
 
-  // Erro Axios (resposta HTTP)
   if (typeof err === 'object' && err !== null) {
     const e = err as Record<string, unknown>;
 
@@ -46,52 +22,50 @@ export function extractTechnical(err: unknown): string {
       const res = e.response as Record<string, unknown>;
       const status = res.status;
       const data = res.data;
-      const url = (res.config as Record<string, unknown> | undefined)?.url ?? (e as Record<string,unknown>)?.config
-        ? ((e as Record<string,unknown>).config as Record<string,unknown>)?.url
-        : undefined;
+      const cfg = e.config as Record<string, unknown> | undefined;
+      const reqUrl = cfg?.url ?? (res.config as Record<string, unknown> | undefined)?.url;
 
       let body = '';
       if (typeof data === 'object' && data !== null) {
         const d = data as Record<string, unknown>;
-        body = d.error
-          ? String(d.error)
-          : d.message
-          ? String(d.message)
-          : JSON.stringify(data);
+        body = d.error ? String(d.error) : d.message ? String(d.message) : JSON.stringify(data);
       } else {
         body = String(data ?? '');
       }
 
       return [
         `HTTP ${status}`,
-        url ? `URL: ${url}` : '',
+        reqUrl ? `URL: ${reqUrl}` : '',
         body ? `Resposta: ${body}` : '',
-        e.message ? `${e.message}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
+        e.message ? String(e.message) : '',
+      ].filter(Boolean).join('\n');
     }
 
-    // Erro de rede (sem resposta)
     if (e.request) {
       return `Sem resposta do servidor (timeout ou rede indisponível)\n${e.message ?? ''}`;
     }
 
-    // Error padrão JS
     if (e.message) {
-      const stack = typeof e.stack === 'string' ? `\n${e.stack}` : '';
-      return `${e.message}${stack}`;
+      return String(e.message);
     }
 
-    return JSON.stringify(err);
+    try { return JSON.stringify(err); } catch { return String(err); }
   }
 
   return String(err);
 }
 
+/** Extrai apenas o stack trace (quando disponível). */
+function extractStack(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const e = err as Record<string, unknown>;
+  return typeof e.stack === 'string' ? e.stack : undefined;
+}
+
 /**
- * Registra um erro no log local.
- * @returns O ID gerado para o registro (útil para linkar no toast)
+ * Envia o log de erro para a API (fire-and-forget).
+ * Não bloqueia a execução — falhas silenciosas são ignoradas.
+ * Retorna o ID gerado (para linkar no toast).
  */
 export function logError(
   friendlyMessage: string,
@@ -99,30 +73,45 @@ export function logError(
   context?: string,
 ): string {
   const id = crypto.randomUUID();
-  const entry: ErrorLogEntry = {
+  const timestamp = new Date().toISOString();
+  const technical = extractTechnical(err);
+  const stackTrace = extractStack(err);
+  const url = window.location.pathname;
+
+  // Fire-and-forget: não aguarda nem propaga erros
+  const payload = {
     id,
-    timestamp: new Date().toISOString(),
+    timestamp,
     friendlyMessage,
-    technical: extractTechnical(err),
-    url: window.location.pathname,
+    technical,
+    stackTrace,
+    url,
     context,
   };
 
-  const entries = load();
-  entries.unshift(entry); // mais recente primeiro
-  save(entries);
+  // Fire-and-forget — falhas silenciosas (usuário deslogado, rede indisponível, etc.)
+  api.post('/tenant/logs/errors', payload).catch(() => {/* silencioso */});
 
   return id;
 }
 
-export function getErrorLog(): ErrorLogEntry[] {
-  return load();
+/** Busca a lista de logs do servidor. */
+export async function fetchErrorLog(): Promise<ErrorLogEntry[]> {
+  const res = await api.get('/tenant/logs/errors');
+  return res.data.errors ?? [];
 }
 
-export function clearErrorLog(): void {
-  localStorage.removeItem(STORAGE_KEY);
+/** Busca um log específico pelo ID. */
+export async function fetchErrorById(id: string): Promise<ErrorLogEntry | null> {
+  try {
+    const res = await api.get(`/tenant/logs/errors/${id}`);
+    return res.data;
+  } catch {
+    return null;
+  }
 }
 
-export function getErrorById(id: string): ErrorLogEntry | undefined {
-  return load().find((e) => e.id === id);
+/** Remove todos os logs do tenant. */
+export async function clearErrorLog(): Promise<void> {
+  await api.delete('/tenant/logs/errors');
 }
