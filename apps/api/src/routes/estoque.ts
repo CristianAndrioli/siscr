@@ -220,7 +220,7 @@ app.post('/transferencias', zValidator('json', transSchema), async (c) => {
 app.get('/locais', async (c) => {
   const tenant = c.get('tenant')
   const { results } = await c.env.DB_SHARED
-    .prepare('SELECT * FROM locais WHERE tenant_id = ? ORDER BY nome')
+    .prepare('SELECT * FROM locais WHERE tenant_id = ? ORDER BY codigo')
     .bind(tenant.tenantId)
     .all()
   return c.json({ locais: results })

@@ -43,7 +43,7 @@ app.get('/pessoas', async (c) => {
   if (tipoCadastro) { query += ' AND tipo_cadastro = ?'; params.push(tipoCadastro) }
   if (busca) { query += ' AND (nome LIKE ? OR cpf_cnpj LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
 
-  query += ' ORDER BY nome LIMIT 100'
+  query += ' ORDER BY codigo LIMIT 100'
 
   const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
   return c.json({ pessoas: results })
@@ -161,7 +161,7 @@ app.get('/produtos', async (c) => {
   if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
   if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
 
-  query += ' ORDER BY descricao LIMIT 100'
+  query += ' ORDER BY CAST(codigo AS INTEGER) LIMIT 100'
 
   const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
   return c.json({ produtos: results })
@@ -284,7 +284,7 @@ app.get('/servicos', async (c) => {
   if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
   if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
 
-  query += ' ORDER BY descricao'
+  query += ' ORDER BY CAST(codigo AS INTEGER)'
 
   const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
   return c.json({ servicos: results })
