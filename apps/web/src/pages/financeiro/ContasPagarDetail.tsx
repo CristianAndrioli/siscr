@@ -4,11 +4,7 @@ import { contasPagarService, type ContaPagar, type ContaForm } from '../../servi
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0);
-
-const fmtDate = (s?: string) =>
-  s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+import { fmtBRL as fmt, fmtDate } from '../../utils/format';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',

@@ -25,11 +25,7 @@ const TIPO_ICON: Record<string, React.ReactElement> = {
   ),
 };
 
-const fmt = (v: number | null | undefined) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0);
-
-const fmtDate = (s: string) =>
-  s ? new Date(s + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+import { fmtBRL as fmt, fmtDate } from '../../utils/format';
 
 function FinanceiroDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);

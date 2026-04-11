@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { bancarioService, type ContaBancaria, type ContaBancariaForm } from '../../services/bancario';
 
-const fmt = (v: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v ?? 0);
+import { fmtBRL as fmt } from '../../utils/format';
 
 const TIPO_LABEL: Record<string, string> = {
   corrente: 'Conta Corrente',

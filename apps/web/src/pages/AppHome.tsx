@@ -5,8 +5,7 @@ import Layout from '../components/Layout';
 import api from '../services/api';
 
 // ─── Helpers ──────────────────────────────────────────────────────
-const fmtBRL = (v: number | null | undefined) =>
-  (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+import { fmtBRL } from '../utils/format';
 
 const fmtDate = (s?: string) => {
   if (!s) return '—';
