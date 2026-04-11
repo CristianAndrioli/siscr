@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { movimentacoesService, estoqueService, locaisService, type Movimentacao } from '../../services/estoqueService';
 import api from '../../services/api';
+import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
 
 const fmtQtd = (v: number) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 const fmtDate = (s: string) => s ? new Date(s).toLocaleString('pt-BR') : '—';
@@ -135,7 +136,6 @@ export function MovimentacoesList() {
   const [movs, setMovs] = useState<Movimentacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [busca, setBusca] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [locais, setLocais] = useState<string[]>([]);
@@ -199,14 +199,40 @@ export function MovimentacoesList() {
     }
   };
 
-  const filtered = movs.filter(m => {
-    const matchBusca = !busca || m.produto?.toLowerCase().includes(busca.toLowerCase()) || m.produto_codigo?.toLowerCase().includes(busca.toLowerCase());
-    const matchTipo = !tipoFiltro || m.tipo === tipoFiltro;
-    return matchBusca && matchTipo;
-  });
+  const COLUMNS: SmartColumn<Movimentacao>[] = [
+    { key: 'codigo', label: '#', width: 70, required: true, align: 'center',
+      render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v ?? '—'}</span> },
+    { key: 'produto', label: 'Produto', width: 220, required: true,
+      render: (v, row) => (
+        <div>
+          <div className="font-medium text-slate-800 dark:text-slate-100">{String(v ?? '—')}</div>
+          {row.produto_codigo && <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">{String(row.produto_codigo)}</div>}
+        </div>
+      ) },
+    { key: 'tipo', label: 'Tipo', width: 140, filterable: false,
+      render: v => (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${TIPO_STYLE[String(v)] ?? ''}`}>
+          {TIPO_LABEL[String(v)] ?? String(v)}
+        </span>
+      ) },
+    { key: 'quantidade', label: 'Quantidade', width: 110, align: 'right', filterable: false,
+      render: (v, row) => {
+        const isSaida = row.tipo === 'saida' || row.tipo === 'transferencia_saida';
+        return (
+          <span className={`font-bold tabular-nums ${isSaida ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {TIPO_SIGN[String(row.tipo)]}{fmtQtd(Number(v ?? 0))}
+          </span>
+        );
+      } },
+    { key: 'location', label: 'Local', width: 110,
+      render: v => <span className="font-mono text-xs">{String(v ?? '—')}</span> },
+    { key: 'motivo', label: 'Motivo', width: 200 },
+    { key: 'created_at', label: 'Data', width: 130, filterable: false,
+      render: v => <span className="text-xs text-slate-400 dark:text-slate-500">{fmtDate(String(v ?? ''))}</span> },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Movimentações</h1>
@@ -227,13 +253,8 @@ export function MovimentacoesList() {
         <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <input
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar produto ou código..."
-          className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-        />
+      {/* Filtro de tipo (vai ao servidor) */}
+      <div className="flex gap-3">
         <select
           value={tipoFiltro}
           onChange={e => setTipoFiltro(e.target.value)}
@@ -248,55 +269,14 @@ export function MovimentacoesList() {
         </select>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-slate-400 dark:text-slate-500 text-sm font-medium">Nenhuma movimentação registrada.</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Clique em "Nova Movimentação" para registrar a primeira entrada.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  {['#', 'Produto', 'Tipo', 'Qtd.', 'Local', 'Motivo', 'Data'].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map(m => (
-                  <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{m.codigo ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800 dark:text-slate-100">{m.produto || '—'}</div>
-                      <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">{m.produto_codigo}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${TIPO_STYLE[m.tipo] ?? ''}`}>
-                        {TIPO_LABEL[m.tipo] ?? m.tipo}
-                      </span>
-                    </td>
-                    <td className={`px-4 py-3 font-bold tabular-nums ${m.tipo === 'saida' || m.tipo === 'transferencia_saida' ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {TIPO_SIGN[m.tipo]}{fmtQtd(m.quantidade)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-mono text-xs">{m.location}</td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs max-w-[200px] truncate">{m.motivo || '—'}</td>
-                    <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">{fmtDate(m.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <SmartGrid<Movimentacao>
+        gridId="movimentacoes-list"
+        data={movs}
+        columns={COLUMNS}
+        defaultSort={{ key: 'created_at', dir: 'desc' }}
+        loading={loading}
+        emptyMessage="Nenhuma movimentação registrada."
+      />
 
       {/* Modal Nova Movimentação */}
       {showModal && (
