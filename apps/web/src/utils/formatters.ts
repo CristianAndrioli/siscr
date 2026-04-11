@@ -6,12 +6,14 @@
  * Formata valor como moeda brasileira (R$)
  */
 export function formatCurrency(value: number | string | null | undefined): string {
-  if (!value && value !== 0) return 'R$ 0,00';
+  if (value == null || value === '') return 'R$ 0,00';
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-  }).format(numValue);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(isNaN(numValue) ? 0 : numValue);
 }
 
 /**

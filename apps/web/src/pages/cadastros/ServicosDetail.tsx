@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { servicosService, type Servico, type ServicoForm } from '../../services/cadastros/servicos';
+import { fmtBRL } from '../../utils/format';
 
 const UNIDADES = ['UN', 'HR', 'DIA', 'MES', 'KM', 'SV'];
 
@@ -147,7 +148,7 @@ export function ServicosDetail() {
               { label: 'SKU (Stock Keeping Unit)', value: record.sku || '—' },
               { label: 'Unidade', value: record.unidade },
               { label: 'Descrição', value: record.descricao },
-              { label: 'Preço', value: record.preco?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
+              { label: 'Preço', value: record.preco != null ? fmtBRL(record.preco) : '—' },
               { label: 'Situação', value: record.ativo ? 'Ativo' : 'Inativo' },
             ].map(({ label, value }) => (
               <div key={label}>

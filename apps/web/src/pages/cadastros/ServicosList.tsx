@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { servicosService, type Servico } from '../../services/cadastros/servicos';
+import { fmtBRL } from '../../utils/format';
 
 export function ServicosList() {
   const navigate = useNavigate();
@@ -126,7 +127,7 @@ export function ServicosList() {
                   </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{s.unidade}</td>
                   <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-200">
-                    {s.preco?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {s.preco != null ? fmtBRL(s.preco) : '—'}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`inline-block w-2 h-2 rounded-full ${s.ativo ? 'bg-green-500' : 'bg-slate-300'}`} />

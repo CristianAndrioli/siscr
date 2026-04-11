@@ -3,8 +3,7 @@ import { notasService, type NotaFiscal, type NFStatus } from '../../services/fat
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
-const fmtBRL = (v: number) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
+import { fmtBRL, fmtDate } from '../../utils/format';
 const fmtPct = (v?: number | null) => v != null ? `${v}%` : '—';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
@@ -519,14 +518,14 @@ export function NFSePage() {
                         <div key={i} className="flex justify-between text-xs">
                           <span className="text-slate-500 dark:text-slate-400">{i + 1}/{condicao.parcelas} — {venc.toLocaleDateString('pt-BR')}</span>
                           <span className="font-semibold text-slate-700 dark:text-slate-200">
-                            {valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {fmtBRL(valorFinal)}
                           </span>
                         </div>
                       );
                     })}
                     <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 flex justify-between text-xs font-bold text-slate-700 dark:text-slate-100">
                       <span>Total</span>
-                      <span>{(selectedNota.valor_total ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                      <span>{fmtBRL(selectedNota.valor_total)}</span>
                     </div>
                   </div>
                 )}

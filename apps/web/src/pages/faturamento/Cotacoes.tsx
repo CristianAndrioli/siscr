@@ -3,7 +3,7 @@ import { cotacoesService, type Cotacao, type CotacaoItem, type CotacaoStatus } f
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
-const fmtBRL = (v: number) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+import { fmtBRL } from '../../utils/format';
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 
 const STATUS_STYLE: Record<CotacaoStatus, string> = {

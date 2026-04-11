@@ -2,10 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { produtosService, type Produto } from '../../services/cadastros/produtos';
 
-function fmtPreco(valor?: number) {
-  if (valor === undefined || valor === null) return '—';
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
+import { fmtBRL } from '../../utils/format';
+const fmtPreco = (v?: number | null) => v != null ? fmtBRL(v) : '—';
 
 export function ProdutosList() {
   const navigate = useNavigate();

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fmtBRL } from '../utils/format';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 import {
@@ -126,7 +127,7 @@ export default function Checkout() {
     );
   }
 
-  const priceLabel = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(plan.preco_mensal);
+  const priceLabel = fmtBRL(plan.preco_mensal);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">

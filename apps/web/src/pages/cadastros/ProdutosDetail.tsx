@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { produtosService, type Produto, type ProdutoForm } from '../../services/cadastros/produtos';
+import { fmtBRL } from '../../utils/format';
 
 const UNIDADES = ['UN', 'CX', 'KG', 'LT', 'MT', 'PC', 'PAR', 'RL', 'SC', 'TON'];
 
@@ -152,8 +153,8 @@ export function ProdutosDetail() {
               { label: 'Unidade', value: record.unidade },
               { label: 'Descrição', value: record.descricao },
               { label: 'NCM', value: record.ncm ?? '—' },
-              { label: 'Preço de Venda', value: record.preco_venda?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
-              { label: 'Preço de Custo', value: record.preco_custo?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) ?? '—' },
+              { label: 'Preço de Venda', value: record.preco_venda != null ? fmtBRL(record.preco_venda) : '—' },
+              { label: 'Preço de Custo', value: record.preco_custo != null ? fmtBRL(record.preco_custo) : '—' },
               { label: 'Situação', value: record.ativo ? 'Ativo' : 'Inativo' },
             ].map(({ label, value }) => (
               <div key={label}>

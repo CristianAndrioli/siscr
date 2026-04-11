@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fmtBRL } from '../utils/format';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { authService } from '../services/auth';
@@ -267,7 +268,7 @@ export default function SubscriptionManagement() {
             {subscription.preco_mensal > 0 && (
               <div className="flex items-baseline gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <span className="text-2xl font-bold text-brand-600 dark:text-brand-400">
-                  R$ {subscription.preco_mensal.toFixed(2).replace('.', ',')}
+                  {fmtBRL(subscription.preco_mensal)}
                 </span>
                 <span className="text-sm text-slate-500 dark:text-slate-400">/mês</span>
               </div>
