@@ -38,6 +38,13 @@ export interface PessoaForm {
   uf?: string;
 }
 
+/** Remove campos de string vazia para não falhar validação opcional na API */
+function sanitize<T extends Record<string, unknown>>(dados: T): T {
+  return Object.fromEntries(
+    Object.entries(dados).filter(([, v]) => v !== ''),
+  ) as T;
+}
+
 export const pessoasService = {
   list: async (params: { search?: string; page?: number } = {}): Promise<Pessoa[]> => {
     const query: Record<string, unknown> = {};
@@ -53,12 +60,12 @@ export const pessoasService = {
   },
 
   create: async (dados: PessoaForm): Promise<{ id: string }> => {
-    const response = await api.post('/tenant/cadastros/pessoas', dados);
+    const response = await api.post('/tenant/cadastros/pessoas', sanitize(dados));
     return response.data;
   },
 
   update: async (id: string, dados: Partial<PessoaForm>): Promise<void> => {
-    await api.put(`/tenant/cadastros/pessoas/${id}`, dados);
+    await api.put(`/tenant/cadastros/pessoas/${id}`, sanitize(dados));
   },
 
   delete: async (id: string): Promise<void> => {

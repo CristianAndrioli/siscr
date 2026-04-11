@@ -9,24 +9,28 @@ const app = new Hono<{ Bindings: Env }>()
 
 // ─── Pessoas (Clientes / Fornecedores / Funcionários) ────────────
 
+// Converte string vazia para undefined para que campos opcionais passem na validação
+const emptyToUndef = (schema: z.ZodTypeAny) =>
+  z.preprocess((v) => (v === '' ? undefined : v), schema)
+
 const pessoaSchema = z.object({
   tipo: z.enum(['PF', 'PJ']),
   tipoCadastro: z.enum(['cliente', 'fornecedor', 'funcionario', 'transportadora']),
   nome: z.string().min(2),
-  cpfCnpj: z.string().min(11).max(18).optional(),
-  email: z.string().email().optional(),
-  telefone: z.string().optional(),
+  cpfCnpj: emptyToUndef(z.string().min(11).max(18).optional()),
+  email: emptyToUndef(z.string().email().optional()),
+  telefone: emptyToUndef(z.string().optional()),
   // endereço
-  cep: z.string().optional(),
-  logradouro: z.string().optional(),
-  numero: z.string().optional(),
-  complemento: z.string().optional(),
-  bairro: z.string().optional(),
-  cidade: z.string().optional(),
-  uf: z.string().length(2).optional(),
+  cep: emptyToUndef(z.string().optional()),
+  logradouro: emptyToUndef(z.string().optional()),
+  numero: emptyToUndef(z.string().optional()),
+  complemento: emptyToUndef(z.string().optional()),
+  bairro: emptyToUndef(z.string().optional()),
+  cidade: emptyToUndef(z.string().optional()),
+  uf: emptyToUndef(z.string().length(2).optional()),
   // vínculo
-  empresaId: z.string().uuid().optional(),
-  filialId: z.string().uuid().optional(),
+  empresaId: emptyToUndef(z.string().uuid().optional()),
+  filialId: emptyToUndef(z.string().uuid().optional()),
 })
 
 app.get('/pessoas', async (c) => {
