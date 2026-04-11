@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { authService } from '../../services/auth';
+import MaskedInput from '../../components/common/MaskedInput';
+import type { ComponentProps } from 'react';
 
 const UF_LIST = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
@@ -126,12 +128,25 @@ type FilialForm = { nome: string; cnpj: string; uf: string; cidade: string; logr
 const emptyEmpresa = (): EmpresaForm => ({ razaoSocial: '', nomeFantasia: '', cnpj: '', email: '', telefone: '', uf: 'SC', cidade: '', logradouro: '', numero: '', bairro: '', cep: '' });
 const emptyFilial = (): FilialForm => ({ nome: '', cnpj: '', uf: 'SC', cidade: '', logradouro: '', numero: '', bairro: '', cep: '', ativa: true });
 
+const FIELD_CLS = 'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500';
+
 function Field({ label, value, onChange, type = 'text', required, placeholder, maxLen }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; maxLen?: number; }) {
   return (
     <div>
       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLen}
-        className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        className={FIELD_CLS} />
+    </div>
+  );
+}
+
+function MaskedField({ label, required, ...props }: { label: string; required?: boolean } & ComponentProps<typeof MaskedInput>) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      <MaskedInput className={FIELD_CLS} {...props} />
     </div>
   );
 }
@@ -529,15 +544,15 @@ export function FiliaisPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2"><Field label="Razão Social" value={empresaForm.razaoSocial} onChange={v => setEF('razaoSocial', v)} required /></div>
                 <Field label="Nome Fantasia" value={empresaForm.nomeFantasia} onChange={v => setEF('nomeFantasia', v)} />
-                <Field label="CNPJ (somente números)" value={empresaForm.cnpj} onChange={v => setEF('cnpj', v.replace(/\D/g, ''))} required maxLen={14} />
+                <MaskedField label="CNPJ" mask="cnpj" value={empresaForm.cnpj} onChange={v => setEF('cnpj', v)} required placeholder="00.000.000/0000-00" />
                 <Field label="E-mail" value={empresaForm.email} onChange={v => setEF('email', v)} type="email" />
-                <Field label="Telefone" value={empresaForm.telefone} onChange={v => setEF('telefone', v)} />
+                <MaskedField label="Telefone" mask="phone" value={empresaForm.telefone} onChange={v => setEF('telefone', v)} placeholder="(48) 99999-9999" />
                 <div className="col-span-2"><Field label="Logradouro" value={empresaForm.logradouro} onChange={v => setEF('logradouro', v)} /></div>
                 <Field label="Número" value={empresaForm.numero} onChange={v => setEF('numero', v)} />
                 <Field label="Bairro" value={empresaForm.bairro} onChange={v => setEF('bairro', v)} />
                 <Field label="Cidade" value={empresaForm.cidade} onChange={v => setEF('cidade', v)} />
                 <SelectField label="UF" value={empresaForm.uf} onChange={v => setEF('uf', v)} options={UF_LIST} />
-                <Field label="CEP" value={empresaForm.cep} onChange={v => setEF('cep', v.replace(/\D/g, ''))} maxLen={8} />
+                <MaskedField label="CEP" mask="cep" value={empresaForm.cep} onChange={v => setEF('cep', v)} placeholder="00000-000" />
               </div>
 
               {isAdmin && !empresaEditing && (
@@ -643,10 +658,10 @@ export function FiliaisPage() {
               {filialModalError && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{filialModalError}</div>}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2"><Field label="Nome da Filial" value={filialForm.nome} onChange={v => setFF('nome', v)} required /></div>
-                <Field label="CNPJ (somente números)" value={filialForm.cnpj} onChange={v => setFF('cnpj', v.replace(/\D/g, ''))} maxLen={14} />
+                <MaskedField label="CNPJ" mask="cnpj" value={filialForm.cnpj} onChange={v => setFF('cnpj', v)} placeholder="00.000.000/0000-00" />
                 <Field label="Cidade" value={filialForm.cidade} onChange={v => setFF('cidade', v)} />
                 <SelectField label="UF" value={filialForm.uf} onChange={v => setFF('uf', v)} options={UF_LIST} />
-                <Field label="CEP" value={filialForm.cep} onChange={v => setFF('cep', v.replace(/\D/g, ''))} maxLen={8} />
+                <MaskedField label="CEP" mask="cep" value={filialForm.cep} onChange={v => setFF('cep', v)} placeholder="00000-000" />
                 <div className="col-span-2"><Field label="Logradouro" value={filialForm.logradouro} onChange={v => setFF('logradouro', v)} /></div>
                 <Field label="Número" value={filialForm.numero} onChange={v => setFF('numero', v)} />
                 <Field label="Bairro" value={filialForm.bairro} onChange={v => setFF('bairro', v)} />

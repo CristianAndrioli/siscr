@@ -17,23 +17,30 @@ export function formatCurrency(value: number | string | null | undefined): strin
 }
 
 /**
- * Formata CPF (000.000.000-00)
+ * Formata CPF (000.000.000-00) — suporta digitação incremental
  */
 export function formatCPF(cpf: string | null | undefined): string {
   if (!cpf) return '';
-  const cleaned = cpf.replace(/\D/g, '');
-  if (cleaned.length !== 11) return cpf;
-  return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  const d = cpf.replace(/\D/g, '').slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return d.replace(/(\d{3})(\d+)/, '$1.$2');
+  if (d.length <= 9) return d.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1.$2.$3-$4');
 }
 
 /**
- * Formata CNPJ (00.000.000/0000-00)
+ * Formata CNPJ (00.000.000/0000-00) — suporta digitação incremental
  */
 export function formatCNPJ(cnpj: string | null | undefined): string {
   if (!cnpj) return '';
-  const cleaned = cnpj.replace(/\D/g, '');
-  if (cleaned.length !== 14) return cnpj;
-  return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  const d = cnpj.replace(/\D/g, '').slice(0, 14);
+  if (d.length === 0) return '';
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return d.replace(/(\d{2})(\d+)/, '$1.$2');
+  if (d.length <= 8) return d.replace(/(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
+  if (d.length <= 12) return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
+  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d+)/, '$1.$2.$3/$4-$5');
 }
 
 /**

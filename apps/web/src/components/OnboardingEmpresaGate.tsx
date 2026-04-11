@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import api from '../services/api';
 import { authService } from '../services/auth';
+import MaskedInput from './common/MaskedInput';
 
 type OnboardingStatus = {
   needsEmpresaOnboarding: boolean;
@@ -276,12 +277,13 @@ function OnboardingWizard({
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-slate-400">CNPJ * (14 dígitos)</span>
-                <input
+                <span className="text-xs font-medium text-slate-400">CNPJ *</span>
+                <MaskedInput
+                  mask="cnpj"
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-brand-500 focus:outline-none font-mono"
                   value={cnpj}
-                  onChange={(e) => setCnpj(e.target.value)}
-                  placeholder="Somente números"
+                  onChange={setCnpj}
+                  placeholder="00.000.000/0000-00"
                 />
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -296,10 +298,12 @@ function OnboardingWizard({
                 </label>
                 <label className="block">
                   <span className="text-xs font-medium text-slate-400">Telefone</span>
-                  <input
+                  <MaskedInput
+                    mask="phone"
                     className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
                     value={telefone}
-                    onChange={(e) => setTelefone(e.target.value)}
+                    onChange={setTelefone}
+                    placeholder="(48) 99999-9999"
                   />
                 </label>
               </div>
@@ -352,10 +356,12 @@ function OnboardingWizard({
                   </label>
                   <label className="block">
                     <span className="text-xs font-medium text-slate-400">CNPJ da filial (opcional)</span>
-                    <input
+                    <MaskedInput
+                      mask="cnpj"
                       className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono focus:border-brand-500 focus:outline-none"
                       value={filialCnpj}
-                      onChange={(e) => setFilialCnpj(e.target.value)}
+                      onChange={setFilialCnpj}
+                      placeholder="00.000.000/0000-00"
                     />
                   </label>
                   <div className="grid grid-cols-2 gap-3">

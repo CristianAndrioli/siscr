@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { pessoasService, type Pessoa, type PessoaForm } from '../../services/cadastros/pessoas';
+import MaskedInput from '../../components/common/MaskedInput';
 
 const TIPO_CADASTRO_OPTS = [
   { value: 'cliente', label: 'Cliente' },
@@ -276,7 +277,7 @@ export function PessoasDetail() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Tipo <span className="text-red-500">*</span>
                 </label>
-                <select value={form.tipo} onChange={e => set('tipo', e.target.value)} required className={INPUT_CLS}>
+                <select value={form.tipo} onChange={e => { set('tipo', e.target.value); set('cpfCnpj', ''); }} required className={INPUT_CLS}>
                   {TIPO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
@@ -302,21 +303,23 @@ export function PessoasDetail() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CPF/CNPJ</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  {form.tipo === 'PJ' ? 'CNPJ' : 'CPF'}
+                </label>
+                <MaskedInput
+                  mask={form.tipo === 'PJ' ? 'cnpj' : 'cpf'}
                   value={form.cpfCnpj}
-                  onChange={e => set('cpfCnpj', e.target.value)}
-                  placeholder="000.000.000-00"
+                  onChange={v => set('cpfCnpj', v)}
+                  placeholder={form.tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
                   className={INPUT_CLS}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
-                <input
-                  type="text"
+                <MaskedInput
+                  mask="phone"
                   value={form.telefone}
-                  onChange={e => set('telefone', e.target.value)}
+                  onChange={v => set('telefone', v)}
                   placeholder="(48) 99999-9999"
                   className={INPUT_CLS}
                 />
@@ -342,13 +345,12 @@ export function PessoasDetail() {
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CEP</label>
                 <div className="relative">
-                  <input
-                    type="text"
+                  <MaskedInput
+                    mask="cep"
                     value={form.cep}
-                    onChange={e => set('cep', e.target.value)}
+                    onChange={v => set('cep', v)}
                     onBlur={handleCepBlur}
                     placeholder="00000-000"
-                    maxLength={9}
                     className={INPUT_CLS}
                   />
                   {loadingCep && (
