@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { bancarioService, type ContaBancaria, type ContaBancariaForm } from '../../services/bancario';
 
 import { fmtBRL as fmt } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 
 const TIPO_LABEL: Record<string, string> = {
   corrente: 'Conta Corrente',
@@ -327,13 +328,9 @@ export function ContasBancariasPage() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                   Saldo inicial (R$)
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={form.saldo_inicial || ''}
-                  onChange={e => setForm(f => ({ ...f, saldo_inicial: parseFloat(e.target.value) || 0 }))}
-                  placeholder="0,00"
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                <CurrencyInput
+                  value={form.saldo_inicial}
+                  onChange={v => setForm(f => ({ ...f, saldo_inicial: v }))}
                 />
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Saldo que a conta já tinha antes de usar o sistema.</p>
               </div>

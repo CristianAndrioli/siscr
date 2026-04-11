@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { produtosService, type Produto, type ProdutoForm } from '../../services/cadastros/produtos';
 import { fmtBRL } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 
 const UNIDADES = ['UN', 'CX', 'KG', 'LT', 'MT', 'PC', 'PAR', 'RL', 'SC', 'TON'];
 
@@ -220,26 +221,11 @@ export function ProdutosDetail() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Preço de Venda <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.precoVenda}
-                onChange={e => set('precoVenda', parseFloat(e.target.value) || 0)}
-                required
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+              <CurrencyInput value={form.precoVenda} onChange={v => set('precoVenda', v)} required />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Preço de Custo</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.precoCusto}
-                onChange={e => set('precoCusto', parseFloat(e.target.value) || 0)}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+              <CurrencyInput value={form.precoCusto} onChange={v => set('precoCusto', v)} />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">NCM</label>

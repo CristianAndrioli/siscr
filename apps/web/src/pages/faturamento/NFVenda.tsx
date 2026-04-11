@@ -4,6 +4,7 @@ import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
 import { fmtBRL, fmtDate } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
   rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -346,13 +347,25 @@ export function NFVendaPage() {
                       {form.itens.length > 1 && <button onClick={() => setForm(f => ({ ...f, itens: f.itens.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600 shrink-0"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>}
                     </div>
                     <div className="grid grid-cols-5 gap-2">
-                      {([['Qtd.', 'quantidade', 'number'], ['Unid.', 'unidade', 'text'], ['CFOP', 'cfop', 'text'], ['NCM', 'ncm', 'text'], ['Vlr. Unit.', 'valorUnitario', 'number']] as const).map(([label, field, type]) => (
+                      {([['Qtd.', 'quantidade'], ['Unid.', 'unidade'], ['CFOP', 'cfop'], ['NCM', 'ncm']] as const).map(([label, field]) => (
                         <div key={field}>
                           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">{label}</label>
-                          <input type={type} value={(item as any)[field]} onChange={e => setItem(idx, field as keyof NFItem, type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
-                            className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                          <input
+                            type={field === 'quantidade' ? 'number' : 'text'}
+                            value={(item as any)[field]}
+                            onChange={e => setItem(idx, field as keyof NFItem, field === 'quantidade' ? parseFloat(e.target.value) || 0 : e.target.value)}
+                            className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                          />
                         </div>
                       ))}
+                      <div>
+                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Vlr. Unit.</label>
+                        <CurrencyInput
+                          value={item.valorUnitario}
+                          onChange={v => setItem(idx, 'valorUnitario', v)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
+                        />
+                      </div>
                     </div>
                     <div className="text-right text-xs font-bold text-slate-600 dark:text-slate-300">Total: {fmtBRL(calcItemTotal(item))}</div>
                   </div>

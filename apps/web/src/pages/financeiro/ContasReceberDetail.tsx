@@ -5,6 +5,7 @@ import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
 import { fmtBRL as fmt, fmtDate } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
@@ -377,13 +378,10 @@ export function ContasReceberDetail() {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Valor <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={form.valor || ''}
-                    onChange={e => set('valor', parseFloat(e.target.value) || 0)}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  <CurrencyInput
+                    value={form.valor}
+                    onChange={v => set('valor', v)}
+                    required
                   />
                 </div>
 
@@ -472,13 +470,9 @@ export function ContasReceberDetail() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Valor recebido (R$)</label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
+                <CurrencyInput
                   value={pagarData.valorPago}
-                  onChange={e => setPagarData(prev => ({ ...prev, valorPago: parseFloat(e.target.value) || 0 }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  onChange={v => setPagarData(prev => ({ ...prev, valorPago: v }))}
                 />
               </div>
               <div>

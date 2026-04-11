@@ -4,6 +4,7 @@ import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
 import { fmtBRL, fmtDate } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 const fmtPct = (v?: number | null) => v != null ? `${v}%` : '—';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
@@ -332,13 +333,11 @@ export function NFSePage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Valor do Serviço (R$) <span className="text-red-500">*</span></label>
-                  <input type="number" min="0" step="0.01" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  <CurrencyInput value={form.valor} onChange={v => setForm(f => ({ ...f, valor: v }))} required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Desconto (R$)</label>
-                  <input type="number" min="0" step="0.01" value={form.desconto} onChange={e => setForm(f => ({ ...f, desconto: parseFloat(e.target.value) || 0 }))}
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  <CurrencyInput value={form.desconto} onChange={v => setForm(f => ({ ...f, desconto: v }))} />
                 </div>
               </div>
 

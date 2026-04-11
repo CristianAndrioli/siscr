@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { servicosService, type Servico, type ServicoForm } from '../../services/cadastros/servicos';
 import { fmtBRL } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 
 const UNIDADES = ['UN', 'HR', 'DIA', 'MES', 'KM', 'SV'];
 
@@ -214,15 +215,7 @@ export function ServicosDetail() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                 Preço <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.preco}
-                onChange={e => set('preco', parseFloat(e.target.value) || 0)}
-                required
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+              <CurrencyInput value={form.preco} onChange={v => set('preco', v)} required />
             </div>
             <div className="flex items-center gap-3 pt-6">
               <input

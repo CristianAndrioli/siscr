@@ -4,6 +4,7 @@ import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
 import { fmtBRL } from '../../utils/format';
+import CurrencyInput from '../../components/common/CurrencyInput';
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 
 const STATUS_STYLE: Record<CotacaoStatus, string> = {
@@ -277,13 +278,13 @@ export function CotacoesPage() {
                       </div>
                       <div>
                         <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Vlr. Unit.</label>
-                        <input type="number" min="0" step="0.01" value={item.valorUnitario} onChange={e => setItem(idx, 'valorUnitario', parseFloat(e.target.value) || 0)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <CurrencyInput value={item.valorUnitario} onChange={v => setItem(idx, 'valorUnitario', v)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums" />
                       </div>
                       <div>
                         <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Desc. item</label>
-                        <input type="number" min="0" step="0.01" value={item.desconto} onChange={e => setItem(idx, 'desconto', parseFloat(e.target.value) || 0)} placeholder="0"
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <CurrencyInput value={item.desconto} onChange={v => setItem(idx, 'desconto', v)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums" />
                       </div>
                     </div>
                     <div className="text-right text-xs font-bold text-slate-600 dark:text-slate-300">Subtotal item: {fmtBRL(calcItemTotal(item))}</div>
@@ -305,8 +306,8 @@ export function CotacoesPage() {
                 </div>
                 <div className="flex justify-between items-center gap-2">
                   <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Desconto geral:</span>
-                  <input type="number" min="0" step="0.01" value={form.desconto} onChange={e => setForm(f => ({ ...f, desconto: parseFloat(e.target.value) || 0 }))}
-                    className="w-28 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right" />
+                  <CurrencyInput value={form.desconto} onChange={v => setForm(f => ({ ...f, desconto: v }))}
+                    className="w-28 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums" />
                 </div>
                 <div className="flex justify-between font-bold text-base border-t border-slate-200 dark:border-slate-700 pt-2 text-slate-800 dark:text-slate-100">
                   <span>Total:</span><span className="text-brand-600 dark:text-brand-400">{fmtBRL(totalFinal)}</span>
