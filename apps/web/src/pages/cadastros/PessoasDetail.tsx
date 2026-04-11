@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { pessoasService, type Pessoa, type PessoaForm } from '../../services/cadastros/pessoas';
 import MaskedInput from '../../components/common/MaskedInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const TIPO_CADASTRO_OPTS = [
   { value: 'cliente', label: 'Cliente' },
@@ -59,6 +60,7 @@ export function PessoasDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === 'novo';
+  const { reportError } = useErrorNotification();
 
   const [form, setForm] = useState<PessoaForm>(EMPTY);
   const [record, setRecord] = useState<Pessoa | null>(null);
@@ -127,8 +129,9 @@ export function PessoasDetail() {
         const updated = await pessoasService.get(id!);
         setRecord(updated);
       }
-    } catch {
-      setError('Erro ao salvar. Verifique os dados e tente novamente.');
+    } catch (err) {
+      reportError('Erro ao salvar pessoa. Verifique os dados e tente novamente.', err, 'Cadastro de Pessoa');
+      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }
@@ -139,8 +142,9 @@ export function PessoasDetail() {
     try {
       await pessoasService.delete(id!);
       navigate('/cadastros/pessoas');
-    } catch {
-      setError('Erro ao excluir.');
+    } catch (err) {
+      reportError('Erro ao excluir pessoa.', err, 'Cadastro de Pessoa');
+      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
     }
   };
 

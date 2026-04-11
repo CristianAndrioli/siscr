@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { produtosService, type Produto, type ProdutoForm } from '../../services/cadastros/produtos';
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const UNIDADES = ['UN', 'CX', 'KG', 'LT', 'MT', 'PC', 'PAR', 'RL', 'SC', 'TON'];
 
@@ -20,6 +21,7 @@ export function ProdutosDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === 'novo';
+  const { reportError } = useErrorNotification();
 
   const [form, setForm] = useState<ProdutoForm>(EMPTY);
   const [record, setRecord] = useState<Produto | null>(null);
@@ -65,8 +67,9 @@ export function ProdutosDetail() {
         const updated = await produtosService.get(id!);
         setRecord(updated);
       }
-    } catch {
-      setError('Erro ao salvar. Verifique os dados e tente novamente.');
+    } catch (err) {
+      reportError('Erro ao salvar produto. Verifique os dados e tente novamente.', err, 'Cadastro de Produto');
+      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }
@@ -77,8 +80,9 @@ export function ProdutosDetail() {
     try {
       await produtosService.delete(id!);
       navigate('/cadastros/produtos');
-    } catch {
-      setError('Erro ao excluir.');
+    } catch (err) {
+      reportError('Erro ao excluir produto.', err, 'Cadastro de Produto');
+      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
     }
   };
 

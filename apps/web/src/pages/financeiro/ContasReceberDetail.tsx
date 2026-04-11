@@ -6,6 +6,7 @@ import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
 import { fmtBRL as fmt, fmtDate } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
@@ -33,6 +34,7 @@ export function ContasReceberDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === 'novo';
+  const { reportError } = useErrorNotification();
 
   const [record, setRecord] = useState<ContaReceber | null>(null);
   const [form, setForm] = useState<ContaForm>({ ...EMPTY, vencimento: new Date().toISOString().slice(0, 10) });
@@ -95,8 +97,9 @@ export function ContasReceberDetail() {
         setRecord(updated);
         setIsEditing(false);
       }
-    } catch {
-      setError('Erro ao salvar. Verifique os dados.');
+    } catch (err) {
+      reportError('Erro ao salvar conta a receber. Verifique os dados.', err, 'Contas a Receber');
+      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }
@@ -107,8 +110,9 @@ export function ContasReceberDetail() {
     try {
       await contasReceberService.delete(id!);
       navigate('/financeiro/contas-receber');
-    } catch {
-      setError('Erro ao excluir.');
+    } catch (err) {
+      reportError('Erro ao excluir conta a receber.', err, 'Contas a Receber');
+      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
     }
   };
 
@@ -119,8 +123,9 @@ export function ContasReceberDetail() {
       const updated = await contasReceberService.get(id!);
       setRecord(updated);
       setShowPagarModal(false);
-    } catch {
-      setError('Erro ao registrar pagamento.');
+    } catch (err) {
+      reportError('Erro ao registrar recebimento.', err, 'Contas a Receber');
+      setError('Erro ao registrar pagamento. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }

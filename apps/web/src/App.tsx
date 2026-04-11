@@ -1,6 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, ReactNode } from 'react';
 import { authService } from './services/auth';
+import { ErrorNotificationProvider } from './context/ErrorNotificationContext';
+import ErrorToastStack from './components/common/ErrorToast';
+import ErrorLogsPage from './pages/configuracoes/ErrorLogsPage';
 import Login from './pages/Login';
 import CotacoesPage from './pages/faturamento/Cotacoes';
 import NFVendaPage from './pages/faturamento/NFVenda';
@@ -107,6 +110,8 @@ function RootRoute() {
 function App() {
   return (
     <Router>
+      <ErrorNotificationProvider>
+        <ErrorToastStack />
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/app" element={<ProtectedRoute><AppHome /></ProtectedRoute>} />
@@ -162,10 +167,13 @@ function App() {
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/filiais" element={<ProtectedRoute><Layout><FiliaisPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/permissoes" element={<ProtectedRoute><Layout><PermissoesPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/logs/:id" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/logs" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes" element={<ProtectedRoute><Layout><Configuracoes /></Layout></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorNotificationProvider>
     </Router>
   );
 }

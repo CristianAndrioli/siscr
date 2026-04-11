@@ -200,6 +200,7 @@ export default function Layout({ children }: LayoutProps) {
               <SubLink to="/configuracoes/permissoes" label="Permissões" />
               <SubLink to="/configuracoes/filiais" label="Empresas e Filiais" />
               <SubLink to="/subscription-management" label="Assinatura" />
+              <SubLink to="/configuracoes/logs" label="Log de Erros" />
             </SubMenu>
           )}
           <SidebarLink to="/perfil" label="Perfil" iconD={icons.person} />

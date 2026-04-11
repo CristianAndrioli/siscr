@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { servicosService, type Servico, type ServicoForm } from '../../services/cadastros/servicos';
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const UNIDADES = ['UN', 'HR', 'DIA', 'MES', 'KM', 'SV'];
 
@@ -18,6 +19,7 @@ export function ServicosDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === 'novo';
+  const { reportError } = useErrorNotification();
 
   const [form, setForm] = useState<ServicoForm>(EMPTY);
   const [record, setRecord] = useState<Servico | null>(null);
@@ -61,8 +63,9 @@ export function ServicosDetail() {
         const updated = await servicosService.get(id!);
         setRecord(updated);
       }
-    } catch {
-      setError('Erro ao salvar. Verifique os dados e tente novamente.');
+    } catch (err) {
+      reportError('Erro ao salvar serviço. Verifique os dados e tente novamente.', err, 'Cadastro de Serviço');
+      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }
@@ -73,8 +76,9 @@ export function ServicosDetail() {
     try {
       await servicosService.delete(id!);
       navigate('/cadastros/servicos');
-    } catch {
-      setError('Erro ao excluir.');
+    } catch (err) {
+      reportError('Erro ao excluir serviço.', err, 'Cadastro de Serviço');
+      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
     }
   };
 

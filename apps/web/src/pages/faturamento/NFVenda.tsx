@@ -5,6 +5,7 @@ import api from '../../services/api';
 
 import { fmtBRL, fmtDate } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
   rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -26,6 +27,7 @@ type FaturarStep = { label: string; status: 'pending' | 'running' | 'done' | 'er
 interface CondicaoPagamento { parcelas: number; vencimento: string; intervalo_dias: number; }
 
 export function NFVendaPage() {
+  const { reportError } = useErrorNotification();
   const [notas, setNotas] = useState<NotaFiscal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,8 +115,9 @@ export function NFVendaPage() {
         itens: validItens,
       });
       setModalMode(null); load();
-    } catch (err: any) {
-      setModalError(err?.response?.data?.error || 'Erro ao salvar.');
+    } catch (err) {
+      reportError('Erro ao salvar NF-e.', err, 'Faturamento NF-e');
+      setModalError((err as {response?: {data?: {error?: string}}})?.response?.data?.error || 'Erro ao salvar. Consulte o log de erros para mais detalhes.');
     } finally { setSaving(false); }
   };
 
@@ -188,9 +191,10 @@ export function NFVendaPage() {
 
       setFaturarDone(true);
       load();
-    } catch (err: any) {
+    } catch (err) {
+      reportError('Erro ao faturar NF-e.', err, 'Faturamento NF-e');
       setFaturarSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'error' } : s));
-      setModalError(err?.response?.data?.error || 'Erro ao faturar nota.');
+      setModalError((err as {response?: {data?: {error?: string}}})?.response?.data?.error || 'Erro ao faturar nota. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }

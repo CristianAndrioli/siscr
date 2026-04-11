@@ -6,6 +6,7 @@ import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
 import { fmtBRL as fmt, fmtDate } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
@@ -33,6 +34,7 @@ export function ContasPagarDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = id === 'novo';
+  const { reportError } = useErrorNotification();
 
   const [record, setRecord] = useState<ContaPagar | null>(null);
   const [form, setForm] = useState<ContaForm>({ ...EMPTY, vencimento: new Date().toISOString().slice(0, 10) });
@@ -94,8 +96,9 @@ export function ContasPagarDetail() {
         setRecord(updated);
         setIsEditing(false);
       }
-    } catch {
-      setError('Erro ao salvar. Verifique os dados.');
+    } catch (err) {
+      reportError('Erro ao salvar conta a pagar. Verifique os dados.', err, 'Contas a Pagar');
+      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }
@@ -106,8 +109,9 @@ export function ContasPagarDetail() {
     try {
       await contasPagarService.delete(id!);
       navigate('/financeiro/contas-pagar');
-    } catch {
-      setError('Erro ao excluir.');
+    } catch (err) {
+      reportError('Erro ao excluir conta a pagar.', err, 'Contas a Pagar');
+      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
     }
   };
 
@@ -118,8 +122,9 @@ export function ContasPagarDetail() {
       const updated = await contasPagarService.get(id!);
       setRecord(updated);
       setShowPagarModal(false);
-    } catch {
-      setError('Erro ao registrar pagamento.');
+    } catch (err) {
+      reportError('Erro ao registrar pagamento.', err, 'Contas a Pagar');
+      setError('Erro ao registrar pagamento. Consulte o log de erros para mais detalhes.');
     } finally {
       setSaving(false);
     }
