@@ -6,7 +6,6 @@ import api from '../services/api';
 
 // ─── Helpers ──────────────────────────────────────────────────────
 import { fmtBRL } from '../utils/format';
-import { useErrorNotification } from '../context/ErrorNotificationContext';
 
 const fmtDate = (s?: string) => {
   if (!s) return '—';
@@ -68,7 +67,6 @@ function QuickAction({ to, icon, label, desc }: { to: string; icon: React.ReactN
 
 // ─── Página ───────────────────────────────────────────────────────
 function AppHome() {
-  const { reportError } = useErrorNotification();
   const [userName, setUserName] = useState('');
   const [dash, setDash] = useState<FinDash | null>(null);
   const [cotacoesAbertas, setCotacoesAbertas] = useState(0);
@@ -113,24 +111,6 @@ function AppHome() {
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             Nova Cotação
           </Link>
-        </div>
-
-        {/* [TESTE] Botão temporário para testar o sistema de log de erros — remover após validação */}
-        <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl">
-          <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-          <span className="text-sm text-amber-700 dark:text-amber-300 flex-1">Área de teste do sistema de erros</span>
-          <button
-            onClick={() => reportError(
-              'Não foi possível processar a solicitação. Tente novamente em instantes.',
-              { message: 'Request failed with status code 422', response: { status: 422, data: { error: 'Validation failed: campo "valor" é obrigatório' }, config: { url: '/tenant/financeiro/contas-receber' } } },
-              'Teste — Dashboard'
-            )}
-            className="px-3 py-1.5 text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors"
-          >
-            Disparar erro de teste
-          </button>
         </div>
 
         {/* KPIs */}
