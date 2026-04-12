@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
 import { csvAttachment, rowsToCsv } from '../lib/csv'
+import { parseListPagination } from '../lib/listPagination'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -32,28 +33,30 @@ app.get('/receber', async (c) => {
   const { empresaId, filialId, status, vencidoAte, pedidoId } = q
   const exportFmt = q.export
 
-  let query = `
-    SELECT cr.id, cr.codigo, cr.descricao, cr.valor, cr.vencimento, cr.status,
-           cr.categoria, cr.observacoes, cr.data_pagamento, cr.valor_pago,
-           cr.created_at, cr.pessoa_id, cr.pedido_id,
-           p.nome as cliente
+  let where = `
     FROM contas_receber cr
     LEFT JOIN pessoas p ON p.id = cr.pessoa_id
     WHERE cr.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
 
-  if (empresaId) { query += ' AND cr.empresa_id = ?'; params.push(empresaId) }
-  if (filialId) { query += ' AND cr.filial_id = ?'; params.push(filialId) }
-  if (status) { query += ' AND cr.status = ?'; params.push(status) }
-  if (pedidoId) { query += ' AND cr.pedido_id = ?'; params.push(pedidoId) }
-  if (vencidoAte) { query += ' AND cr.vencimento <= ? AND cr.status != ?'; params.push(vencidoAte, 'pago') }
+  if (empresaId) { where += ' AND cr.empresa_id = ?'; params.push(empresaId) }
+  if (filialId) { where += ' AND cr.filial_id = ?'; params.push(filialId) }
+  if (status) { where += ' AND cr.status = ?'; params.push(status) }
+  if (pedidoId) { where += ' AND cr.pedido_id = ?'; params.push(pedidoId) }
+  if (vencidoAte) { where += ' AND cr.vencimento <= ? AND cr.status != ?'; params.push(vencidoAte, 'pago') }
 
-  query += ' ORDER BY cr.vencimento'
+  const selectList = `
+    SELECT cr.id, cr.codigo, cr.descricao, cr.valor, cr.vencimento, cr.status,
+           cr.categoria, cr.observacoes, cr.data_pagamento, cr.valor_pago,
+           cr.created_at, cr.pessoa_id, cr.pedido_id,
+           p.nome as cliente
+  `
 
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
+  const query = `${selectList} ${where} ORDER BY cr.vencimento`
 
   if (exportFmt === 'csv') {
+    const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
     const cols = [
       'codigo',
       'id',
@@ -68,11 +71,21 @@ app.get('/receber', async (c) => {
       'data_pagamento',
       'valor_pago',
     ]
-    const rows = (results ?? []).map((r) => r as Record<string, unknown>)
+    const rows = ((results ?? []) as unknown[]).map((r) => r as Record<string, unknown>)
     return csvAttachment(rowsToCsv(rows, cols), 'contas_receber.csv')
   }
 
-  return c.json({ contas: results })
+  const { limit, offset, page } = parseListPagination(c)
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c ${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+
+  const pageQuery = `${query} LIMIT ? OFFSET ?`
+  const { results: pageResults } = await c.env.DB_SHARED.prepare(pageQuery).bind(...params, limit, offset).all()
+
+  return c.json({ contas: pageResults, total, page, limit })
 })
 
 app.get('/receber/:id', async (c) => {
@@ -203,26 +216,35 @@ app.patch('/receber/:id/pagar', async (c) => {
 app.get('/pagar', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, filialId, status } = c.req.query()
+  const { limit, offset, page } = parseListPagination(c)
 
-  let query = `
-    SELECT cp.id, cp.codigo, cp.descricao, cp.valor, cp.vencimento, cp.status,
-           cp.categoria, cp.observacoes, cp.data_pagamento, cp.valor_pago,
-           cp.created_at, cp.pessoa_id,
-           p.nome as fornecedor
+  let where = `
     FROM contas_pagar cp
     LEFT JOIN pessoas p ON p.id = cp.pessoa_id
     WHERE cp.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
 
-  if (empresaId) { query += ' AND cp.empresa_id = ?'; params.push(empresaId) }
-  if (filialId) { query += ' AND cp.filial_id = ?'; params.push(filialId) }
-  if (status) { query += ' AND cp.status = ?'; params.push(status) }
+  if (empresaId) { where += ' AND cp.empresa_id = ?'; params.push(empresaId) }
+  if (filialId) { where += ' AND cp.filial_id = ?'; params.push(filialId) }
+  if (status) { where += ' AND cp.status = ?'; params.push(status) }
 
-  query += ' ORDER BY cp.vencimento'
+  const selectList = `
+    SELECT cp.id, cp.codigo, cp.descricao, cp.valor, cp.vencimento, cp.status,
+           cp.categoria, cp.observacoes, cp.data_pagamento, cp.valor_pago,
+           cp.created_at, cp.pessoa_id,
+           p.nome as fornecedor
+  `
+  const query = `${selectList} ${where} ORDER BY cp.vencimento`
 
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
-  return c.json({ contas: results })
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c ${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+
+  const { results } = await c.env.DB_SHARED.prepare(`${query} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all()
+  return c.json({ contas: results, total, page, limit })
 })
 
 app.get('/pagar/:id', async (c) => {

@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { estoqueService, type ItemEstoque } from '../../services/estoqueService';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const GRID_ID = 'estoque-atual-list';
 
 const fmtQtd = (v: number) =>
   Number(v ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
@@ -18,7 +26,7 @@ const COLUMNS: SmartColumn<ItemEstoque>[] = [
   { key: 'produto', label: 'Produto', width: 240, required: true,
     render: v => <span className="font-medium text-slate-800 dark:text-slate-100">{String(v ?? '—')}</span> },
   { key: 'codigo', label: 'Código', width: 90,
-    render: v => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{v ?? '—'}</span> },
+    render: v => <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{v != null && v !== '' ? String(v) : '—'}</span> },
   { key: 'location', label: 'Local', width: 140,
     render: v => (
       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${TIPO_COLOR[String(v)] ?? TIPO_COLOR.GERAL}`}>
@@ -39,6 +47,12 @@ const COLUMNS: SmartColumn<ItemEstoque>[] = [
 
 export function EstoqueAtualList() {
   const [itens, setItens] = useState<ItemEstoque[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(GRID_ID)?.pageSize),
+  );
+  const [meta, setMeta] = useState({ com_saldo: 0, zerados: 0, locais: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -46,20 +60,26 @@ export function EstoqueAtualList() {
     setLoading(true);
     setError('');
     try {
-      const data = await estoqueService.posicao();
-      setItens(data);
+      const r = await estoqueService.posicao({ page, limit: pageSize });
+      setItens(r.estoque);
+      setTotal(r.total);
+      setMeta(r.meta);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
     } catch {
       setError('Erro ao carregar posição de estoque.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const totalItens = itens.length;
-  const totalZerado = itens.filter(i => i.quantidade <= 0).length;
-  const locaisCount = new Set(itens.map(i => i.location)).size;
+  const comSaldo = meta.com_saldo;
+  const totalZerado = meta.zerados;
+  const locaisCount = meta.locais;
 
   return (
     <div className="space-y-5">
@@ -82,7 +102,7 @@ export function EstoqueAtualList() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Com saldo</p>
-          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{totalItens - totalZerado}</p>
+          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">{comSaldo}</p>
         </div>
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
           <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Locais</p>
@@ -101,13 +121,23 @@ export function EstoqueAtualList() {
       )}
 
       <SmartGrid<ItemEstoque>
-        gridId="estoque-atual-list"
+        gridId={GRID_ID}
         data={itens}
         columns={COLUMNS}
         defaultSort={{ key: 'produto', dir: 'asc' }}
         loading={loading}
         emptyMessage="Nenhum item de estoque. Registre uma entrada em Movimentações."
         getRowClass={row => row.quantidade <= 0 ? 'bg-red-50/30 dark:bg-red-950/20' : ''}
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
     </div>
   );

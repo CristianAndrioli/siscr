@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { contasReceberService, type ContaReceber } from '../../services/financeiro';
+import { contasReceberService, financeiroService, type ContaReceber } from '../../services/financeiro';
 import { fmtBRL as fmt, fmtDate } from '../../utils/format';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const GRID_ID = 'contas-receber-list';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
@@ -14,7 +22,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const COLUMNS: SmartColumn<ContaReceber>[] = [
   { key: 'codigo', label: '#', width: 70, required: true, align: 'center',
-    render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v ?? '—'}</span> },
+    render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v != null && v !== '' ? String(v) : '—'}</span> },
   { key: 'descricao', label: 'Descrição', width: 220, required: true,
     render: v => <span className="font-medium text-slate-800 dark:text-slate-100">{String(v ?? '—')}</span> },
   { key: 'cliente', label: 'Cliente', width: 180 },
@@ -41,38 +49,72 @@ const COLUMNS: SmartColumn<ContaReceber>[] = [
 export function ContasReceberList() {
   const navigate = useNavigate();
   const [contas, setContas] = useState<ContaReceber[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(GRID_ID)?.pageSize),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
+  const [resumo, setResumo] = useState<{ pendente: number; recebido: number; vencido: number } | null>(null);
+
+  const loadResumo = useCallback(async () => {
+    try {
+      const d = await financeiroService.dashboard();
+      const r = d.receber as { pendente?: number; recebido?: number; vencido?: number };
+      setResumo({
+        pendente: Number(r.pendente ?? 0),
+        recebido: Number(r.recebido ?? 0),
+        vencido: Number(r.vencido ?? 0),
+      });
+    } catch {
+      setResumo(null);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await contasReceberService.list(statusFiltro ? { status: statusFiltro } : {});
-      setContas(data);
+      const r = await contasReceberService.list({
+        status: statusFiltro || undefined,
+        page,
+        limit: pageSize,
+      });
+      setContas(r.contas);
+      setTotal(r.total);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
     } catch {
       setError('Erro ao carregar contas a receber.');
     } finally {
       setLoading(false);
     }
-  }, [statusFiltro]);
+  }, [statusFiltro, page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadResumo();
+  }, [loadResumo]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Excluir esta conta?')) return;
     try {
       await contasReceberService.delete(id);
-      setContas(prev => prev.filter(c => c.id !== id));
+      await load();
+      await loadResumo();
     } catch {
       alert('Erro ao excluir.');
     }
   };
 
-  const totalPendente = contas.filter(c => c.status === 'pendente').reduce((s, c) => s + c.valor, 0);
-  const totalRecebido = contas.filter(c => c.status === 'pago').reduce((s, c) => s + c.valor, 0);
-  const totalVencido = contas.filter(c => c.status === 'pendente' && c.vencimento < today()).reduce((s, c) => s + c.valor, 0);
+  const totalPendente = resumo?.pendente ?? 0;
+  const totalRecebido = resumo?.recebido ?? 0;
+  const totalVencido = resumo?.vencido ?? 0;
 
   return (
     <div className="space-y-5">
@@ -105,7 +147,10 @@ export function ContasReceberList() {
       <div className="flex gap-3">
         <select
           value={statusFiltro}
-          onChange={e => setStatusFiltro(e.target.value)}
+          onChange={(e) => {
+            setStatusFiltro(e.target.value);
+            setPage(0);
+          }}
           className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
         >
           <option value="">Todos os status</option>
@@ -116,7 +161,7 @@ export function ContasReceberList() {
       </div>
 
       <SmartGrid<ContaReceber>
-        gridId="contas-receber-list"
+        gridId={GRID_ID}
         data={contas}
         columns={COLUMNS}
         defaultSort={{ key: 'vencimento', dir: 'asc' }}
@@ -128,6 +173,16 @@ export function ContasReceberList() {
         actions={c => (
           <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(c.id)); }} />
         )}
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
     </div>
   );

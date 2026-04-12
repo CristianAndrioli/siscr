@@ -85,10 +85,30 @@ export interface DashboardData {
 
 const BASE = '/tenant/financeiro';
 
+export type ContasListPage = {
+  contas: ContaReceber[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type ContasPagarListPage = {
+  contas: ContaPagar[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 export const contasReceberService = {
-  list: async (params?: { status?: string }): Promise<ContaReceber[]> => {
+  list: async (params?: { status?: string; page?: number; limit?: number }): Promise<ContasListPage> => {
     const res = await api.get(`${BASE}/receber`, { params });
-    return res.data.contas ?? [];
+    const d = res.data;
+    return {
+      contas: d.contas ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+    };
   },
   get: async (id: string): Promise<ContaReceber> => {
     const res = await api.get(`${BASE}/receber/${id}`);
@@ -110,9 +130,15 @@ export const contasReceberService = {
 };
 
 export const contasPagarService = {
-  list: async (params?: { status?: string }): Promise<ContaPagar[]> => {
+  list: async (params?: { status?: string; page?: number; limit?: number }): Promise<ContasPagarListPage> => {
     const res = await api.get(`${BASE}/pagar`, { params });
-    return res.data.contas ?? [];
+    const d = res.data;
+    return {
+      contas: d.contas ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+    };
   },
   get: async (id: string): Promise<ContaPagar> => {
     const res = await api.get(`${BASE}/pagar/${id}`);

@@ -8,7 +8,12 @@ import {
   type NcmSyncPostResponse,
 } from '../../services/faturamentoService';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
-import { loadGridPreferences, normalizeGridPageSize } from '../../utils/gridPreferences';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
 
 function labelFonte(source: string): string {
   if (source === 'classif') return 'Siscomex';
@@ -72,7 +77,8 @@ export function NcmConfigPage() {
 
   const [search, setSearch] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
-  const [rowLimit, setRowLimit] = useState(() =>
+  const [page, setPage] = useState(() => loadGridListPage(NCM_GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
     normalizeGridPageSize(loadGridPreferences(NCM_GRID_ID)?.pageSize),
   );
   const [catalogTotal, setCatalogTotal] = useState(0);
@@ -98,11 +104,13 @@ export function NcmConfigPage() {
     try {
       const r = await ncmCatalogService.items({
         q: appliedSearch || undefined,
-        limit: rowLimit,
-        offset: 0,
+        limit: pageSize,
+        page,
       });
       setRows(toGridRows(r.items));
       setCatalogTotal(r.total);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
     } catch {
       setError('Não foi possível carregar os códigos NCM.');
       setRows([]);
@@ -110,7 +118,7 @@ export function NcmConfigPage() {
     } finally {
       setGridLoading(false);
     }
-  }, [appliedSearch, rowLimit]);
+  }, [appliedSearch, page, pageSize]);
 
   useEffect(() => {
     loadStatus();
@@ -258,6 +266,7 @@ export function NcmConfigPage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          setPage(0);
           setAppliedSearch(search.trim());
         }}
         className="flex gap-2 flex-wrap"
@@ -283,13 +292,21 @@ export function NcmConfigPage() {
         columns={NCM_COLUMNS}
         defaultSort={{ key: 'codigo', dir: 'asc' }}
         loading={gridLoading}
-        rowLimit={{ value: rowLimit, onChange: setRowLimit }}
-        backendTotalCount={catalogTotal}
         emptyMessage={
           (status?.itemCount ?? 0) === 0
             ? 'Nenhum código na base. Peça a um administrador para atualizar o catálogo.'
-            : 'Nenhum registo com estes critérios. Ajuste a busca acima ou os filtros por coluna.'
+            : 'Nenhum registo com estes critérios. Ajuste a busca acima.'
         }
+        serverPagination={{
+          total: catalogTotal,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
     </div>
   );

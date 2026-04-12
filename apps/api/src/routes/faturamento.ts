@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
+import { parseListPagination } from '../lib/listPagination'
 import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
 import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
@@ -849,14 +850,18 @@ app.get('/ncm/items', async (c) => {
   const q = qRaw.replace(/[%_]/g, '')
   const full = c.req.query('full') === '1'
   const limitCap = full ? 120_000 : 200
-  const limit = Math.min(Math.max(Number(c.req.query('limit')) || (full ? limitCap : 50), 1), limitCap)
-  const offset = full ? 0 : Math.max(Number(c.req.query('offset')) || 0, 0)
+  const pag = parseListPagination(c)
+  const limit = full
+    ? Math.min(Math.max(Number(c.req.query('limit')) || limitCap, 1), limitCap)
+    : Math.min(Math.max(pag.limit, 1), limitCap)
+  const offset = full ? 0 : pag.offset
+  const page = full ? 0 : pag.page
 
   const active = await db
     .prepare(`SELECT value FROM ncm_meta WHERE key = 'active_batch_id'`)
     .first<{ value: string }>()
   if (!active?.value) {
-    return c.json({ items: [], total: 0 })
+    return c.json({ items: [], total: 0, page: 0, limit: pag.limit })
   }
   const batchId = active.value
 
@@ -915,6 +920,8 @@ app.get('/ncm/items', async (c) => {
 
   return c.json({
     total,
+    page,
+    limit,
     items: (results ?? []).map((row) => ({
       codigo: row.codigo_8?.trim() || row.codigo_raw,
       descricao: row.descricao,

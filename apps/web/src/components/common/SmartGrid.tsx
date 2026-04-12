@@ -10,7 +10,7 @@ import {
 
 // ─── Column definition ────────────────────────────────────────────────────────
 
-export interface SmartColumn<T = Record<string, unknown>> {
+export interface SmartColumn<T = object> {
   key: string;
   label: string;
   width?: number;
@@ -24,14 +24,19 @@ export interface SmartColumn<T = Record<string, unknown>> {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-export interface SmartGridRowLimitProps {
-  value: number;
-  onChange: (n: number) => void;
-  /** Predefinição: 10, 20, 50, 100, 200 */
+/** Paginação no servidor: `data` deve conter só a página actual. */
+export interface SmartGridServerPagination {
+  total: number;
+  /** 0-based */
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  /** Deve repor a página para 0 quando o tamanho mudar (evita pedidos duplicados). */
+  onPageSizeChange: (pageSize: number) => void;
   options?: readonly number[];
 }
 
-interface SmartGridProps<T extends Record<string, unknown>> {
+interface SmartGridProps<T extends object> {
   gridId: string;
   data: T[];
   columns: SmartColumn<T>[];
@@ -46,12 +51,10 @@ interface SmartGridProps<T extends Record<string, unknown>> {
   /** Optional extra CSS class for a row */
   getRowClass?: (row: T) => string;
   /**
-   * Limite de registos vindo da API; o seletor em baixo persiste `pageSize` nas preferências da grelha.
-   * Sem isto, o SmartGrid continua a assumir que `data` já é o conjunto completo (padrão actual nas listas de cadastro).
+   * Lista paginada no servidor. Desactiva filtros por coluna (dados incompletos).
+   * Persiste `pageSize` e `listPage` nas preferências da grelha.
    */
-  rowLimit?: SmartGridRowLimitProps;
-  /** Total no servidor (ex.: catálogo), para texto “N de M” quando M > linhas carregadas */
-  backendTotalCount?: number;
+  serverPagination?: SmartGridServerPagination;
 }
 
 // ─── Icons (inline SVG helpers) ───────────────────────────────────────────────
@@ -89,7 +92,7 @@ const IconDelete = () => (
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SmartGrid<T extends Record<string, unknown>>({
+export function SmartGrid<T extends object>({
   gridId,
   data,
   columns,
@@ -101,11 +104,9 @@ export function SmartGrid<T extends Record<string, unknown>>({
   emptyMessage = 'Nenhum registro encontrado.',
   actions,
   getRowClass,
-  rowLimit,
-  backendTotalCount,
+  serverPagination,
 }: SmartGridProps<T>) {
-  const rowLimitOptions = rowLimit?.options ?? GRID_PAGE_SIZE_OPTIONS;
-  const rowLimitValue = rowLimit?.value;
+  const pageSizeOptions = serverPagination?.options ?? GRID_PAGE_SIZE_OPTIONS;
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [sort, setSort] = useState<GridSort | null>(defaultSort ?? null);
@@ -168,9 +169,20 @@ export function SmartGrid<T extends Record<string, unknown>>({
       columnOrder,
       columnWidths,
       visibleColumns,
-      ...(rowLimitValue != null ? { pageSize: rowLimitValue } : {}),
+      ...(serverPagination != null
+        ? { pageSize: serverPagination.pageSize, listPage: serverPagination.page }
+        : {}),
     });
-  }, [gridId, sort, filters, columnOrder, columnWidths, visibleColumns, rowLimitValue]);
+  }, [
+    gridId,
+    sort,
+    filters,
+    columnOrder,
+    columnWidths,
+    visibleColumns,
+    serverPagination?.page,
+    serverPagination?.pageSize,
+  ]);
 
   useEffect(() => {
     if (!prefsLoaded.current) return;
@@ -190,17 +202,19 @@ export function SmartGrid<T extends Record<string, unknown>>({
   // ── Filtering (client-side per column) ────────────────────────────────────
 
   const filteredData = useMemo(() => {
+    if (serverPagination) return data;
+
     const activeFilters = Object.entries(filters).filter(([, v]) => v.trim() !== '');
     if (!activeFilters.length) return data;
 
     return data.filter(row =>
       activeFilters.every(([key, val]) => {
-        const cell = row[key];
+        const cell = (row as Record<string, unknown>)[key];
         if (cell === null || cell === undefined) return false;
         return String(cell).toLowerCase().includes(val.toLowerCase());
       }),
     );
-  }, [data, filters]);
+  }, [data, filters, serverPagination]);
 
   // ── Sorting (client-side) ─────────────────────────────────────────────────
 
@@ -208,8 +222,8 @@ export function SmartGrid<T extends Record<string, unknown>>({
     if (!sort) return filteredData;
 
     return [...filteredData].sort((a, b) => {
-      const aVal = a[sort.key];
-      const bVal = b[sort.key];
+      const aVal = (a as Record<string, unknown>)[sort.key];
+      const bVal = (b as Record<string, unknown>)[sort.key];
 
       if (aVal === null || aVal === undefined) return 1;
       if (bVal === null || bVal === undefined) return -1;
@@ -244,7 +258,10 @@ export function SmartGrid<T extends Record<string, unknown>>({
     setColumnWidths({});
     setVisibleColumns(columns.map(c => c.key));
     setShowFilters(false);
-    if (rowLimit) rowLimit.onChange(DEFAULT_GRID_PAGE_SIZE);
+    if (serverPagination) {
+      serverPagination.onPageChange(0);
+      serverPagination.onPageSizeChange(DEFAULT_GRID_PAGE_SIZE);
+    }
   };
 
   // Drag reorder
@@ -297,8 +314,12 @@ export function SmartGrid<T extends Record<string, unknown>>({
   const hasActiveFilters = Object.values(filters).some(v => v.trim() !== '');
   const activeFilterCount = Object.values(filters).filter(v => v.trim() !== '').length;
 
-  const showServerTotal =
-    rowLimit != null && backendTotalCount != null && backendTotalCount > 0;
+  const pageCount =
+    serverPagination != null
+      ? Math.max(1, Math.ceil(serverPagination.total / Math.max(serverPagination.pageSize, 1)))
+      : 1;
+  const canPrevPage = serverPagination != null && serverPagination.page > 0;
+  const canNextPage = serverPagination != null && serverPagination.page < pageCount - 1;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -308,33 +329,42 @@ export function SmartGrid<T extends Record<string, unknown>>({
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex-wrap">
         <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
-          {sortedData.length} registro{sortedData.length !== 1 ? 's' : ''}
-          {data.length !== sortedData.length
-            ? rowLimit
-              ? ` (sobre ${data.length} carregados)`
-              : ` de ${data.length}`
-            : ''}
-          {showServerTotal ? ` · ${backendTotalCount} no servidor` : ''}
+          {serverPagination ? (
+            <>
+              Página {serverPagination.page + 1} de {pageCount} · {serverPagination.total} registro
+              {serverPagination.total !== 1 ? 's' : ''} no servidor
+              {sortedData.length !== serverPagination.pageSize && sortedData.length > 0
+                ? ` (${sortedData.length} nesta página)`
+                : ''}
+            </>
+          ) : (
+            <>
+              {sortedData.length} registro{sortedData.length !== 1 ? 's' : ''}
+              {data.length !== sortedData.length ? ` de ${data.length}` : ''}
+            </>
+          )}
         </span>
 
         <div className="flex-1" />
 
-        {/* Filter toggle */}
-        <button
-          onClick={() => setShowFilters(f => !f)}
-          title="Filtros por coluna"
-          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-            showFilters || hasActiveFilters
-              ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 border-brand-200 dark:border-brand-700'
-              : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-          }`}
-        >
-          <IconFilter />
-          Filtros
-          {activeFilterCount > 0 && (
-            <span className="bg-brand-500 text-white rounded-full px-1.5 text-[10px] leading-4">{activeFilterCount}</span>
-          )}
-        </button>
+        {/* Filter toggle — só modo cliente (página completa em memória) */}
+        {!serverPagination && (
+          <button
+            onClick={() => setShowFilters(f => !f)}
+            title="Filtros por coluna"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+              showFilters || hasActiveFilters
+                ? 'bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 border-brand-200 dark:border-brand-700'
+                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+            }`}
+          >
+            <IconFilter />
+            Filtros
+            {activeFilterCount > 0 && (
+              <span className="bg-brand-500 text-white rounded-full px-1.5 text-[10px] leading-4">{activeFilterCount}</span>
+            )}
+          </button>
+        )}
 
         {/* Columns toggle */}
         <button
@@ -420,7 +450,7 @@ export function SmartGrid<T extends Record<string, unknown>>({
             </tr>
 
             {/* Filter row */}
-            {showFilters && (
+            {showFilters && !serverPagination && (
               <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40">
                 {orderedVisibleColumns.map(col => (
                   <td key={col.key} className="px-2 py-1.5">
@@ -460,7 +490,8 @@ export function SmartGrid<T extends Record<string, unknown>>({
               </tr>
             ) : (
               sortedData.map((row, idx) => {
-                const rowKey = (row.id as string) ?? idx;
+                const rid = (row as Record<string, unknown>).id;
+                const rowKey = rid != null && rid !== '' ? String(rid) : idx;
                 const extraClass = getRowClass ? getRowClass(row) : '';
                 return (
                   <tr
@@ -478,8 +509,11 @@ export function SmartGrid<T extends Record<string, unknown>>({
                       >
                         <div className="truncate">
                           {col.render
-                            ? col.render(row[col.key], row)
-                            : (row[col.key] !== null && row[col.key] !== undefined ? String(row[col.key]) : '—')}
+                            ? col.render((row as Record<string, unknown>)[col.key], row)
+                            : ((row as Record<string, unknown>)[col.key] !== null &&
+                                (row as Record<string, unknown>)[col.key] !== undefined
+                                ? String((row as Record<string, unknown>)[col.key])
+                                : '—')}
                         </div>
                       </td>
                     ))}
@@ -499,27 +533,44 @@ export function SmartGrid<T extends Record<string, unknown>>({
         </table>
       </div>
 
-      {rowLimit && (
-        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3 bg-slate-50/60 dark:bg-slate-800/40">
-          <span className="text-xs text-slate-600 dark:text-slate-400">Registos a carregar</span>
-          <select
-            value={rowLimit.value}
-            onChange={(e) => rowLimit.onChange(Number(e.target.value))}
-            className="text-xs border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-            aria-label="Quantidade de registos a carregar"
-          >
-            {rowLimitOptions.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-          {backendTotalCount != null && data.length > 0 && backendTotalCount > data.length && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              Há mais linhas no catálogo — aumente o valor acima. Os filtros por coluna aplicam-se só aos registos já
-              carregados.
-            </span>
-          )}
+      {serverPagination && (
+        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60 dark:bg-slate-800/40">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={!canPrevPage || loading}
+              onClick={() => serverPagination.onPageChange(serverPagination.page - 1)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              disabled={!canNextPage || loading}
+              onClick={() => serverPagination.onPageChange(serverPagination.page + 1)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-40"
+            >
+              Seguinte
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+            <span>Por página</span>
+            <select
+              value={serverPagination.pageSize}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                serverPagination.onPageSizeChange(n);
+              }}
+              className="text-xs border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              aria-label="Registos por página"
+            >
+              {pageSizeOptions.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 

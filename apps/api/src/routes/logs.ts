@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
+import { parseListPagination } from '../lib/listPagination'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -42,21 +43,29 @@ app.post('/errors', zValidator('json', logSchema), async (c) => {
   return c.json({ ok: true }, 201)
 })
 
-/** Lista os últimos 200 erros do tenant (sem stack_trace) */
+/** Lista erros do tenant paginados (sem stack_trace) */
 app.get('/errors', async (c) => {
   const tenant = c.get('tenant')
+  const { limit, offset, page } = parseListPagination(c)
+
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c FROM error_logs WHERE tenant_id = ?`)
+    .bind(tenant.tenantId)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+
   const { results } = await c.env.DB_SHARED
     .prepare(`
       SELECT id, timestamp, friendly_message, technical, url, context, created_at
       FROM error_logs
       WHERE tenant_id = ?
       ORDER BY timestamp DESC
-      LIMIT 200
+      LIMIT ? OFFSET ?
     `)
-    .bind(tenant.tenantId)
+    .bind(tenant.tenantId, limit, offset)
     .all()
 
-  return c.json({ errors: results })
+  return c.json({ errors: results, total, page, limit })
 })
 
 /** Detalhe de um erro (sem stack_trace) */

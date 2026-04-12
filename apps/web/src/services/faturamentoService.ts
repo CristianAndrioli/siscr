@@ -305,6 +305,8 @@ export type NcmItemRow = {
 export type NcmItemsResponse = {
   items: NcmItemRow[];
   total: number;
+  page: number;
+  limit: number;
 };
 
 export type NcmSyncPostResponse = {
@@ -326,15 +328,15 @@ export const ncmCatalogService = {
   items: async (params?: {
     q?: string;
     limit?: number;
-    offset?: number;
-    /** Catálogo completo para grid com filtros/ordenação no cliente (até 120k linhas). */
+    page?: number;
+    /** Catálogo completo para export (até 120k linhas; ignora page). */
     full?: boolean;
   }): Promise<NcmItemsResponse> => {
     const res = await api.get(`${BASE}/ncm/items`, {
       params: {
         q: params?.q,
         limit: params?.limit,
-        offset: params?.offset,
+        page: params?.page,
         full: params?.full ? '1' : undefined,
       },
     });

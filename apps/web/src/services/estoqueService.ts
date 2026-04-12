@@ -74,17 +74,66 @@ export interface LocalForm {
 
 const BASE = '/tenant/estoque';
 
+export interface EstoqueListMeta {
+  com_saldo: number;
+  zerados: number;
+  locais: number;
+}
+
+export interface EstoquePosicaoPage {
+  estoque: ItemEstoque[];
+  total: number;
+  page: number;
+  limit: number;
+  meta: EstoqueListMeta;
+}
+
 export const estoqueService = {
-  posicao: async (params?: { busca?: string; location?: string }): Promise<ItemEstoque[]> => {
+  /** Lista paginada (predefinição 10 por página na API). */
+  posicao: async (params?: {
+    busca?: string;
+    location?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<EstoquePosicaoPage> => {
     const res = await api.get(BASE, { params });
-    return res.data.estoque ?? [];
+    const d = res.data;
+    return {
+      estoque: d.estoque ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+      meta: {
+        com_saldo: Number(d.meta?.com_saldo ?? 0),
+        zerados: Number(d.meta?.zerados ?? 0),
+        locais: Number(d.meta?.locais ?? 0),
+      },
+    };
+  },
+
+  locaisDistinct: async (): Promise<string[]> => {
+    const res = await api.get(`${BASE}/locais-distinct`);
+    return res.data.locais ?? [];
   },
 };
 
+export interface MovimentacoesListPage {
+  movimentacoes: Movimentacao[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export const movimentacoesService = {
-  list: async (params?: { tipo?: string; busca?: string }): Promise<Movimentacao[]> => {
+  list: async (params?: { tipo?: string; busca?: string; page?: number; limit?: number }): Promise<MovimentacoesListPage> => {
     const res = await api.get(`${BASE}/movimentacoes`, { params });
-    return res.data.movimentacoes ?? [];
+    const d = res.data;
+    return {
+      movimentacoes: d.movimentacoes ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+    };
   },
   create: async (data: MovForm): Promise<{ id: string }> => {
     const res = await api.post(`${BASE}/movimentacoes`, data);

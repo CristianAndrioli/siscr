@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchErrorLog, fetchErrorById, clearErrorLog, type ErrorLogEntry } from '../../utils/errorLogger';
 import { SmartGrid, type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const ERROR_LOG_GRID_ID = 'error-logs';
 
 const fmtDatetime = (s?: string | null) =>
   s
@@ -166,24 +174,39 @@ function BackBtn({ onClick }: { onClick: () => void }) {
 function ErrorLogList() {
   const navigate = useNavigate();
   const [entries, setEntries] = useState<ErrorLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(ERROR_LOG_GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(ERROR_LOG_GRID_ID)?.pageSize),
+  );
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
 
-  const reload = () => {
+  const reload = useCallback(async () => {
     setLoading(true);
-    fetchErrorLog()
-      .then(setEntries)
-      .finally(() => setLoading(false));
-  };
+    try {
+      const r = await fetchErrorLog({ page, limit: pageSize });
+      setEntries(r.errors);
+      setTotal(r.total);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize]);
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   const handleClear = async () => {
     if (!window.confirm('Limpar todos os registros de erro?')) return;
     setClearing(true);
     try {
       await clearErrorLog();
+      setPage(0);
       setEntries([]);
+      setTotal(0);
     } finally {
       setClearing(false);
     }
@@ -198,7 +221,7 @@ function ErrorLogList() {
             Erros registrados pelo sistema para este tenant.
           </p>
         </div>
-        {entries.length > 0 && (
+        {total > 0 && (
           <button
             onClick={handleClear}
             disabled={clearing}
@@ -212,23 +235,25 @@ function ErrorLogList() {
         )}
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center min-h-40">
-          <svg className="animate-spin w-6 h-6 text-brand-500" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-        </div>
-      ) : (
-        <SmartGrid<ErrorLogEntry>
-          gridId="error-logs"
-          columns={COLUMNS}
-          data={entries}
-          defaultSort={{ key: 'timestamp', dir: 'desc' }}
-          onRowClick={(row) => navigate(`/configuracoes/logs/${row.id}`)}
-          emptyMessage="Nenhum erro registrado."
-        />
-      )}
+      <SmartGrid<ErrorLogEntry>
+        gridId={ERROR_LOG_GRID_ID}
+        columns={COLUMNS}
+        data={entries}
+        defaultSort={{ key: 'timestamp', dir: 'desc' }}
+        loading={loading}
+        onRowClick={(row) => navigate(`/configuracoes/logs/${row.id}`)}
+        emptyMessage="Nenhum erro registrado."
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
+      />
     </div>
   );
 }

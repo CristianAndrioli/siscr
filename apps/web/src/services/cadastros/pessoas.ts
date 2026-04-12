@@ -53,13 +53,27 @@ function sanitize<T extends Record<string, unknown>>(dados: T): T {
   ) as T;
 }
 
+export type PessoasListResult = {
+  pessoas: Pessoa[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 export const pessoasService = {
-  list: async (params: { search?: string; page?: number } = {}): Promise<Pessoa[]> => {
+  list: async (params: { search?: string; page?: number; limit?: number } = {}): Promise<PessoasListResult> => {
     const query: Record<string, unknown> = {};
     if (params.search) query.busca = params.search;
-    if (params.page) query.page = params.page;
+    if (params.page !== undefined) query.page = params.page;
+    if (params.limit !== undefined) query.limit = params.limit;
     const response = await api.get('/tenant/cadastros/pessoas', { params: query });
-    return response.data.pessoas ?? [];
+    const d = response.data;
+    return {
+      pessoas: d.pessoas ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+    };
   },
 
   get: async (id: string): Promise<Pessoa> => {

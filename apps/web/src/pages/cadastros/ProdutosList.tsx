@@ -3,10 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { produtosService, type Produto } from '../../services/cadastros/produtos';
 import { fmtBRL } from '../../utils/format';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const GRID_ID = 'produtos-list';
 
 const COLUMNS: SmartColumn<Produto>[] = [
   { key: 'codigo', label: 'Cód.', width: 75, required: true, align: 'center',
-    render: v => <span className="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{v ?? '—'}</span> },
+    render: v => <span className="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{v != null && v !== '' ? String(v) : '—'}</span> },
   { key: 'descricao', label: 'Descrição', width: 260, required: true,
     render: (v, row) => (
       <div>
@@ -24,30 +32,45 @@ const COLUMNS: SmartColumn<Produto>[] = [
 export function ProdutosList() {
   const navigate = useNavigate();
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(GRID_ID)?.pageSize),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
 
-  const load = useCallback(async (busca = '') => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await produtosService.list({ search: busca });
-      setProdutos(data);
+      const r = await produtosService.list({
+        search: appliedSearch || undefined,
+        page,
+        limit: pageSize,
+      });
+      setProdutos(r.produtos);
+      setTotal(r.total);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
     } catch {
       setError('Erro ao carregar produtos.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliedSearch, page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDelete = async (id: string, desc: string) => {
     if (!window.confirm(`Deseja excluir "${desc}"?`)) return;
     try {
       await produtosService.delete(id);
-      setProdutos(prev => prev.filter(p => p.id !== id));
+      await load();
     } catch {
       alert('Erro ao excluir. Tente novamente.');
     }
@@ -62,11 +85,18 @@ export function ProdutosList() {
         </div>
       </div>
 
-      <form onSubmit={e => { e.preventDefault(); load(search); }} className="flex gap-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(0);
+          setAppliedSearch(searchInput.trim());
+        }}
+        className="flex gap-2"
+      >
         <input
           type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Buscar por código, SKU ou descrição..."
           className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
@@ -80,7 +110,7 @@ export function ProdutosList() {
       )}
 
       <SmartGrid<Produto>
-        gridId="produtos-list"
+        gridId={GRID_ID}
         data={produtos}
         columns={COLUMNS}
         defaultSort={{ key: 'codigo', dir: 'desc' }}
@@ -92,6 +122,16 @@ export function ProdutosList() {
         actions={p => (
           <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(p.id), String(p.descricao)); }} />
         )}
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
     </div>
   );

@@ -38,13 +38,27 @@ function sanitize(dados: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(dados).filter(([, v]) => v !== ''));
 }
 
+export type ProdutosListResult = {
+  produtos: Produto[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 export const produtosService = {
-  list: async (params: { search?: string; page?: number } = {}): Promise<Produto[]> => {
+  list: async (params: { search?: string; page?: number; limit?: number } = {}): Promise<ProdutosListResult> => {
     const query: Record<string, unknown> = {};
     if (params.search) query.busca = params.search;
-    if (params.page) query.page = params.page;
+    if (params.page !== undefined) query.page = params.page;
+    if (params.limit !== undefined) query.limit = params.limit;
     const response = await api.get('/tenant/cadastros/produtos', { params: query });
-    return response.data.produtos ?? [];
+    const d = response.data;
+    return {
+      produtos: d.produtos ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+    };
   },
 
   get: async (id: string): Promise<Produto> => {

@@ -2,6 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { movimentacoesService, estoqueService, locaisService, type Movimentacao } from '../../services/estoqueService';
 import api from '../../services/api';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const MOVS_GRID_ID = 'movimentacoes-list';
 
 const fmtQtd = (v: number) => Number(v ?? 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 const fmtDate = (s: string) => s ? new Date(s).toLocaleString('pt-BR') : '—';
@@ -46,7 +54,9 @@ function ProdutoBusca({ onSelect }: { onSelect: (p: Produto) => void }) {
     if (!termo.trim()) { setResultados([]); return; }
     setBuscando(true);
     try {
-      const res = await api.get('/tenant/cadastros/produtos', { params: { busca: termo } });
+      const res = await api.get('/tenant/cadastros/produtos', {
+        params: { busca: termo, limit: 50, page: 0 },
+      });
       setResultados(res.data.produtos ?? []);
       setAberto(true);
     } catch {
@@ -134,6 +144,11 @@ function ProdutoBusca({ onSelect }: { onSelect: (p: Produto) => void }) {
 
 export function MovimentacoesList() {
   const [movs, setMovs] = useState<Movimentacao[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(MOVS_GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(MOVS_GRID_ID)?.pageSize),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tipoFiltro, setTipoFiltro] = useState('');
@@ -149,23 +164,31 @@ export function MovimentacoesList() {
     setLoading(true);
     setError('');
     try {
-      const [movsData, estoqueData, locaisData] = await Promise.all([
-        movimentacoesService.list(tipoFiltro ? { tipo: tipoFiltro } : {}),
-        estoqueService.posicao(),
+      const [movsRes, locaisEstoque, locaisData] = await Promise.all([
+        movimentacoesService.list({
+          ...(tipoFiltro ? { tipo: tipoFiltro } : {}),
+          page,
+          limit: pageSize,
+        }),
+        estoqueService.locaisDistinct(),
         locaisService.list(),
       ]);
-      setMovs(movsData);
-      const locaisEstoque = [...new Set(estoqueData.map(i => i.location))];
-      const locaisCadastrados = locaisData.map(l => l.nome);
+      setMovs(movsRes.movimentacoes);
+      setTotal(movsRes.total);
+      const maxPage = Math.max(0, Math.ceil(movsRes.total / Math.max(movsRes.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
+      const locaisCadastrados = locaisData.map((l) => l.nome);
       setLocais([...new Set(['GERAL', ...locaisEstoque, ...locaisCadastrados])].sort());
     } catch {
       setError('Erro ao carregar movimentações.');
     } finally {
       setLoading(false);
     }
-  }, [tipoFiltro]);
+  }, [tipoFiltro, page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const openModal = () => {
     setProdutoSelecionado(null);
@@ -201,7 +224,7 @@ export function MovimentacoesList() {
 
   const COLUMNS: SmartColumn<Movimentacao>[] = [
     { key: 'codigo', label: '#', width: 70, required: true, align: 'center',
-      render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v ?? '—'}</span> },
+      render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v != null && v !== '' ? String(v) : '—'}</span> },
     { key: 'produto', label: 'Produto', width: 220, required: true,
       render: (v, row) => (
         <div>
@@ -257,7 +280,10 @@ export function MovimentacoesList() {
       <div className="flex gap-3">
         <select
           value={tipoFiltro}
-          onChange={e => setTipoFiltro(e.target.value)}
+          onChange={(e) => {
+            setTipoFiltro(e.target.value);
+            setPage(0);
+          }}
           className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
         >
           <option value="">Todos os tipos</option>
@@ -270,12 +296,22 @@ export function MovimentacoesList() {
       </div>
 
       <SmartGrid<Movimentacao>
-        gridId="movimentacoes-list"
+        gridId={MOVS_GRID_ID}
         data={movs}
         columns={COLUMNS}
         defaultSort={{ key: 'created_at', dir: 'desc' }}
         loading={loading}
         emptyMessage="Nenhuma movimentação registrada."
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
 
       {/* Modal Nova Movimentação */}

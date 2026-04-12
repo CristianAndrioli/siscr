@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
 import { csvAttachment, rowsToCsv } from '../lib/csv'
+import { parseListPagination } from '../lib/listPagination'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -15,30 +16,76 @@ app.get('/', async (c) => {
   const { produtoId, location, busca } = q
   const exportFmt = q.export
 
-  let query = `
-    SELECT e.id, e.produto_id, p.descricao as produto, p.codigo as codigo,
-           p.unidade, e.location, e.quantidade, e.updated_at
+  let where = `
     FROM estoque e
     LEFT JOIN produtos p ON p.id = e.produto_id
     WHERE e.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
 
-  if (produtoId) { query += ' AND e.produto_id = ?'; params.push(produtoId) }
-  if (location) { query += ' AND e.location = ?'; params.push(location) }
-  if (busca) { query += ' AND (p.descricao LIKE ? OR p.codigo LIKE ? OR e.location LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
+  if (produtoId) { where += ' AND e.produto_id = ?'; params.push(produtoId) }
+  if (location) { where += ' AND e.location = ?'; params.push(location) }
+  if (busca) {
+    where += ' AND (p.descricao LIKE ? OR p.codigo LIKE ? OR e.location LIKE ?)'
+    params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`)
+  }
 
-  query += ' ORDER BY p.descricao, e.location'
-
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
+  const selectList = `
+    SELECT e.id, e.produto_id, p.descricao as produto, p.codigo as codigo,
+           p.unidade, e.location, e.quantidade, e.updated_at
+  `
+  const query = `${selectList} ${where} ORDER BY p.descricao, e.location`
 
   if (exportFmt === 'csv') {
+    const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
     const cols = ['id', 'produto_id', 'produto', 'codigo', 'unidade', 'location', 'quantidade', 'updated_at']
-    const rows = (results ?? []).map((r) => r as Record<string, unknown>)
+    const rows = ((results ?? []) as unknown[]).map((r) => r as Record<string, unknown>)
     return csvAttachment(rowsToCsv(rows, cols), 'estoque.csv')
   }
 
-  return c.json({ estoque: results })
+  const { limit, offset, page } = parseListPagination(c)
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c ${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+
+  const metaRow = await c.env.DB_SHARED
+    .prepare(
+      `SELECT
+        COUNT(*) as n,
+        SUM(CASE WHEN e.quantidade > 0 THEN 1 ELSE 0 END) as com_saldo,
+        SUM(CASE WHEN e.quantidade <= 0 THEN 1 ELSE 0 END) as zerados,
+        COUNT(DISTINCT e.location) as locais
+      ${where}`,
+    )
+    .bind(...params)
+    .first<{ n: number; com_saldo: number | null; zerados: number | null; locais: number | null }>()
+
+  const { results } = await c.env.DB_SHARED.prepare(`${query} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all()
+  return c.json({
+    estoque: results,
+    total,
+    page,
+    limit,
+    meta: {
+      com_saldo: Number(metaRow?.com_saldo ?? 0),
+      zerados: Number(metaRow?.zerados ?? 0),
+      locais: Number(metaRow?.locais ?? 0),
+    },
+  })
+})
+
+/** Locais distintos com saldo em estoque (para formulários). */
+app.get('/locais-distinct', async (c) => {
+  const tenant = c.get('tenant')
+  const { results } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT DISTINCT e.location as loc FROM estoque e WHERE e.tenant_id = ? ORDER BY e.location`,
+    )
+    .bind(tenant.tenantId)
+    .all<{ loc: string }>()
+  return c.json({ locais: (results ?? []).map((r) => r.loc) })
 })
 
 // ─── Movimentações ────────────────────────────────────────────────
@@ -46,25 +93,34 @@ app.get('/', async (c) => {
 app.get('/movimentacoes', async (c) => {
   const tenant = c.get('tenant')
   const { produtoId, tipo, location, busca } = c.req.query()
+  const { limit, offset, page } = parseListPagination(c)
 
-  let query = `
-    SELECT m.id, m.codigo, m.produto_id, p.descricao as produto, p.codigo as produto_codigo,
-           m.tipo, m.quantidade, m.location, m.motivo, m.referencia_id, m.created_at
+  let where = `
     FROM movimentacoes_estoque m
     LEFT JOIN produtos p ON p.id = m.produto_id
     WHERE m.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
 
-  if (produtoId) { query += ' AND m.produto_id = ?'; params.push(produtoId) }
-  if (tipo) { query += ' AND m.tipo = ?'; params.push(tipo) }
-  if (location) { query += ' AND m.location = ?'; params.push(location) }
-  if (busca) { query += ' AND (p.descricao LIKE ? OR p.codigo LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
+  if (produtoId) { where += ' AND m.produto_id = ?'; params.push(produtoId) }
+  if (tipo) { where += ' AND m.tipo = ?'; params.push(tipo) }
+  if (location) { where += ' AND m.location = ?'; params.push(location) }
+  if (busca) { where += ' AND (p.descricao LIKE ? OR p.codigo LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
 
-  query += ' ORDER BY m.created_at DESC LIMIT 200'
+  const selectList = `
+    SELECT m.id, m.codigo, m.produto_id, p.descricao as produto, p.codigo as produto_codigo,
+           m.tipo, m.quantidade, m.location, m.motivo, m.referencia_id, m.created_at
+  `
+  const query = `${selectList} ${where} ORDER BY m.created_at DESC`
 
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
-  return c.json({ movimentacoes: results })
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c ${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+
+  const { results } = await c.env.DB_SHARED.prepare(`${query} LIMIT ? OFFSET ?`).bind(...params, limit, offset).all()
+  return c.json({ movimentacoes: results, total, page, limit })
 })
 
 const movSchema = z.object({

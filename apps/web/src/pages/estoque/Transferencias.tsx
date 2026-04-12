@@ -22,7 +22,9 @@ function ProdutoBusca({ onSelect, resetKey }: { onSelect: (p: Produto | null) =>
     if (!termo.trim()) { setResultados([]); return; }
     setBuscando(true);
     try {
-      const res = await api.get('/tenant/cadastros/produtos', { params: { busca: termo } });
+      const res = await api.get('/tenant/cadastros/produtos', {
+        params: { busca: termo, limit: 50, page: 0 },
+      });
       setResultados(res.data.produtos ?? []);
       setAberto(true);
     } catch { setResultados([]); } finally { setBuscando(false); }
@@ -88,13 +90,12 @@ export function Transferencias() {
     setLoading(true);
     setError('');
     try {
-      const [transData, estoqueData, locaisData] = await Promise.all([
+      const [transData, locaisEstoque, locaisData] = await Promise.all([
         transferenciasService.list(),
-        estoqueService.posicao(),
+        estoqueService.locaisDistinct(),
         locaisService.list(),
       ]);
       setTransferencias(transData);
-      const locaisEstoque = [...new Set(estoqueData.map(i => i.location))];
       const locaisCadastrados = locaisData.map(l => l.nome);
       setLocais([...new Set(['GERAL', ...locaisEstoque, ...locaisCadastrados])].sort());
     } catch {
@@ -132,7 +133,7 @@ export function Transferencias() {
         motivo: form.motivo || undefined,
       });
       setShowModal(false);
-      setForm({ produtoId: '', localOrigem: '', localDestino: '', quantidade: '', motivo: '' });
+      setForm({ localOrigem: '', localDestino: '', quantidade: '', motivo: '' });
       load();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };

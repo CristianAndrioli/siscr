@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
+import { parseListPagination } from '../lib/listPagination'
 import { nextCodigo } from '../lib/nextCodigo'
 
 const app = new Hono<{ Bindings: Env }>()
@@ -40,21 +41,27 @@ const pessoaSchema = z.object({
 app.get('/pessoas', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, filialId, tipo, tipoCadastro, busca } = c.req.query()
+  const { limit, offset, page } = parseListPagination(c)
 
-  let query = `SELECT id, codigo, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at
-               FROM pessoas WHERE tenant_id = ?`
+  let where = ' WHERE tenant_id = ?'
   const params: unknown[] = [tenant.tenantId]
 
-  if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
-  if (filialId) { query += ' AND filial_id = ?'; params.push(filialId) }
-  if (tipo) { query += ' AND tipo = ?'; params.push(tipo) }
-  if (tipoCadastro) { query += ' AND tipo_cadastro = ?'; params.push(tipoCadastro) }
-  if (busca) { query += ' AND (nome LIKE ? OR cpf_cnpj LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
+  if (empresaId) { where += ' AND empresa_id = ?'; params.push(empresaId) }
+  if (filialId) { where += ' AND filial_id = ?'; params.push(filialId) }
+  if (tipo) { where += ' AND tipo = ?'; params.push(tipo) }
+  if (tipoCadastro) { where += ' AND tipo_cadastro = ?'; params.push(tipoCadastro) }
+  if (busca) { where += ' AND (nome LIKE ? OR cpf_cnpj LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
 
-  query += ' ORDER BY codigo LIMIT 100'
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c FROM pessoas${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
 
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
-  return c.json({ pessoas: results })
+  const query = `SELECT id, codigo, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at
+               FROM pessoas${where} ORDER BY codigo LIMIT ? OFFSET ?`
+  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params, limit, offset).all()
+  return c.json({ pessoas: results, total, page, limit })
 })
 
 app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
@@ -178,22 +185,31 @@ const produtoSchema = z.object({
 app.get('/produtos', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, busca } = c.req.query()
+  const { limit, offset, page } = parseListPagination(c)
 
-  let query = `SELECT id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm,
-    origem, cest, icms_cst, icms_csosn, pis_cst, cofins_cst, ativo FROM produtos WHERE tenant_id = ?`
+  let where = ' WHERE tenant_id = ?'
   const params: unknown[] = [tenant.tenantId]
 
-  // Produtos sem empresa (uso geral do tenant) + produtos vinculados à empresa escolhida
   if (empresaId) {
-    query += ' AND (empresa_id IS NULL OR empresa_id = ?)'
+    where += ' AND (empresa_id IS NULL OR empresa_id = ?)'
     params.push(empresaId)
   }
-  if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
+  if (busca) {
+    where += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'
+    params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`)
+  }
 
-  query += ' ORDER BY CAST(codigo AS INTEGER) LIMIT 100'
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c FROM produtos${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
 
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
-  return c.json({ produtos: results })
+  const query = `SELECT id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm,
+    origem, cest, icms_cst, icms_csosn, pis_cst, cofins_cst, ativo FROM produtos${where}
+    ORDER BY CAST(codigo AS INTEGER) LIMIT ? OFFSET ?`
+  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params, limit, offset).all()
+  return c.json({ produtos: results, total, page, limit })
 })
 
 app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
@@ -320,17 +336,27 @@ const servicoSchema = z.object({
 app.get('/servicos', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, busca } = c.req.query()
+  const { limit, offset, page } = parseListPagination(c)
 
-  let query = 'SELECT id, codigo, sku, descricao, unidade, preco, ativo FROM servicos WHERE tenant_id = ?'
+  let where = ' WHERE tenant_id = ?'
   const params: unknown[] = [tenant.tenantId]
 
-  if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
-  if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
+  if (empresaId) { where += ' AND empresa_id = ?'; params.push(empresaId) }
+  if (busca) {
+    where += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'
+    params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`)
+  }
 
-  query += ' ORDER BY CAST(codigo AS INTEGER)'
+  const countRow = await c.env.DB_SHARED
+    .prepare(`SELECT COUNT(*) as c FROM servicos${where}`)
+    .bind(...params)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
 
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
-  return c.json({ servicos: results })
+  const query = `SELECT id, codigo, sku, descricao, unidade, preco, ativo FROM servicos${where}
+    ORDER BY CAST(codigo AS INTEGER) LIMIT ? OFFSET ?`
+  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params, limit, offset).all()
+  return c.json({ servicos: results, total, page, limit })
 })
 
 app.post('/servicos', zValidator('json', servicoSchema), async (c) => {

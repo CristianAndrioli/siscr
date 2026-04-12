@@ -48,7 +48,10 @@ export function ContasPagarDetail() {
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
 
   useEffect(() => {
-    pessoasService.list({ search: '' }).then(setPessoas).catch(() => {});
+    pessoasService
+      .list({ search: '', page: 0, limit: 200 })
+      .then((r) => setPessoas(r.pessoas))
+      .catch(() => {});
     bancarioService.listContas().then(setContasBancarias).catch(() => {});
     if (!isNew) {
       contasPagarService.get(id!)

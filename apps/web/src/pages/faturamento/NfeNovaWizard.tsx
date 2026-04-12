@@ -144,7 +144,7 @@ export function NfeNovaWizardPage() {
     if (!empresaId) return;
     let cancelled = false;
     api
-      .get('/tenant/cadastros/produtos', { params: { empresaId } })
+      .get('/tenant/cadastros/produtos', { params: { empresaId, limit: 200, page: 0 } })
       .then((r) => {
         if (!cancelled) setProdutos(r.data.produtos ?? []);
       })

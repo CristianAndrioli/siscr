@@ -53,7 +53,10 @@ export function CotacoesPage() {
 
   useEffect(() => {
     if (showModal && produtos.length === 0) {
-      api.get('/tenant/cadastros/produtos').then(r => setProdutos(r.data.produtos ?? [])).catch(() => {});
+      api
+        .get('/tenant/cadastros/produtos', { params: { limit: 200, page: 0 } })
+        .then((r) => setProdutos(r.data.produtos ?? []))
+        .catch(() => {});
     }
   }, [showModal, produtos.length]);
 

@@ -95,10 +95,23 @@ export function logError(
   return id;
 }
 
-/** Busca a lista de logs do servidor. */
-export async function fetchErrorLog(): Promise<ErrorLogEntry[]> {
-  const res = await api.get('/tenant/logs/errors');
-  return res.data.errors ?? [];
+export type ErrorLogPage = {
+  errors: ErrorLogEntry[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+/** Lista paginada de logs (page e limit 0-based / tamanho da página). */
+export async function fetchErrorLog(params?: { page?: number; limit?: number }): Promise<ErrorLogPage> {
+  const res = await api.get('/tenant/logs/errors', { params });
+  const d = res.data;
+  return {
+    errors: d.errors ?? [],
+    total: Number(d.total ?? 0),
+    page: Number(d.page ?? 0),
+    limit: Number(d.limit ?? 10),
+  };
 }
 
 /** Busca um log específico pelo ID. */

@@ -2,6 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const GRID_ID = 'pessoas-list';
 
 const TIPO_CADASTRO_LABEL: Record<string, string> = {
   cliente: 'Cliente',
@@ -12,7 +20,7 @@ const TIPO_CADASTRO_LABEL: Record<string, string> = {
 
 const COLUMNS: SmartColumn<Pessoa>[] = [
   { key: 'codigo', label: '#', width: 70, required: true, align: 'center',
-    render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v ?? '—'}</span> },
+    render: v => <span className="font-mono text-xs font-semibold text-slate-400 dark:text-slate-500">{v != null && v !== '' ? String(v) : '—'}</span> },
   { key: 'nome', label: 'Nome', width: 220, required: true,
     render: v => <span className="font-medium text-slate-800 dark:text-slate-100">{String(v ?? '—')}</span> },
   { key: 'tipo_cadastro', label: 'Tipo', width: 130,
@@ -22,7 +30,7 @@ const COLUMNS: SmartColumn<Pessoa>[] = [
       </span>
     ) },
   { key: 'cpf_cnpj', label: 'CPF/CNPJ', width: 150,
-    render: v => <span className="text-slate-600 dark:text-slate-300 font-mono text-xs">{v ?? '—'}</span> },
+    render: v => <span className="text-slate-600 dark:text-slate-300 font-mono text-xs">{v != null && v !== '' ? String(v) : '—'}</span> },
   { key: 'email', label: 'E-mail', width: 200 },
   { key: 'telefone', label: 'Telefone', width: 130 },
 ];
@@ -30,30 +38,45 @@ const COLUMNS: SmartColumn<Pessoa>[] = [
 export function PessoasList() {
   const navigate = useNavigate();
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(GRID_ID)?.pageSize),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
 
-  const load = useCallback(async (busca = '') => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await pessoasService.list({ search: busca });
-      setPessoas(data);
+      const r = await pessoasService.list({
+        search: appliedSearch || undefined,
+        page,
+        limit: pageSize,
+      });
+      setPessoas(r.pessoas);
+      setTotal(r.total);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
     } catch {
       setError('Erro ao carregar cadastro de pessoas.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliedSearch, page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDelete = async (id: string, nome: string) => {
     if (!window.confirm(`Deseja excluir "${nome}"?`)) return;
     try {
       await pessoasService.delete(id);
-      setPessoas(prev => prev.filter(p => p.id !== id));
+      await load();
     } catch {
       alert('Erro ao excluir. Tente novamente.');
     }
@@ -68,11 +91,18 @@ export function PessoasList() {
         </div>
       </div>
 
-      <form onSubmit={e => { e.preventDefault(); load(search); }} className="flex gap-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(0);
+          setAppliedSearch(searchInput.trim());
+        }}
+        className="flex gap-2"
+      >
         <input
           type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Buscar por nome ou CPF/CNPJ..."
           className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
@@ -86,7 +116,7 @@ export function PessoasList() {
       )}
 
       <SmartGrid<Pessoa>
-        gridId="pessoas-list"
+        gridId={GRID_ID}
         data={pessoas}
         columns={COLUMNS}
         defaultSort={{ key: 'codigo', dir: 'desc' }}
@@ -98,6 +128,16 @@ export function PessoasList() {
         actions={p => (
           <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(p.id), String(p.nome)); }} />
         )}
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
     </div>
   );

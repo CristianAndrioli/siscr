@@ -18,13 +18,27 @@ export interface ServicoForm {
   ativo: boolean;
 }
 
+export type ServicosListResult = {
+  servicos: Servico[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 export const servicosService = {
-  list: async (params: { search?: string; page?: number } = {}): Promise<Servico[]> => {
+  list: async (params: { search?: string; page?: number; limit?: number } = {}): Promise<ServicosListResult> => {
     const query: Record<string, unknown> = {};
     if (params.search) query.busca = params.search;
-    if (params.page) query.page = params.page;
+    if (params.page !== undefined) query.page = params.page;
+    if (params.limit !== undefined) query.limit = params.limit;
     const response = await api.get('/tenant/cadastros/servicos', { params: query });
-    return response.data.servicos ?? [];
+    const d = response.data;
+    return {
+      servicos: d.servicos ?? [],
+      total: Number(d.total ?? 0),
+      page: Number(d.page ?? 0),
+      limit: Number(d.limit ?? 10),
+    };
   },
 
   get: async (id: string): Promise<Servico> => {

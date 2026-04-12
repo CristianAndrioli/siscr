@@ -3,10 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { servicosService, type Servico } from '../../services/cadastros/servicos';
 import { fmtBRL } from '../../utils/format';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import {
+  loadGridListPage,
+  loadGridPreferences,
+  normalizeGridPageSize,
+  type GridPageSize,
+} from '../../utils/gridPreferences';
+
+const GRID_ID = 'servicos-list';
 
 const COLUMNS: SmartColumn<Servico>[] = [
   { key: 'codigo', label: 'Cód.', width: 75, required: true, align: 'center',
-    render: v => <span className="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{v ?? '—'}</span> },
+    render: v => <span className="font-mono text-xs font-semibold text-slate-500 dark:text-slate-400">{v != null && v !== '' ? String(v) : '—'}</span> },
   { key: 'descricao', label: 'Descrição', width: 260, required: true,
     render: v => <span className="font-medium text-slate-800 dark:text-slate-100">{String(v ?? '—')}</span> },
   { key: 'unidade', label: 'Unid.', width: 80 },
@@ -19,30 +27,45 @@ const COLUMNS: SmartColumn<Servico>[] = [
 export function ServicosList() {
   const navigate = useNavigate();
   const [servicos, setServicos] = useState<Servico[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
+  const [pageSize, setPageSize] = useState<GridPageSize>(() =>
+    normalizeGridPageSize(loadGridPreferences(GRID_ID)?.pageSize),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
 
-  const load = useCallback(async (busca = '') => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await servicosService.list({ search: busca });
-      setServicos(data);
+      const r = await servicosService.list({
+        search: appliedSearch || undefined,
+        page,
+        limit: pageSize,
+      });
+      setServicos(r.servicos);
+      setTotal(r.total);
+      const maxPage = Math.max(0, Math.ceil(r.total / Math.max(r.limit, 1)) - 1);
+      if (page > maxPage) setPage(maxPage);
     } catch {
       setError('Erro ao carregar serviços.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [appliedSearch, page, pageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDelete = async (id: string, desc: string) => {
     if (!window.confirm(`Deseja excluir "${desc}"?`)) return;
     try {
       await servicosService.delete(id);
-      setServicos(prev => prev.filter(s => s.id !== id));
+      await load();
     } catch {
       alert('Erro ao excluir. Tente novamente.');
     }
@@ -57,11 +80,18 @@ export function ServicosList() {
         </div>
       </div>
 
-      <form onSubmit={e => { e.preventDefault(); load(search); }} className="flex gap-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(0);
+          setAppliedSearch(searchInput.trim());
+        }}
+        className="flex gap-2"
+      >
         <input
           type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Buscar por código ou descrição..."
           className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
@@ -75,7 +105,7 @@ export function ServicosList() {
       )}
 
       <SmartGrid<Servico>
-        gridId="servicos-list"
+        gridId={GRID_ID}
         data={servicos}
         columns={COLUMNS}
         defaultSort={{ key: 'codigo', dir: 'desc' }}
@@ -87,6 +117,16 @@ export function ServicosList() {
         actions={s => (
           <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(s.id), String(s.descricao)); }} />
         )}
+        serverPagination={{
+          total,
+          page,
+          pageSize,
+          onPageChange: setPage,
+          onPageSizeChange: (n) => {
+            setPageSize(normalizeGridPageSize(n));
+            setPage(0);
+          },
+        }}
       />
     </div>
   );

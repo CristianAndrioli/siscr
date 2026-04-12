@@ -106,7 +106,10 @@ export function NFVendaPage() {
 
   useEffect(() => {
     if (modalMode === 'new' && produtos.length === 0) {
-      api.get('/tenant/cadastros/produtos').then(r => setProdutos(r.data.produtos ?? [])).catch(() => {});
+      api
+        .get('/tenant/cadastros/produtos', { params: { limit: 200, page: 0 } })
+        .then((r) => setProdutos(r.data.produtos ?? []))
+        .catch(() => {});
     }
   }, [modalMode, produtos.length]);
 
