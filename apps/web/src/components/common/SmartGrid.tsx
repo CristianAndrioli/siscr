@@ -1,5 +1,12 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { saveGridPreferences, loadGridPreferences, clearGridPreferences, type GridSort } from '../../utils/gridPreferences';
+import {
+  saveGridPreferences,
+  loadGridPreferences,
+  clearGridPreferences,
+  DEFAULT_GRID_PAGE_SIZE,
+  GRID_PAGE_SIZE_OPTIONS,
+  type GridSort,
+} from '../../utils/gridPreferences';
 
 // ─── Column definition ────────────────────────────────────────────────────────
 
@@ -17,6 +24,13 @@ export interface SmartColumn<T = Record<string, unknown>> {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+export interface SmartGridRowLimitProps {
+  value: number;
+  onChange: (n: number) => void;
+  /** Predefinição: 10, 20, 50, 100, 200 */
+  options?: readonly number[];
+}
+
 interface SmartGridProps<T extends Record<string, unknown>> {
   gridId: string;
   data: T[];
@@ -31,6 +45,13 @@ interface SmartGridProps<T extends Record<string, unknown>> {
   actions?: (row: T) => React.ReactNode;
   /** Optional extra CSS class for a row */
   getRowClass?: (row: T) => string;
+  /**
+   * Limite de registos vindo da API; o seletor em baixo persiste `pageSize` nas preferências da grelha.
+   * Sem isto, o SmartGrid continua a assumir que `data` já é o conjunto completo (padrão actual nas listas de cadastro).
+   */
+  rowLimit?: SmartGridRowLimitProps;
+  /** Total no servidor (ex.: catálogo), para texto “N de M” quando M > linhas carregadas */
+  backendTotalCount?: number;
 }
 
 // ─── Icons (inline SVG helpers) ───────────────────────────────────────────────
@@ -80,7 +101,11 @@ export function SmartGrid<T extends Record<string, unknown>>({
   emptyMessage = 'Nenhum registro encontrado.',
   actions,
   getRowClass,
+  rowLimit,
+  backendTotalCount,
 }: SmartGridProps<T>) {
+  const rowLimitOptions = rowLimit?.options ?? GRID_PAGE_SIZE_OPTIONS;
+  const rowLimitValue = rowLimit?.value;
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [sort, setSort] = useState<GridSort | null>(defaultSort ?? null);
@@ -137,8 +162,15 @@ export function SmartGrid<T extends Record<string, unknown>>({
   // ── Save preferences on change ─────────────────────────────────────────────
 
   const savePrefs = useCallback(() => {
-    saveGridPreferences(gridId, { sort, filters, columnOrder, columnWidths, visibleColumns });
-  }, [gridId, sort, filters, columnOrder, columnWidths, visibleColumns]);
+    saveGridPreferences(gridId, {
+      sort,
+      filters,
+      columnOrder,
+      columnWidths,
+      visibleColumns,
+      ...(rowLimitValue != null ? { pageSize: rowLimitValue } : {}),
+    });
+  }, [gridId, sort, filters, columnOrder, columnWidths, visibleColumns, rowLimitValue]);
 
   useEffect(() => {
     if (!prefsLoaded.current) return;
@@ -212,6 +244,7 @@ export function SmartGrid<T extends Record<string, unknown>>({
     setColumnWidths({});
     setVisibleColumns(columns.map(c => c.key));
     setShowFilters(false);
+    if (rowLimit) rowLimit.onChange(DEFAULT_GRID_PAGE_SIZE);
   };
 
   // Drag reorder
@@ -264,6 +297,9 @@ export function SmartGrid<T extends Record<string, unknown>>({
   const hasActiveFilters = Object.values(filters).some(v => v.trim() !== '');
   const activeFilterCount = Object.values(filters).filter(v => v.trim() !== '').length;
 
+  const showServerTotal =
+    rowLimit != null && backendTotalCount != null && backendTotalCount > 0;
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -273,7 +309,12 @@ export function SmartGrid<T extends Record<string, unknown>>({
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex-wrap">
         <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
           {sortedData.length} registro{sortedData.length !== 1 ? 's' : ''}
-          {data.length !== sortedData.length && ` de ${data.length}`}
+          {data.length !== sortedData.length
+            ? rowLimit
+              ? ` (sobre ${data.length} carregados)`
+              : ` de ${data.length}`
+            : ''}
+          {showServerTotal ? ` · ${backendTotalCount} no servidor` : ''}
         </span>
 
         <div className="flex-1" />
@@ -457,6 +498,30 @@ export function SmartGrid<T extends Record<string, unknown>>({
           </tbody>
         </table>
       </div>
+
+      {rowLimit && (
+        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3 bg-slate-50/60 dark:bg-slate-800/40">
+          <span className="text-xs text-slate-600 dark:text-slate-400">Registos a carregar</span>
+          <select
+            value={rowLimit.value}
+            onChange={(e) => rowLimit.onChange(Number(e.target.value))}
+            className="text-xs border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            aria-label="Quantidade de registos a carregar"
+          >
+            {rowLimitOptions.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          {backendTotalCount != null && data.length > 0 && backendTotalCount > data.length && (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Há mais linhas no catálogo — aumente o valor acima. Os filtros por coluna aplicam-se só aos registos já
+              carregados.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Column visibility modal */}
       {showColumnModal && (

@@ -8,6 +8,7 @@ import {
   type NcmSyncPostResponse,
 } from '../../services/faturamentoService';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import { loadGridPreferences, normalizeGridPageSize } from '../../utils/gridPreferences';
 
 function labelFonte(source: string): string {
   if (source === 'classif') return 'Siscomex';
@@ -56,6 +57,8 @@ function toGridRows(items: NcmItemRow[]): NcmGridRow[] {
   })) as NcmGridRow[];
 }
 
+const NCM_GRID_ID = 'faturamento-ncm-catalog';
+
 export function NcmConfigPage() {
   const user = authService.getLocalUser() as { role?: string } | null;
   const isAdmin = user?.role === 'admin';
@@ -68,6 +71,11 @@ export function NcmConfigPage() {
   const [error, setError] = useState('');
 
   const [search, setSearch] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [rowLimit, setRowLimit] = useState(() =>
+    normalizeGridPageSize(loadGridPreferences(NCM_GRID_ID)?.pageSize),
+  );
+  const [catalogTotal, setCatalogTotal] = useState(0);
   const [gridLoading, setGridLoading] = useState(true);
   const [rows, setRows] = useState<NcmGridRow[]>([]);
 
@@ -84,22 +92,25 @@ export function NcmConfigPage() {
     }
   }, []);
 
-  const loadGrid = useCallback(async (busca = '') => {
+  const loadGrid = useCallback(async () => {
     setGridLoading(true);
     setError('');
     try {
       const r = await ncmCatalogService.items({
-        full: true,
-        q: busca || undefined,
+        q: appliedSearch || undefined,
+        limit: rowLimit,
+        offset: 0,
       });
       setRows(toGridRows(r.items));
+      setCatalogTotal(r.total);
     } catch {
       setError('Não foi possível carregar os códigos NCM.');
       setRows([]);
+      setCatalogTotal(0);
     } finally {
       setGridLoading(false);
     }
-  }, []);
+  }, [appliedSearch, rowLimit]);
 
   useEffect(() => {
     loadStatus();
@@ -135,7 +146,7 @@ export function NcmConfigPage() {
           : `${r.message}${r.meta?.dataUltima ? ` (${r.meta.dataUltima})` : ''}${r.meta?.ato ? ` — ${r.meta.ato}` : ''}`,
       );
       await loadStatus();
-      await loadGrid(search);
+      await loadGrid();
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { error?: string } } };
       setError(ax.response?.data?.error || 'Falha na atualização.');
@@ -247,7 +258,7 @@ export function NcmConfigPage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          loadGrid(search);
+          setAppliedSearch(search.trim());
         }}
         className="flex gap-2 flex-wrap"
       >
@@ -267,11 +278,13 @@ export function NcmConfigPage() {
       </form>
 
       <SmartGrid<NcmGridRow>
-        gridId="faturamento-ncm-catalog"
+        gridId={NCM_GRID_ID}
         data={rows}
         columns={NCM_COLUMNS}
         defaultSort={{ key: 'codigo', dir: 'asc' }}
         loading={gridLoading}
+        rowLimit={{ value: rowLimit, onChange: setRowLimit }}
+        backendTotalCount={catalogTotal}
         emptyMessage={
           (status?.itemCount ?? 0) === 0
             ? 'Nenhum código na base. Peça a um administrador para atualizar o catálogo.'
