@@ -7,6 +7,7 @@ import ErrorLogsPage from './pages/configuracoes/ErrorLogsPage';
 import Login from './pages/Login';
 import CotacoesPage from './pages/faturamento/Cotacoes';
 import NFVendaPage from './pages/faturamento/NFVenda';
+import NfeNovaWizardPage from './pages/faturamento/NfeNovaWizard';
 import NFSePage from './pages/faturamento/NFSe';
 import Perfil from './pages/Perfil';
 import SubscriptionManagement from './pages/SubscriptionManagement';
@@ -137,6 +138,7 @@ function App() {
         {/* Faturamento */}
         <Route path="/faturamento/cotacoes" element={<ProtectedRoute><Layout><CotacoesPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nf-venda" element={<ProtectedRoute><Layout><NFVendaPage /></Layout></ProtectedRoute>} />
+        <Route path="/faturamento/nf-venda/nova" element={<ProtectedRoute><Layout><NfeNovaWizardPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nfse" element={<ProtectedRoute><Layout><NFSePage /></Layout></ProtectedRoute>} />
 
         {/* Subscription */}

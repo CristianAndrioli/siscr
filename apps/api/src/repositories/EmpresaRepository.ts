@@ -16,6 +16,12 @@ export type EmpresaInsertRow = {
   cidade: string | null
   uf: string | null
   cep: string | null
+  codigoMunicipio: string | null
+  crt: string | null
+  cnae: string | null
+  nfeSerie: string | null
+  nfeAmbiente: number | null
+  nfeProximoNumero: number | null
   createdAt: string
   /** Usuário autenticado ao criar (created_by / updated_by). */
   auditUserId: string | null
@@ -30,7 +36,10 @@ export class EmpresaRepository extends BaseTenantRepository {
     const { results } = await this.db
       .prepare(
         `
-      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta,
+      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.inscricao_estadual, e.email, e.telefone,
+             e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf, e.cep,
+             e.codigo_municipio, e.crt, e.cnae, e.nfe_serie, e.nfe_ambiente, e.nfe_proximo_numero,
+             e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta,
              (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id) as total_filiais
       FROM empresas e
       WHERE e.tenant_id = ?
@@ -47,8 +56,10 @@ export class EmpresaRepository extends BaseTenantRepository {
       .prepare(
         `
       INSERT INTO empresas (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual,
-        email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep,
+        codigo_municipio, crt, cnae, nfe_serie, nfe_ambiente, nfe_proximo_numero,
+        created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .bind(
@@ -67,6 +78,12 @@ export class EmpresaRepository extends BaseTenantRepository {
         row.cidade,
         row.uf,
         row.cep,
+        row.codigoMunicipio,
+        row.crt,
+        row.cnae,
+        row.nfeSerie,
+        row.nfeAmbiente,
+        row.nfeProximoNumero,
         row.createdAt,
         row.createdAt,
         row.auditUserId,

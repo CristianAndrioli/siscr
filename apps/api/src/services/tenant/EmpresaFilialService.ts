@@ -15,9 +15,27 @@ const EMPRESA_FIELD_MAP: Record<string, string> = {
   cidade: 'cidade',
   uf: 'uf',
   cep: 'cep',
+  codigoMunicipio: 'codigo_municipio',
+  crt: 'crt',
+  cnae: 'cnae',
+  nfeSerie: 'nfe_serie',
+  nfeAmbiente: 'nfe_ambiente',
+  nfeProximoNumero: 'nfe_proximo_numero',
 }
 
-const FILIAL_UPDATE_COLS = ['nome', 'cnpj', 'uf', 'cidade', 'logradouro', 'numero', 'bairro', 'cep'] as const
+const FILIAL_FIELD_MAP: Record<string, string> = {
+  nome: 'nome',
+  cnpj: 'cnpj',
+  uf: 'uf',
+  cidade: 'cidade',
+  logradouro: 'logradouro',
+  numero: 'numero',
+  complemento: 'complemento',
+  bairro: 'bairro',
+  cep: 'cep',
+  codigoMunicipio: 'codigo_municipio',
+  inscricaoEstadual: 'inscricao_estadual',
+}
 
 export class EmpresaFilialService {
   constructor(
@@ -44,6 +62,12 @@ export class EmpresaFilialService {
       cidade?: string
       uf?: string
       cep?: string
+      codigoMunicipio?: string
+      crt?: string
+      cnae?: string
+      nfeSerie?: string
+      nfeAmbiente?: number
+      nfeProximoNumero?: number
     },
     auditUserId: string | null,
   ): Promise<string> {
@@ -64,6 +88,12 @@ export class EmpresaFilialService {
       cidade: input.cidade ?? null,
       uf: input.uf ?? null,
       cep: input.cep ?? null,
+      codigoMunicipio: input.codigoMunicipio ?? null,
+      crt: input.crt ?? '1',
+      cnae: input.cnae ?? null,
+      nfeSerie: input.nfeSerie ?? '1',
+      nfeAmbiente: input.nfeAmbiente ?? 2,
+      nfeProximoNumero: input.nfeProximoNumero ?? 1,
       createdAt: now,
       auditUserId,
     }
@@ -111,8 +141,11 @@ export class EmpresaFilialService {
       cidade?: string
       logradouro?: string
       numero?: string
+      complemento?: string
       bairro?: string
       cep?: string
+      codigoMunicipio?: string
+      inscricaoEstadual?: string
     },
     auditUserId: string | null,
   ): Promise<string> {
@@ -128,8 +161,11 @@ export class EmpresaFilialService {
       cidade: input.cidade ?? null,
       logradouro: input.logradouro ?? null,
       numero: input.numero ?? null,
+      complemento: input.complemento ?? null,
       bairro: input.bairro ?? null,
       cep: input.cep ?? null,
+      codigoMunicipio: input.codigoMunicipio ?? null,
+      inscricaoEstadual: input.inscricaoEstadual ?? null,
       ativa: 1,
       createdAt: now,
       auditUserId,
@@ -150,10 +186,10 @@ export class EmpresaFilialService {
     const now = new Date().toISOString()
     const fields: string[] = ['updated_at = ?', 'updated_by = ?']
     const vals: unknown[] = [now, auditUserId]
-    for (const col of FILIAL_UPDATE_COLS) {
-      if (data[col] !== undefined) {
+    for (const [k, col] of Object.entries(FILIAL_FIELD_MAP)) {
+      if (data[k] !== undefined) {
         fields.push(`${col} = ?`)
-        vals.push(data[col])
+        vals.push(data[k])
       }
     }
     if (data.ativa !== undefined) {

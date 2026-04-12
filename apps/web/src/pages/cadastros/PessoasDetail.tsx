@@ -16,6 +16,12 @@ const TIPO_OPTS = [
   { value: 'PJ', label: 'Pessoa Jurídica' },
 ];
 
+const IND_IE_LABEL: Record<string, string> = {
+  '1': 'Contribuinte ICMS',
+  '2': 'Isento',
+  '9': 'Não contribuinte',
+};
+
 const EMPTY: PessoaForm = {
   tipo: 'PF',
   tipoCadastro: 'cliente',
@@ -30,6 +36,10 @@ const EMPTY: PessoaForm = {
   bairro: '',
   cidade: '',
   uf: '',
+  inscricaoEstadual: '',
+  indIeDest: '9',
+  codigoMunicipio: '',
+  codigoPais: '1058',
 };
 
 const INPUT_CLS =
@@ -90,6 +100,12 @@ export function PessoasDetail() {
           bairro: data.bairro ?? '',
           cidade: data.cidade ?? '',
           uf: data.uf ?? '',
+          inscricaoEstadual: data.inscricao_estadual ?? '',
+          indIeDest: (data.ind_ie_dest === '1' || data.ind_ie_dest === '2' || data.ind_ie_dest === '9'
+            ? data.ind_ie_dest
+            : '9') as '1' | '2' | '9',
+          codigoMunicipio: data.codigo_municipio ?? '',
+          codigoPais: data.codigo_pais ?? '1058',
         });
       })
       .catch(() => setError('Erro ao carregar registro.'))
@@ -267,6 +283,30 @@ export function PessoasDetail() {
               <p className="text-sm text-slate-400 dark:text-slate-500">Endereço não informado.</p>
             )}
           </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Fiscal (NF-e)</p>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Inscrição estadual</dt>
+                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.inscricao_estadual ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Indicador IE</dt>
+                <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">
+                  {IND_IE_LABEL[record.ind_ie_dest ?? '9'] ?? record.ind_ie_dest ?? '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Cód. município (IBGE)</dt>
+                <dd className="mt-1 text-sm font-mono text-slate-800 dark:text-slate-100">{record.codigo_municipio ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Cód. país</dt>
+                <dd className="mt-1 text-sm font-mono text-slate-800 dark:text-slate-100">{record.codigo_pais ?? '1058'}</dd>
+              </div>
+            </dl>
+          </div>
         </div>
       )}
 
@@ -439,6 +479,59 @@ export function PessoasDetail() {
                   placeholder="SC"
                   maxLength={2}
                   className={INPUT_CLS}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Fiscal (NF-e)</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">
+              Usado como destinatário na nota. Código do município: 7 dígitos IBGE.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Inscrição estadual</label>
+                <input
+                  type="text"
+                  value={form.inscricaoEstadual ?? ''}
+                  onChange={e => set('inscricaoEstadual', e.target.value)}
+                  className={INPUT_CLS}
+                  placeholder="Se aplicável"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Indicador de IE</label>
+                <select
+                  value={form.indIeDest ?? '9'}
+                  onChange={e => set('indIeDest', e.target.value as '1' | '2' | '9')}
+                  className={INPUT_CLS}
+                >
+                  <option value="1">1 — Contribuinte ICMS</option>
+                  <option value="2">2 — Isento</option>
+                  <option value="9">9 — Não contribuinte</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cód. município (IBGE)</label>
+                <input
+                  type="text"
+                  value={form.codigoMunicipio ?? ''}
+                  onChange={e => set('codigoMunicipio', e.target.value.replace(/\D/g, '').slice(0, 7))}
+                  maxLength={7}
+                  placeholder="3550308"
+                  className={`${INPUT_CLS} font-mono`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cód. país</label>
+                <input
+                  type="text"
+                  value={form.codigoPais ?? '1058'}
+                  onChange={e => set('codigoPais', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  maxLength={4}
+                  placeholder="1058"
+                  className={`${INPUT_CLS} font-mono`}
                 />
               </div>
             </div>

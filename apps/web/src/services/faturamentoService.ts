@@ -45,6 +45,27 @@ export interface NFItem {
   unidade: string;
   cfop?: string;
   ncm?: string;
+  origem?: number;
+  icmsCst?: string;
+  icmsCsosn?: string;
+  icmsModalidadeBc?: number;
+  icmsBaseCalculo?: number;
+  icmsAliquota?: number;
+  icmsValor?: number;
+  icmsCreditoAliquota?: number;
+  icmsCreditoValor?: number;
+  pisCst?: string;
+  pisBaseCalculo?: number;
+  pisAliquota?: number;
+  pisValor?: number;
+  cofinsCst?: string;
+  cofinsBaseCalculo?: number;
+  cofinsAliquota?: number;
+  cofinsValor?: number;
+  ipiCst?: string;
+  ipiBaseCalculo?: number;
+  ipiAliquota?: number;
+  ipiValor?: number;
 }
 
 export interface NotaFiscal {
@@ -135,10 +156,29 @@ export const notasService = {
     const res = await api.get(`${BASE}/notas/${id}`);
     return res.data.nota;
   },
-  create: async (data: { tipo: NFTipo; destinatarioId?: string; naturezaOperacao?: string; descricaoServico?: string; aliquotaIss?: number; codigoServico?: string; observacoes?: string; desconto?: number; itens: NFItem[] }): Promise<{ id: string; numero: number }> => {
+  create: async (data: {
+    tipo: NFTipo;
+    empresaId?: string;
+    filialId?: string;
+    pedidoId?: string;
+    destinatarioId?: string;
+    naturezaOperacao?: string;
+    descricaoServico?: string;
+    aliquotaIss?: number;
+    codigoServico?: string;
+    observacoes?: string;
+    desconto?: number;
+    formaPagamento?: string;
+    modFrete?: number;
+    ambiente?: number;
+    modelo?: number;
+    serie?: string;
+    valorTroco?: number;
+    itens: NFItem[];
+  }): Promise<{ id: string; numero: number }> => {
     const res = await api.post(`${BASE}/notas`, {
       ...data,
-      itens: data.itens.map(i => ({
+      itens: data.itens.map((i) => ({
         produtoId: i.produtoId,
         servicoId: i.servicoId,
         descricao: i.descricao,
@@ -148,6 +188,27 @@ export const notasService = {
         unidade: i.unidade ?? 'UN',
         cfop: i.cfop,
         ncm: i.ncm,
+        origem: i.origem,
+        icmsCst: i.icmsCst,
+        icmsCsosn: i.icmsCsosn,
+        icmsModalidadeBc: i.icmsModalidadeBc,
+        icmsBaseCalculo: i.icmsBaseCalculo,
+        icmsAliquota: i.icmsAliquota,
+        icmsValor: i.icmsValor,
+        icmsCreditoAliquota: i.icmsCreditoAliquota,
+        icmsCreditoValor: i.icmsCreditoValor,
+        pisCst: i.pisCst,
+        pisBaseCalculo: i.pisBaseCalculo,
+        pisAliquota: i.pisAliquota,
+        pisValor: i.pisValor,
+        cofinsCst: i.cofinsCst,
+        cofinsBaseCalculo: i.cofinsBaseCalculo,
+        cofinsAliquota: i.cofinsAliquota,
+        cofinsValor: i.cofinsValor,
+        ipiCst: i.ipiCst,
+        ipiBaseCalculo: i.ipiBaseCalculo,
+        ipiAliquota: i.ipiAliquota,
+        ipiValor: i.ipiValor,
       })),
     });
     return res.data;

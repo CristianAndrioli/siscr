@@ -28,6 +28,10 @@ const pessoaSchema = z.object({
   bairro: emptyToUndef(z.string().optional()),
   cidade: emptyToUndef(z.string().optional()),
   uf: emptyToUndef(z.string().length(2).optional()),
+  inscricaoEstadual: emptyToUndef(z.string().optional()),
+  indIeDest: emptyToUndef(z.enum(['1', '2', '9']).optional()),
+  codigoMunicipio: emptyToUndef(z.string().max(7).optional()),
+  codigoPais: emptyToUndef(z.string().max(4).optional()),
   // vínculo
   empresaId: emptyToUndef(z.string().uuid().optional()),
   filialId: emptyToUndef(z.string().uuid().optional()),
@@ -63,8 +67,10 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
   await c.env.DB_SHARED
     .prepare(`
       INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone,
-        cep, logradouro, numero, complemento, bairro, cidade, uf, ativo, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+        cep, logradouro, numero, complemento, bairro, cidade, uf,
+        inscricao_estadual, ind_ie_dest, codigo_municipio, codigo_pais,
+        ativo, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
@@ -74,6 +80,10 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
       data.email ?? null, data.telefone ?? null,
       data.cep ?? null, data.logradouro ?? null, data.numero ?? null,
       data.complemento ?? null, data.bairro ?? null, data.cidade ?? null, data.uf ?? null,
+      data.inscricaoEstadual ?? null,
+      data.indIeDest ?? '9',
+      data.codigoMunicipio ?? null,
+      data.codigoPais ?? '1058',
       now, now, uid, uid,
     )
     .run()
@@ -110,6 +120,10 @@ app.put('/pessoas/:id', zValidator('json', pessoaSchema.partial()), async (c) =>
     bairro: 'bairro',
     cidade: 'cidade',
     uf: 'uf',
+    inscricaoEstadual: 'inscricao_estadual',
+    indIeDest: 'ind_ie_dest',
+    codigoMunicipio: 'codigo_municipio',
+    codigoPais: 'codigo_pais',
     empresaId: 'empresa_id',
     filialId: 'filial_id',
   }
@@ -151,6 +165,12 @@ const produtoSchema = z.object({
   precoVenda: z.number().nonnegative(),
   precoCusto: z.number().nonnegative().optional(),
   ncm: z.string().optional(),
+  origem: z.coerce.number().int().min(0).max(8).optional(),
+  cest: z.string().optional(),
+  icmsCst: z.string().optional(),
+  icmsCsosn: z.string().optional(),
+  pisCst: z.string().optional(),
+  cofinsCst: z.string().optional(),
   ativo: z.boolean().default(true),
   empresaId: z.string().uuid().optional(),
 })
@@ -159,7 +179,8 @@ app.get('/produtos', async (c) => {
   const tenant = c.get('tenant')
   const { empresaId, busca } = c.req.query()
 
-  let query = 'SELECT id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm, ativo FROM produtos WHERE tenant_id = ?'
+  let query = `SELECT id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm,
+    origem, cest, icms_cst, icms_csosn, pis_cst, cofins_cst, ativo FROM produtos WHERE tenant_id = ?`
   const params: unknown[] = [tenant.tenantId]
 
   if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
@@ -182,8 +203,9 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
   try {
     await c.env.DB_SHARED
       .prepare(`
-        INSERT INTO produtos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm, ativo, created_at, updated_at, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO produtos (id, tenant_id, empresa_id, codigo, sku, descricao, unidade, preco_venda, preco_custo, ncm,
+          origem, cest, icms_cst, icms_csosn, pis_cst, cofins_cst, ativo, created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         id, tenant.tenantId,
@@ -191,7 +213,14 @@ app.post('/produtos', zValidator('json', produtoSchema), async (c) => {
         codigo, data.sku ?? null,
         data.descricao, data.unidade,
         data.precoVenda, data.precoCusto ?? 0,
-        data.ncm ?? null, data.ativo ? 1 : 0,
+        data.ncm ?? null,
+        data.origem ?? 0,
+        data.cest ?? null,
+        data.icmsCst ?? null,
+        data.icmsCsosn ?? null,
+        data.pisCst ?? '07',
+        data.cofinsCst ?? '07',
+        data.ativo ? 1 : 0,
         now, now, uid, uid,
       )
       .run()
@@ -226,6 +255,12 @@ app.put('/produtos/:id', zValidator('json', produtoSchema.partial()), async (c) 
     precoVenda: 'preco_venda',
     precoCusto: 'preco_custo',
     ncm: 'ncm',
+    origem: 'origem',
+    cest: 'cest',
+    icmsCst: 'icms_cst',
+    icmsCsosn: 'icms_csosn',
+    pisCst: 'pis_cst',
+    cofinsCst: 'cofins_cst',
     ativo: 'ativo',
     empresaId: 'empresa_id',
   }

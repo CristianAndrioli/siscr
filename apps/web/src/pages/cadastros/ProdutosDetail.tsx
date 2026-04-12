@@ -7,6 +7,9 @@ import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const UNIDADES = ['UN', 'CX', 'KG', 'LT', 'MT', 'PC', 'PAR', 'RL', 'SC', 'TON'];
 
+const INPUT_CLS =
+  'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500';
+
 const EMPTY: ProdutoForm = {
   sku: '',
   descricao: '',
@@ -14,6 +17,12 @@ const EMPTY: ProdutoForm = {
   precoVenda: 0,
   precoCusto: 0,
   ncm: '',
+  origem: 0,
+  cest: '',
+  icmsCst: '',
+  icmsCsosn: '',
+  pisCst: '07',
+  cofinsCst: '07',
   ativo: true,
 };
 
@@ -43,6 +52,12 @@ export function ProdutosDetail() {
           precoVenda: data.preco_venda,
           precoCusto: data.preco_custo ?? 0,
           ncm: data.ncm ?? '',
+          origem: data.origem ?? 0,
+          cest: data.cest ?? '',
+          icmsCst: data.icms_cst ?? '',
+          icmsCsosn: data.icms_csosn ?? '',
+          pisCst: data.pis_cst ?? '07',
+          cofinsCst: data.cofins_cst ?? '07',
           ativo: data.ativo === 1,
         });
       })
@@ -158,9 +173,15 @@ export function ProdutosDetail() {
               { label: 'Unidade', value: record.unidade },
               { label: 'Descrição', value: record.descricao },
               { label: 'NCM', value: record.ncm ?? '—' },
+              { label: 'Origem (mercadoria)', value: record.origem != null ? String(record.origem) : '0' },
+              { label: 'CEST', value: record.cest ?? '—' },
+              { label: 'ICMS CST', value: record.icms_cst ?? '—' },
+              { label: 'ICMS CSOSN', value: record.icms_csosn ?? '—' },
+              { label: 'PIS CST', value: record.pis_cst ?? '—' },
+              { label: 'COFINS CST', value: record.cofins_cst ?? '—' },
               { label: 'Preço de Venda', value: record.preco_venda != null ? fmtBRL(record.preco_venda) : '—' },
               { label: 'Preço de Custo', value: record.preco_custo != null ? fmtBRL(record.preco_custo) : '—' },
-              { label: 'Situação', value: record.ativo ? 'Ativo' : 'Inativo' },
+              { label: 'Situação', value: record.ativo === 1 ? 'Ativo' : 'Inativo' },
             ].map(({ label, value }) => (
               <div key={label}>
                 <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
@@ -192,7 +213,7 @@ export function ProdutosDetail() {
                 value={form.sku ?? ''}
                 onChange={e => set('sku', e.target.value)}
                 placeholder="Ex: MESA-G-NAT, REF-001"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={INPUT_CLS}
               />
             </div>
             <div>
@@ -203,7 +224,7 @@ export function ProdutosDetail() {
                 value={form.unidade}
                 onChange={e => set('unidade', e.target.value)}
                 required
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={INPUT_CLS}
               >
                 {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
@@ -218,7 +239,7 @@ export function ProdutosDetail() {
                 onChange={e => set('descricao', e.target.value)}
                 required
                 placeholder="Descrição do produto"
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={INPUT_CLS}
               />
             </div>
             <div>
@@ -239,7 +260,77 @@ export function ProdutosDetail() {
                 onChange={e => set('ncm', e.target.value)}
                 placeholder="00000000"
                 maxLength={8}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className={INPUT_CLS}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest pt-2">
+                Tributos (NF-e)
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Padrões comuns: PIS/COFINS 07 (operação isenta); ajuste CST/CSOSN conforme o regime.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Origem (0–8)</label>
+              <input
+                type="number"
+                min={0}
+                max={8}
+                value={form.origem ?? 0}
+                onChange={e => set('origem', Math.min(8, Math.max(0, Number(e.target.value) || 0)))}
+                className={`${INPUT_CLS} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CEST</label>
+              <input
+                type="text"
+                value={form.cest ?? ''}
+                onChange={e => set('cest', e.target.value.replace(/\D/g, '').slice(0, 7))}
+                maxLength={7}
+                placeholder="7 dígitos"
+                className={`${INPUT_CLS} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ICMS CST</label>
+              <input
+                type="text"
+                value={form.icmsCst ?? ''}
+                onChange={e => set('icmsCst', e.target.value.toUpperCase().slice(0, 3))}
+                maxLength={3}
+                className={`${INPUT_CLS} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ICMS CSOSN</label>
+              <input
+                type="text"
+                value={form.icmsCsosn ?? ''}
+                onChange={e => set('icmsCsosn', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                maxLength={3}
+                className={`${INPUT_CLS} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">PIS CST</label>
+              <input
+                type="text"
+                value={form.pisCst ?? ''}
+                onChange={e => set('pisCst', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                maxLength={2}
+                className={`${INPUT_CLS} font-mono`}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">COFINS CST</label>
+              <input
+                type="text"
+                value={form.cofinsCst ?? ''}
+                onChange={e => set('cofinsCst', e.target.value.replace(/\D/g, '').slice(0, 2))}
+                maxLength={2}
+                className={`${INPUT_CLS} font-mono`}
               />
             </div>
             <div className="flex items-center gap-3 pt-6">

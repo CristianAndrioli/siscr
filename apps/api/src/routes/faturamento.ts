@@ -228,6 +228,27 @@ const nfItemSchema = z.object({
   unidade: z.string().default('UN'),
   cfop: z.string().optional(),
   ncm: z.string().optional(),
+  origem: z.coerce.number().int().min(0).max(8).optional(),
+  icmsCst: z.string().optional(),
+  icmsCsosn: z.string().optional(),
+  icmsModalidadeBc: z.coerce.number().int().optional(),
+  icmsBaseCalculo: z.number().optional(),
+  icmsAliquota: z.number().optional(),
+  icmsValor: z.number().optional(),
+  icmsCreditoAliquota: z.number().optional(),
+  icmsCreditoValor: z.number().optional(),
+  pisCst: z.string().optional(),
+  pisBaseCalculo: z.number().optional(),
+  pisAliquota: z.number().optional(),
+  pisValor: z.number().optional(),
+  cofinsCst: z.string().optional(),
+  cofinsBaseCalculo: z.number().optional(),
+  cofinsAliquota: z.number().optional(),
+  cofinsValor: z.number().optional(),
+  ipiCst: z.string().optional(),
+  ipiBaseCalculo: z.number().optional(),
+  ipiAliquota: z.number().optional(),
+  ipiValor: z.number().optional(),
 })
 
 const nfSchema = z.object({
@@ -243,6 +264,12 @@ const nfSchema = z.object({
   codigoServico: z.string().optional(),
   observacoes: z.string().optional(),
   desconto: z.number().min(0).default(0),
+  formaPagamento: z.string().max(2).optional(),
+  modFrete: z.coerce.number().int().min(0).max(9).optional(),
+  ambiente: z.coerce.number().int().min(1).max(2).optional(),
+  modelo: z.coerce.number().int().optional(),
+  serie: z.string().max(3).optional(),
+  valorTroco: z.number().min(0).optional(),
   itens: z.array(nfItemSchema).default([]),
 })
 
@@ -271,6 +298,17 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     if (!destinatarioId) destinatarioId = ped.cliente_id
   }
 
+  let serieNf = data.serie ?? '1'
+  let ambienteNf = data.ambiente ?? 2
+  if (empresaId) {
+    const em = await c.env.DB_SHARED
+      .prepare('SELECT nfe_serie, nfe_ambiente FROM empresas WHERE id = ? AND tenant_id = ?')
+      .bind(empresaId, tenant.tenantId)
+      .first<{ nfe_serie: string | null; nfe_ambiente: number | null }>()
+    if (em?.nfe_serie) serieNf = em.nfe_serie
+    if (em?.nfe_ambiente != null) ambienteNf = em.nfe_ambiente
+  }
+
   // Número sequencial por tipo
   const last = await c.env.DB_SHARED
     .prepare('SELECT numero FROM notas_fiscais WHERE tenant_id = ? AND tipo = ? ORDER BY created_at DESC LIMIT 1')
@@ -280,14 +318,19 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
   const valorProdutos = calcTotal(data.itens)
   const valorTotal = valorProdutos - (data.desconto ?? 0)
   const valorIss = data.aliquotaIss ? valorTotal * (data.aliquotaIss / 100) : null
+  const modeloNf = data.modelo ?? 55
+  const modFreteNf = data.modFrete ?? 9
+  const valorTrocoNf = data.valorTroco ?? 0
 
   const stmts = [
     c.env.DB_SHARED.prepare(`
       INSERT INTO notas_fiscais
         (id, tenant_id, empresa_id, filial_id, pedido_id, tipo, numero, serie, destinatario_id, natureza_operacao,
          descricao_servico, aliquota_iss, valor_iss, codigo_servico,
-         observacoes, valor_produtos, valor_desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, '1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rascunho', ?, ?, ?, ?)
+         observacoes, valor_produtos, valor_desconto, valor_total, status,
+         ambiente, modelo, forma_pagamento, mod_frete, valor_troco,
+         created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rascunho', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id,
       tenant.tenantId,
@@ -296,6 +339,7 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
       pedidoId,
       data.tipo,
       numero,
+      serieNf,
       destinatarioId,
       data.naturezaOperacao ?? null,
       data.descricaoServico ?? null,
@@ -306,6 +350,11 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
       valorProdutos,
       data.desconto,
       valorTotal,
+      ambienteNf,
+      modeloNf,
+      data.formaPagamento ?? null,
+      modFreteNf,
+      valorTrocoNf,
       now,
       now,
       uid,
@@ -318,11 +367,31 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     stmts.push(
       c.env.DB_SHARED.prepare(`
         INSERT INTO nota_fiscal_itens
-          (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, cfop, ncm, unidade, created_at, updated_at, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
-          item.descricao, item.quantidade, item.valorUnitario, item.desconto, itemTotal,
-          item.cfop ?? null, item.ncm ?? null, item.unidade, now, now, uid, uid)
+          (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total,
+           cfop, ncm, unidade, origem,
+           icms_cst, icms_csosn, icms_modalidade_bc, icms_base_calculo, icms_aliquota, icms_valor, icms_credito_aliquota, icms_credito_valor,
+           pis_cst, pis_base_calculo, pis_aliquota, pis_valor,
+           cofins_cst, cofins_base_calculo, cofins_aliquota, cofins_valor,
+           ipi_cst, ipi_base_calculo, ipi_aliquota, ipi_valor,
+           created_at, updated_at, created_by, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
+        item.descricao, item.quantidade, item.valorUnitario, item.desconto, itemTotal,
+        item.cfop ?? null, item.ncm ?? null, item.unidade, item.origem ?? 0,
+        item.icmsCst ?? null, item.icmsCsosn ?? null, item.icmsModalidadeBc ?? null,
+        item.icmsBaseCalculo ?? null, item.icmsAliquota ?? null, item.icmsValor ?? null,
+        item.icmsCreditoAliquota ?? null, item.icmsCreditoValor ?? null,
+        item.pisCst ?? null, item.pisBaseCalculo ?? null, item.pisAliquota ?? null, item.pisValor ?? null,
+        item.cofinsCst ?? null, item.cofinsBaseCalculo ?? null, item.cofinsAliquota ?? null, item.cofinsValor ?? null,
+        item.ipiCst ?? null, item.ipiBaseCalculo ?? null, item.ipiAliquota ?? null, item.ipiValor ?? null,
+        now, now, uid, uid,
+      ),
     )
   }
 
@@ -356,11 +425,31 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
       stmts.push(
         c.env.DB_SHARED.prepare(`
           INSERT INTO nota_fiscal_itens
-            (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, cfop, ncm, unidade, created_at, updated_at, created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
-            item.descricao!, item.quantidade!, item.valorUnitario!, item.desconto ?? 0, itemTotal,
-            item.cfop ?? null, item.ncm ?? null, item.unidade ?? 'UN', now, now, uid, uid)
+            (id, nota_fiscal_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total,
+             cfop, ncm, unidade, origem,
+             icms_cst, icms_csosn, icms_modalidade_bc, icms_base_calculo, icms_aliquota, icms_valor, icms_credito_aliquota, icms_credito_valor,
+             pis_cst, pis_base_calculo, pis_aliquota, pis_valor,
+             cofins_cst, cofins_base_calculo, cofins_aliquota, cofins_valor,
+             ipi_cst, ipi_base_calculo, ipi_aliquota, ipi_valor,
+             created_at, updated_at, created_by, updated_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?)
+        `).bind(
+          crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
+          item.descricao!, item.quantidade!, item.valorUnitario!, item.desconto ?? 0, itemTotal,
+          item.cfop ?? null, item.ncm ?? null, item.unidade ?? 'UN', item.origem ?? 0,
+          item.icmsCst ?? null, item.icmsCsosn ?? null, item.icmsModalidadeBc ?? null,
+          item.icmsBaseCalculo ?? null, item.icmsAliquota ?? null, item.icmsValor ?? null,
+          item.icmsCreditoAliquota ?? null, item.icmsCreditoValor ?? null,
+          item.pisCst ?? null, item.pisBaseCalculo ?? null, item.pisAliquota ?? null, item.pisValor ?? null,
+          item.cofinsCst ?? null, item.cofinsBaseCalculo ?? null, item.cofinsAliquota ?? null, item.cofinsValor ?? null,
+          item.ipiCst ?? null, item.ipiBaseCalculo ?? null, item.ipiAliquota ?? null, item.ipiValor ?? null,
+          now, now, uid, uid,
+        ),
       )
     }
   }
@@ -376,6 +465,12 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
   if (data.aliquotaIss !== undefined) { fields.push('aliquota_iss = ?'); vals.push(data.aliquotaIss) }
   if (data.observacoes !== undefined) { fields.push('observacoes = ?'); vals.push(data.observacoes) }
   if (data.desconto !== undefined) { fields.push('valor_desconto = ?'); vals.push(data.desconto) }
+  if (data.formaPagamento !== undefined) { fields.push('forma_pagamento = ?'); vals.push(data.formaPagamento) }
+  if (data.modFrete !== undefined) { fields.push('mod_frete = ?'); vals.push(data.modFrete) }
+  if (data.ambiente !== undefined) { fields.push('ambiente = ?'); vals.push(data.ambiente) }
+  if (data.modelo !== undefined) { fields.push('modelo = ?'); vals.push(data.modelo) }
+  if (data.serie !== undefined) { fields.push('serie = ?'); vals.push(data.serie) }
+  if (data.valorTroco !== undefined) { fields.push('valor_troco = ?'); vals.push(data.valorTroco) }
 
   stmts.push(
     c.env.DB_SHARED.prepare(`UPDATE notas_fiscais SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)

@@ -71,6 +71,12 @@ const empresaSchema = z.object({
   cidade: z.string().optional(),
   uf: z.string().length(2).optional(),
   cep: z.string().optional(),
+  codigoMunicipio: z.string().max(7).optional(),
+  crt: z.enum(['1', '2', '3']).optional(),
+  cnae: z.string().max(10).optional(),
+  nfeSerie: z.string().max(3).optional(),
+  nfeAmbiente: z.coerce.number().int().min(1).max(2).optional(),
+  nfeProximoNumero: z.coerce.number().int().min(1).optional(),
 })
 
 app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
@@ -111,8 +117,11 @@ const filialSchema = z.object({
   cidade: z.string().optional(),
   logradouro: z.string().optional(),
   numero: z.string().optional(),
+  complemento: z.string().optional(),
   bairro: z.string().optional(),
   cep: z.string().optional(),
+  codigoMunicipio: z.string().max(7).optional(),
+  inscricaoEstadual: z.string().optional(),
 })
 
 app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) => {

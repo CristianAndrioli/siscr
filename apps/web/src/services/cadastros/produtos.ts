@@ -9,6 +9,12 @@ export interface Produto {
   preco_venda: number;
   preco_custo?: number;
   ncm?: string;
+  origem?: number | null;
+  cest?: string | null;
+  icms_cst?: string | null;
+  icms_csosn?: string | null;
+  pis_cst?: string | null;
+  cofins_cst?: string | null;
   ativo: number;
 }
 
@@ -19,7 +25,17 @@ export interface ProdutoForm {
   precoVenda: number;
   precoCusto?: number;
   ncm?: string;
+  origem?: number;
+  cest?: string;
+  icmsCst?: string;
+  icmsCsosn?: string;
+  pisCst?: string;
+  cofinsCst?: string;
   ativo: boolean;
+}
+
+function sanitize(dados: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(dados).filter(([, v]) => v !== ''));
 }
 
 export const produtosService = {
@@ -37,12 +53,12 @@ export const produtosService = {
   },
 
   create: async (dados: ProdutoForm): Promise<{ id: string }> => {
-    const response = await api.post('/tenant/cadastros/produtos', dados);
+    const response = await api.post('/tenant/cadastros/produtos', sanitize({ ...dados }));
     return response.data;
   },
 
   update: async (id: string, dados: Partial<ProdutoForm>): Promise<void> => {
-    await api.put(`/tenant/cadastros/produtos/${id}`, dados);
+    await api.put(`/tenant/cadastros/produtos/${id}`, sanitize({ ...dados }));
   },
 
   delete: async (id: string): Promise<void> => {

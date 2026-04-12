@@ -17,6 +17,10 @@ export interface Pessoa {
   bairro?: string;
   cidade?: string;
   uf?: string;
+  inscricao_estadual?: string | null;
+  ind_ie_dest?: string | null;
+  codigo_municipio?: string | null;
+  codigo_pais?: string | null;
   ativo: number;
   created_at: string;
 }
@@ -36,6 +40,10 @@ export interface PessoaForm {
   bairro?: string;
   cidade?: string;
   uf?: string;
+  inscricaoEstadual?: string;
+  indIeDest?: '1' | '2' | '9';
+  codigoMunicipio?: string;
+  codigoPais?: string;
 }
 
 /** Remove campos de string vazia para não falhar validação opcional na API */
