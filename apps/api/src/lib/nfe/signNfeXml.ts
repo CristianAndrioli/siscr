@@ -1,5 +1,5 @@
 import * as forge from 'node-forge'
-import { SignedXml } from 'xmldsigjs'
+import { Parse, SignedXml } from 'xmldsigjs'
 
 function isCaCert(cert: forge.pki.Certificate): boolean {
   const ext = cert.getExtension('basicConstraints') as { cA?: boolean } | undefined
@@ -107,8 +107,8 @@ export async function signNfeXmlWithA1(
 ): Promise<string> {
   const { privateKey, x509Base64 } = await pfxToWebCryptoRsaSha1(pfxBytes, password)
 
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(unsignedXml, 'application/xml')
+  // Parse do xml-core (via xmldsigjs) — DOMParser não existe em todos os runtimes do Worker.
+  const doc = Parse(unsignedXml)
   const root = doc.documentElement
   if (!root || root.localName !== 'NFe') {
     throw new Error('XML NF-e inválido: elemento raiz NFe esperado.')
