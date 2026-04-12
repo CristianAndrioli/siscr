@@ -6,6 +6,13 @@ import { auditUserId } from '../lib/audit'
 import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
 import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
+import {
+  fetchBrasilApiNcmJson,
+  fetchClassifNcmJson,
+  NCM_BRASIL_API_URL,
+  NCM_CLASSIF_JSON_URL,
+  runNcmSync,
+} from '../lib/ncm/syncNcmCatalog'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -834,6 +841,72 @@ app.get('/notas/:id/danfe-preview', async (c) => {
       'Cache-Control': 'private, max-age=60',
     },
   })
+})
+
+// ─── Tabela NCM (catálogo global D1; apenas admin) ─────────────────
+
+app.get('/ncm/status', async (c) => {
+  const db = c.env.DB_SHARED
+  const active = await db
+    .prepare(`SELECT value FROM ncm_meta WHERE key = 'active_batch_id'`)
+    .first<{ value: string }>()
+  let itemCount = 0
+  if (active?.value) {
+    const r = await db
+      .prepare(`SELECT COUNT(*) as c FROM ncm_items WHERE batch_id = ?`)
+      .bind(active.value)
+      .first<{ c: number }>()
+    itemCount = Number(r?.c ?? 0)
+  }
+  const { results: recentSyncs } = await db
+    .prepare(
+      `SELECT id, source, status, message, row_count, content_sha256, payload_meta, started_at, finished_at
+       FROM ncm_sync_runs ORDER BY started_at DESC LIMIT 8`,
+    )
+    .all()
+  return c.json({
+    activeBatchId: active?.value ?? null,
+    itemCount,
+    recentSyncs: recentSyncs ?? [],
+    sources: { classifUrl: NCM_CLASSIF_JSON_URL, brasilApiUrl: NCM_BRASIL_API_URL },
+  })
+})
+
+app.post('/ncm/sync/classif', async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Apenas administradores podem atualizar a tabela NCM.' }, 403)
+  }
+  const force = c.req.query('force') === '1'
+  const res = await fetchClassifNcmJson()
+  if (!res.ok) {
+    return c.json(
+      {
+        error: `Download do Classif/Siscomex falhou (HTTP ${res.status}). Use a atualização pela Brasil API ou tente mais tarde.`,
+      },
+      502,
+    )
+  }
+  const text = await res.text()
+  const out = await runNcmSync(c.env.DB_SHARED, 'classif', text, { force })
+  if (!out.ok) return c.json({ error: out.message }, 400)
+  return c.json(out)
+})
+
+app.post('/ncm/sync/brasilapi', async (c) => {
+  const user = c.get('user')
+  if (user.role !== 'admin') {
+    return c.json({ error: 'Apenas administradores podem atualizar a tabela NCM.' }, 403)
+  }
+  const force = c.req.query('force') === '1'
+  const res = await fetchBrasilApiNcmJson()
+  if (!res.ok) {
+    return c.json({ error: `Download da Brasil API falhou (HTTP ${res.status}).` }, 502)
+  }
+  const text = await res.text()
+  const out = await runNcmSync(c.env.DB_SHARED, 'brasilapi', text, { force })
+  if (!out.ok) return c.json({ error: out.message }, 400)
+  return c.json(out)
 })
 
 export default app

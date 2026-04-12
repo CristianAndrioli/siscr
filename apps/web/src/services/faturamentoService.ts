@@ -273,3 +273,48 @@ export const notasService = {
     return res.data as Blob;
   },
 };
+
+export type NcmSyncRunRow = {
+  id: string;
+  source: string;
+  status: string;
+  message: string | null;
+  row_count: number | null;
+  content_sha256: string | null;
+  payload_meta: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
+export type NcmStatusResponse = {
+  activeBatchId: string | null;
+  itemCount: number;
+  recentSyncs: NcmSyncRunRow[];
+  sources: { classifUrl: string; brasilApiUrl: string };
+};
+
+export type NcmSyncPostResponse = {
+  ok: boolean;
+  skipped?: boolean;
+  batchId?: string;
+  rowCount?: number;
+  sha256?: string;
+  source: string;
+  message: string;
+  meta?: Record<string, string | undefined>;
+};
+
+export const ncmCatalogService = {
+  status: async (): Promise<NcmStatusResponse> => {
+    const res = await api.get(`${BASE}/ncm/status`);
+    return res.data as NcmStatusResponse;
+  },
+  syncClassif: async (force?: boolean): Promise<NcmSyncPostResponse> => {
+    const res = await api.post(`${BASE}/ncm/sync/classif`, {}, { params: force ? { force: '1' } : undefined });
+    return res.data as NcmSyncPostResponse;
+  },
+  syncBrasilApi: async (force?: boolean): Promise<NcmSyncPostResponse> => {
+    const res = await api.post(`${BASE}/ncm/sync/brasilapi`, {}, { params: force ? { force: '1' } : undefined });
+    return res.data as NcmSyncPostResponse;
+  },
+};

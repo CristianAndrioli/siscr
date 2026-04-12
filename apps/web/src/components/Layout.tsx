@@ -178,6 +178,7 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="faturamento" label="Faturamento" iconD={icons.invoice}>
             <SubLink to="/faturamento/cotacoes" label="Cotações" />
             <SubLink to="/faturamento/nf-venda" label="NF-e Venda" />
+            <SubLink to="/faturamento/ncm" label="Tabela NCM" />
             <SubLink to="/faturamento/nfse" label="NFSe" />
           </SubMenu>
         )}
