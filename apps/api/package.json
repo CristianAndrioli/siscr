@@ -19,6 +19,7 @@
     "hono": "^4.7.0",
     "node-forge": "^1.4.0",
     "stripe": "^17.0.0",
+    "xmldsigjs": "^2.8.7",
     "zod": "^3.24.0"
   },
   "devDependencies": {

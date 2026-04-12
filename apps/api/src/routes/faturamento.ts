@@ -4,6 +4,8 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
 import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
+import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
+import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -646,6 +648,7 @@ async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
       chaveAcesso: r.chaveAcesso,
       xmlPath: r.xmlPath,
       devMode: r.devMode,
+      signed: r.signed,
       message: r.message,
     })
   } catch (e) {
@@ -655,11 +658,12 @@ async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
 }
 
 /**
- * Gera chave de acesso, monta XML NF-e 4.00 (sem assinatura digital) e grava no R2.
- * Não envia à SEFAZ nesta versão — próximo passo: assinatura (Web Crypto) + SOAP.
+ * Gera chave de acesso, monta XML NF-e 4.00, assina com A1 (se configurado) e grava no R2.
+ * Fora de `NFE_DEV_MODE`, exige certificado A1 da empresa ou da filial da nota.
+ * Não envia à SEFAZ nesta versão — próximo passo: client SOAP (nfeAutorizacao).
  *
  * Query: force=1 para regerar quando já existir chave/xml.
- * `NFE_DEV_MODE=1`: mensagem orientada a desenvolvimento sem certificado ICP-Brasil.
+ * `NFE_DEV_MODE=1`: permite XML sem A1; com A1, assina normalmente.
  */
 app.post('/notas/:id/preparar-xml', jsonPrepareNfeXml)
 
@@ -687,6 +691,147 @@ app.get('/notas/:id/xml', async (c) => {
     headers: {
       'Content-Type': 'application/xml',
       'Content-Disposition': `attachment; filename="${nota.chave_acesso}.xml"`,
+    },
+  })
+})
+
+/** JSON: valida digest + RSA da assinatura XML-DSig contra o XML armazenado. */
+app.get('/notas/:id/verificacao-assinatura', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+
+  const nota = await c.env.DB_SHARED
+    .prepare('SELECT xml_path, tipo FROM notas_fiscais WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first<{ xml_path: string | null; tipo: string }>()
+
+  if (!nota?.xml_path) return c.json({ error: 'XML não disponível. Gere o XML primeiro.' }, 404)
+  if (nota.tipo !== 'nfe') return c.json({ error: 'Verificação disponível apenas para NF-e.' }, 400)
+
+  if (!c.env.R2_STORAGE) return c.json({ error: 'Armazenamento não configurado.' }, 503)
+  const object = await c.env.R2_STORAGE.get(nota.xml_path)
+  if (!object) return c.json({ error: 'Arquivo XML não encontrado.' }, 404)
+
+  const xml = await object.text()
+  const r = await verificarAssinaturaNfeXml(xml)
+  return c.json(r)
+})
+
+/** HTML imprimível — prévia estilo DANFE para testes (não é o leiaute oficial em PDF). */
+app.get('/notas/:id/danfe-preview', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+
+  const nota = await c.env.DB_SHARED
+    .prepare(
+      `SELECT nf.*,
+        p.nome as destinatario_nome, p.cpf_cnpj as destinatario_doc,
+        p.logradouro as dest_logradouro, p.numero as dest_numero, p.bairro as dest_bairro,
+        p.cidade as dest_cidade, p.uf as dest_uf, p.cep as dest_cep
+       FROM notas_fiscais nf
+       LEFT JOIN pessoas p ON p.id = nf.destinatario_id
+       WHERE nf.id = ? AND nf.tenant_id = ?`,
+    )
+    .bind(id, tenant.tenantId)
+    .first<Record<string, unknown>>()
+
+  if (!nota) return c.json({ error: 'Nota não encontrada.' }, 404)
+  if (String(nota.tipo) !== 'nfe') return c.json({ error: 'Prévia disponível apenas para NF-e.' }, 400)
+
+  const chave = nota.chave_acesso == null ? '' : String(nota.chave_acesso)
+  if (!chave) return c.json({ error: 'Gere o XML primeiro para obter a chave de acesso.' }, 400)
+
+  const empresaId = nota.empresa_id == null ? '' : String(nota.empresa_id)
+  if (!empresaId) return c.json({ error: 'Nota sem empresa.' }, 400)
+
+  const empresa = await c.env.DB_SHARED
+    .prepare('SELECT * FROM empresas WHERE id = ? AND tenant_id = ?')
+    .bind(empresaId, tenant.tenantId)
+    .first<Record<string, unknown>>()
+
+  if (!empresa) return c.json({ error: 'Empresa não encontrada.' }, 404)
+
+  const filialId = nota.filial_id == null ? '' : String(nota.filial_id)
+  let filial: Record<string, unknown> | null = null
+  if (filialId) {
+    filial = await c.env.DB_SHARED
+      .prepare('SELECT * FROM filiais WHERE id = ? AND tenant_id = ?')
+      .bind(filialId, tenant.tenantId)
+      .first<Record<string, unknown>>()
+  }
+
+  const { results: itensRows } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT ni.*, pr.codigo as produto_codigo
+       FROM nota_fiscal_itens ni
+       LEFT JOIN produtos pr ON pr.id = ni.produto_id
+       WHERE ni.nota_fiscal_id = ?`,
+    )
+    .bind(id)
+    .all()
+
+  const itensList = (itensRows ?? []) as Record<string, unknown>[]
+
+  const str = (v: unknown) => (v == null ? '' : String(v))
+  const num = (v: unknown, d = 0) => {
+    if (v == null) return d
+    const n = Number(v)
+    return Number.isFinite(n) ? n : d
+  }
+
+  const emitente = {
+    razaoSocial: str(empresa.razao_social) || 'Emitente',
+    cnpj: str(empresa.cnpj),
+    ie: str(empresa.inscricao_estadual),
+    logradouro: filial ? str(filial.logradouro) || str(empresa.logradouro) : str(empresa.logradouro),
+    numero: filial ? str(filial.numero) || str(empresa.numero) : str(empresa.numero),
+    bairro: filial ? str(filial.bairro) || str(empresa.bairro) : str(empresa.bairro),
+    cidade: filial ? str(filial.cidade) || str(empresa.cidade) : str(empresa.cidade),
+    uf: filial ? str(filial.uf) || str(empresa.uf) : str(empresa.uf),
+    cep: filial ? str(filial.cep) || str(empresa.cep) : str(empresa.cep),
+  }
+
+  const destNome = str(nota.destinatario_nome)
+  const dest = destNome
+    ? {
+        nome: destNome,
+        doc: str(nota.destinatario_doc),
+        logradouro: str(nota.dest_logradouro),
+        numero: str(nota.dest_numero),
+        bairro: str(nota.dest_bairro),
+        cidade: str(nota.dest_cidade),
+        uf: str(nota.dest_uf),
+        cep: str(nota.dest_cep),
+      }
+    : null
+
+  const itens = itensList.map((ni) => ({
+    descricao: str(ni.descricao) || 'Item',
+    quantidade: num(ni.quantidade, 1),
+    unidade: str(ni.unidade) || 'UN',
+    valorUnitario: num(ni.valor_unitario, 0),
+    valorTotal: num(ni.valor_total, 0),
+    ncm: str(ni.ncm),
+    cfop: str(ni.cfop),
+  }))
+
+  const html = buildDanfePreviewHtml({
+    numero: String(num(nota.numero, 0)),
+    serie: str(nota.serie) || '1',
+    naturezaOperacao: str(nota.natureza_operacao) || '—',
+    ambiente: String(num(nota.ambiente, 2)),
+    chaveAcesso: chave,
+    dataEmissao: str(nota.data_emissao) || null,
+    emitente,
+    destinatario: dest,
+    itens,
+    valorTotal: num(nota.valor_total, 0),
+  })
+
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'private, max-age=60',
     },
   })
 })

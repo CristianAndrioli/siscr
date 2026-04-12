@@ -68,6 +68,15 @@ export interface NFItem {
   ipiValor?: number;
 }
 
+/** Resposta de GET …/notas/:id/verificacao-assinatura */
+export type VerificacaoAssinaturaNfe = {
+  possuiAssinatura: boolean
+  valida: boolean
+  mensagem: string
+  signatureMethod?: string
+  digestMethod?: string
+}
+
 export interface NotaFiscal {
   id: string;
   tipo: NFTipo;
@@ -230,16 +239,37 @@ export const notasService = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/notas/${id}`);
   },
-  /** Gera chave + XML no R2 (sem envio SOAP nesta versão). Query force=1 regera. */
+  /** Gera chave + XML no R2; assina com A1 se configurado. Query force=1 regera. */
   prepararXml: async (
     id: string,
     opts?: { force?: boolean },
-  ): Promise<{ chaveAcesso: string; xmlPath: string; devMode: boolean; message: string }> => {
+  ): Promise<{
+    chaveAcesso: string
+    xmlPath: string
+    devMode: boolean
+    signed: boolean
+    message: string
+  }> => {
     const res = await api.post(
       `${BASE}/notas/${id}/preparar-xml`,
       {},
       { params: opts?.force ? { force: '1' } : undefined },
     );
     return res.data;
+  },
+  /** Baixa o XML armazenado no R2 (assinado ou não). */
+  downloadXml: async (id: string): Promise<Blob> => {
+    const res = await api.get(`${BASE}/notas/${id}/xml`, { responseType: 'blob' });
+    return res.data as Blob;
+  },
+  /** Valida XML-DSig (digest + RSA) do arquivo no R2. */
+  verificacaoAssinatura: async (id: string): Promise<VerificacaoAssinaturaNfe> => {
+    const res = await api.get(`${BASE}/notas/${id}/verificacao-assinatura`);
+    return res.data as VerificacaoAssinaturaNfe;
+  },
+  /** HTML imprimível — prévia estilo DANFE para testes. */
+  danfePreviewBlob: async (id: string): Promise<Blob> => {
+    const res = await api.get(`${BASE}/notas/${id}/danfe-preview`, { responseType: 'blob' });
+    return res.data as Blob;
   },
 };

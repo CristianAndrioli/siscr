@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { notasService, type NotaFiscal, type NFItem, type NFStatus } from '../../services/faturamentoService';
+import {
+  notasService,
+  type NotaFiscal,
+  type NFItem,
+  type NFStatus,
+  type VerificacaoAssinaturaNfe,
+} from '../../services/faturamentoService';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
@@ -50,6 +56,9 @@ export function NFVendaPage() {
   const [motivoCancel, setMotivoCancel] = useState('');
   const [prepararXmlBusy, setPrepararXmlBusy] = useState(false);
   const [prepararXmlHint, setPrepararXmlHint] = useState('');
+  const [assinaturaVerif, setAssinaturaVerif] = useState<VerificacaoAssinaturaNfe | null>(null);
+  const [assinaturaVerifLoading, setAssinaturaVerifLoading] = useState(false);
+  const [xmlToolsBusy, setXmlToolsBusy] = useState(false);
   const [destinatarioId, setDestinatarioId] = useState('');
   const [destinatarioNome, setDestinatarioNome] = useState('');
   const [form, setForm] = useState({
@@ -67,6 +76,33 @@ export function NFVendaPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (modalMode !== 'view' || !selectedNota?.chave_acesso) {
+      setAssinaturaVerif(null);
+      setAssinaturaVerifLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAssinaturaVerifLoading(true);
+    notasService
+      .verificacaoAssinatura(selectedNota.id)
+      .then((v) => {
+        if (!cancelled) {
+          setAssinaturaVerif(v);
+          setAssinaturaVerifLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAssinaturaVerif(null);
+          setAssinaturaVerifLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modalMode, selectedNota?.id, selectedNota?.chave_acesso]);
 
   useEffect(() => {
     if (modalMode === 'new' && produtos.length === 0) {
@@ -96,7 +132,11 @@ export function NFVendaPage() {
     setPrepararXmlHint('');
     try {
       const r = await notasService.prepararXml(selectedNota.id, { force });
-      setPrepararXmlHint(r.message + (r.devMode ? ' (modo desenvolvimento)' : ''));
+      setPrepararXmlHint(
+        r.message +
+          (r.signed ? ' Assinatura digital aplicada.' : '') +
+          (r.devMode ? ' (modo desenvolvimento)' : ''),
+      );
       const updated = await notasService.get(selectedNota.id);
       setSelectedNota(updated);
       load();
@@ -106,6 +146,58 @@ export function NFVendaPage() {
       reportError('Erro ao gerar XML da NF-e.', err, 'Faturamento NF-e');
     } finally {
       setPrepararXmlBusy(false);
+    }
+  };
+
+  const handleDownloadXml = async () => {
+    if (!selectedNota?.chave_acesso) return;
+    setXmlToolsBusy(true);
+    setModalError('');
+    try {
+      const blob = await notasService.downloadXml(selectedNota.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedNota.chave_acesso}.xml`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setModalError(ax.response?.data?.error || 'Não foi possível baixar o XML.');
+      reportError('Erro ao baixar XML da NF-e.', err, 'Faturamento NF-e');
+    } finally {
+      setXmlToolsBusy(false);
+    }
+  };
+
+  const handleDanfePreview = async () => {
+    if (!selectedNota?.chave_acesso) return;
+    setXmlToolsBusy(true);
+    setModalError('');
+    try {
+      const blob = await notasService.danfePreviewBlob(selectedNota.id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setModalError(ax.response?.data?.error || 'Não foi possível abrir a prévia DANFE.');
+      reportError('Erro ao abrir prévia DANFE.', err, 'Faturamento NF-e');
+    } finally {
+      setXmlToolsBusy(false);
+    }
+  };
+
+  const handleRefetchAssinatura = async () => {
+    if (!selectedNota?.chave_acesso) return;
+    setAssinaturaVerifLoading(true);
+    try {
+      const v = await notasService.verificacaoAssinatura(selectedNota.id);
+      setAssinaturaVerif(v);
+    } catch {
+      setAssinaturaVerif(null);
+    } finally {
+      setAssinaturaVerifLoading(false);
     }
   };
 
@@ -488,13 +580,55 @@ export function NFVendaPage() {
             </div>
 
             {selectedNota.chave_acesso && (
-              <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-2 text-xs">
-                <p className="font-semibold text-slate-600 dark:text-slate-300 mb-1">Chave de acesso</p>
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-2 text-xs space-y-2">
+                <p className="font-semibold text-slate-600 dark:text-slate-300">Chave de acesso</p>
                 <p className="font-mono text-[11px] break-all text-slate-800 dark:text-slate-100">{selectedNota.chave_acesso}</p>
-                <p className="text-slate-500 dark:text-slate-400 mt-1">
-                  XML salvo no armazenamento — download pela API{' '}
-                  <code className="text-[10px] bg-slate-200 dark:bg-slate-900 px-1 rounded">GET …/notas/{'{id}'}/xml</code>
-                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadXml()}
+                    disabled={xmlToolsBusy}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Baixar XML
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDanfePreview()}
+                    disabled={xmlToolsBusy}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Prévia DANFE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRefetchAssinatura()}
+                    disabled={assinaturaVerifLoading}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    Verificar assinatura
+                  </button>
+                </div>
+                {assinaturaVerifLoading && (
+                  <p className="text-slate-500 dark:text-slate-400">Verificando assinatura XML-DSig…</p>
+                )}
+                {!assinaturaVerifLoading && assinaturaVerif && (
+                  <div
+                    className={
+                      assinaturaVerif.possuiAssinatura && assinaturaVerif.valida
+                        ? 'rounded-md border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-1.5 text-emerald-900 dark:text-emerald-200'
+                        : 'rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/50 px-2 py-1.5 text-amber-900 dark:text-amber-200'
+                    }
+                  >
+                    <p className="font-medium">{assinaturaVerif.mensagem}</p>
+                    {(assinaturaVerif.signatureMethod || assinaturaVerif.digestMethod) && (
+                      <p className="mt-1 text-[10px] font-mono opacity-90 break-all">
+                        {assinaturaVerif.signatureMethod && <span>Sig: {assinaturaVerif.signatureMethod} </span>}
+                        {assinaturaVerif.digestMethod && <span>Digest: {assinaturaVerif.digestMethod}</span>}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

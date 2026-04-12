@@ -11,12 +11,16 @@ import {
 } from './buildNfeXml'
 import { formatDhEmiSp } from './formatDhEmi'
 import { onlyDigits } from './xmlEscape'
+import { decryptA1Bundle } from '../certBlob'
+import { signNfeXmlWithA1 } from './signNfeXml'
 
 export type PrepareNfeResult = {
   chaveAcesso: string
   xmlPath: string
   xmlBytes: Uint8Array
   devMode: boolean
+  /** true quando o XML foi assinado com o A1 do tenant (empresa ou filial). */
+  signed: boolean
   message: string
 }
 
@@ -31,11 +35,12 @@ function str(v: unknown): string {
 }
 
 /**
- * Carrega nota + empresa (+ dest/itens), gera chave e XML sem assinatura.
+ * Carrega nota + empresa (+ dest/itens), gera chave e XML.
+ * Com certificado A1 (R2 + CERT_BLOB_SECRET), assina com XML-DSig (RSA-SHA1).
  * Grava XML no R2. Atualiza D1 (chave, xml_path, data_emissao, campos de transmissão).
  *
- * `devMode`: quando true, não exige certificado ICP-Brasil — fluxo para desenvolvimento
- * (XML válido estruturalmente; SEFAZ real ainda não é chamada nesta versão).
+ * `devMode`: quando true, permite XML sem certificado; com A1 configurado, assina igual.
+ * Fora do modo dev, exige A1 da empresa ou da filial da nota.
  */
 export async function prepareNfeEnvio(
   env: Env,
@@ -252,7 +257,42 @@ export async function prepareNfeEnvio(
     valorDescontoGlobal: vDescGlobal,
   }
 
-  const xml = buildNfeXmlUnsigned(input)
+  let xml = buildNfeXmlUnsigned(input)
+  let signed = false
+
+  const certSecret = env.CERT_BLOB_SECRET?.trim()
+  let a1ObjectKey: string | null = null
+  let decryptScope = empresaId
+
+  if (filialId && str(filial?.a1_r2_object_key)) {
+    a1ObjectKey = str(filial!.a1_r2_object_key)
+    decryptScope = `filial:${filialId}`
+  } else if (str(empresa.a1_r2_object_key)) {
+    a1ObjectKey = str(empresa.a1_r2_object_key)
+    decryptScope = empresaId
+  }
+
+  if (a1ObjectKey) {
+    if (!certSecret) {
+      throw new Error('CERT_BLOB_SECRET não configurado — impossível usar o certificado A1.')
+    }
+    if (!env.R2_STORAGE) {
+      throw new Error('R2_STORAGE não configurado — impossível ler o certificado A1.')
+    }
+    const certObj = await env.R2_STORAGE.get(a1ObjectKey)
+    if (!certObj) {
+      throw new Error('Arquivo do certificado A1 não encontrado no armazenamento.')
+    }
+    const enc = await certObj.arrayBuffer()
+    const bundle = await decryptA1Bundle(certSecret, tenantId, decryptScope, enc)
+    xml = await signNfeXmlWithA1(xml, chave44, bundle.pfxBytes, bundle.password)
+    signed = true
+  } else if (!options.devMode) {
+    throw new Error(
+      'Certificado A1 não configurado para esta empresa/filial. Envie o .pfx em Configurações ou use NFE_DEV_MODE=1 apenas em desenvolvimento.',
+    )
+  }
+
   const xmlBytes = new TextEncoder().encode(xml)
   const xmlPath = `tenants/${tenantId}/nfe/${chave44}.xml`
 
@@ -286,8 +326,11 @@ export async function prepareNfeEnvio(
     xmlPath,
     xmlBytes,
     devMode: options.devMode,
-    message: options.devMode
-      ? 'XML gerado e salvo. Modo desenvolvimento — sem envio à SEFAZ. Com certificado ICP-Brasil, desative NFE_DEV_MODE e implemente o client SOAP.'
-      : 'XML gerado e salvo. Próximo passo: assinatura digital e envio SOAP (não implementado nesta versão).',
+    signed,
+    message: signed
+      ? options.devMode
+        ? 'XML assinado e salvo. Modo desenvolvimento — envio SOAP à SEFAZ ainda não implementado.'
+        : 'XML assinado e salvo. Próximo passo: envio SOAP (nfeAutorizacao) e tratamento do retorno.'
+      : 'XML gerado e salvo sem assinatura (sem A1). Modo desenvolvimento — sem envio à SEFAZ.',
   }
 }
