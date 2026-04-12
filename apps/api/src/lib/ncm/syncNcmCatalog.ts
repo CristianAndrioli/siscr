@@ -232,7 +232,15 @@ export async function persistNcmBatch(
     .prepare(
       `UPDATE ncm_sync_runs SET status = ?, row_count = ?, content_sha256 = ?, payload_meta = ?, finished_at = ?, message = ? WHERE id = ?`,
     )
-    .bind('ok', rows.length, sha256, metaJson, now, `Importados ${rows.length} registros (${source}).`, runId)
+    .bind(
+      'ok',
+      rows.length,
+      sha256,
+      metaJson,
+      now,
+      `Importados ${rows.length} registros (${source === 'classif' ? 'Siscomex' : 'Brasil API'}).`,
+      runId,
+    )
     .run()
 
   return { batchId, rowCount: rows.length, skipped: false }

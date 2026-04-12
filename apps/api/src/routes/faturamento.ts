@@ -962,7 +962,7 @@ app.post('/ncm/sync/classif', async (c) => {
   if (!res.ok) {
     return c.json(
       {
-        error: `Download do Classif/Siscomex falhou (HTTP ${res.status}). Use a atualização pela Brasil API ou tente mais tarde.`,
+        error: `Download no Siscomex falhou (HTTP ${res.status}). Tente pela Brasil API ou mais tarde.`,
       },
       502,
     )

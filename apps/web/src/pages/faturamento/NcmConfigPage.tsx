@@ -10,7 +10,7 @@ import {
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
 
 function labelFonte(source: string): string {
-  if (source === 'classif') return 'Classif';
+  if (source === 'classif') return 'Siscomex';
   if (source === 'brasilapi') return 'Brasil API';
   return source;
 }
@@ -215,7 +215,7 @@ export function NcmConfigPage() {
               onClick={() => runSync('classif')}
               className="px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-800 hover:bg-slate-900 dark:bg-slate-600 dark:hover:bg-slate-500 text-white disabled:opacity-50 min-w-[200px]"
             >
-              {busy === 'classif' ? `Processando… ${elapsedSec}s` : 'Atualizar pelo Classif (oficial)'}
+              {busy === 'classif' ? `Processando… ${elapsedSec}s` : 'Atualizar pelo Siscomex'}
             </button>
             <button
               type="button"
