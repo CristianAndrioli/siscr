@@ -9,8 +9,6 @@ import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import {
   fetchBrasilApiNcmJson,
   fetchClassifNcmJson,
-  NCM_BRASIL_API_URL,
-  NCM_CLASSIF_JSON_URL,
   runNcmSync,
 } from '../lib/ncm/syncNcmCatalog'
 
@@ -843,7 +841,68 @@ app.get('/notas/:id/danfe-preview', async (c) => {
   })
 })
 
-// ─── Tabela NCM (catálogo global D1; apenas admin) ─────────────────
+// ─── Tabela NCM (catálogo global DB_SHARED; leitura para utilizadores autenticados) ─
+
+app.get('/ncm/items', async (c) => {
+  const db = c.env.DB_SHARED
+  const qRaw = (c.req.query('q') || '').trim().slice(0, 120)
+  const q = qRaw.replace(/[%_]/g, '')
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 200)
+  const offset = Math.max(Number(c.req.query('offset')) || 0, 0)
+
+  const active = await db
+    .prepare(`SELECT value FROM ncm_meta WHERE key = 'active_batch_id'`)
+    .first<{ value: string }>()
+  if (!active?.value) {
+    return c.json({ items: [], total: 0 })
+  }
+  const batchId = active.value
+
+  let countSql = `SELECT COUNT(*) as c FROM ncm_items WHERE batch_id = ?`
+  let listSql = `
+    SELECT codigo_8, codigo_raw, descricao, vigencia_inicio, vigencia_fim
+    FROM ncm_items WHERE batch_id = ?
+  `
+  const bindCount: unknown[] = [batchId]
+  const bindList: unknown[] = [batchId]
+
+  if (q) {
+    const clause = ` AND (
+      COALESCE(codigo_8, '') LIKE ? OR COALESCE(codigo_raw, '') LIKE ? OR descricao LIKE ?
+    )`
+    const p = `%${q}%`
+    countSql += clause
+    listSql += clause
+    bindCount.push(p, p, p)
+    bindList.push(p, p, p)
+  }
+
+  listSql += `
+    ORDER BY COALESCE(codigo_8, codigo_raw) COLLATE NOCASE, vigencia_inicio DESC
+    LIMIT ? OFFSET ?
+  `
+  bindList.push(limit, offset)
+
+  const countRow = await db.prepare(countSql).bind(...bindCount).first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+  const { results } = await db.prepare(listSql).bind(...bindList).all<{
+    codigo_8: string | null
+    codigo_raw: string
+    descricao: string
+    vigencia_inicio: string
+    vigencia_fim: string
+  }>()
+
+  return c.json({
+    total,
+    items: (results ?? []).map((row) => ({
+      codigo: row.codigo_8?.trim() || row.codigo_raw,
+      descricao: row.descricao,
+      vigenciaInicio: row.vigencia_inicio,
+      vigenciaFim: row.vigencia_fim,
+    })),
+  })
+})
 
 app.get('/ncm/status', async (c) => {
   const db = c.env.DB_SHARED
@@ -868,7 +927,6 @@ app.get('/ncm/status', async (c) => {
     activeBatchId: active?.value ?? null,
     itemCount,
     recentSyncs: recentSyncs ?? [],
-    sources: { classifUrl: NCM_CLASSIF_JSON_URL, brasilApiUrl: NCM_BRASIL_API_URL },
   })
 })
 

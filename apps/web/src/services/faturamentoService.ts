@@ -290,7 +290,18 @@ export type NcmStatusResponse = {
   activeBatchId: string | null;
   itemCount: number;
   recentSyncs: NcmSyncRunRow[];
-  sources: { classifUrl: string; brasilApiUrl: string };
+};
+
+export type NcmItemRow = {
+  codigo: string;
+  descricao: string;
+  vigenciaInicio: string;
+  vigenciaFim: string;
+};
+
+export type NcmItemsResponse = {
+  items: NcmItemRow[];
+  total: number;
 };
 
 export type NcmSyncPostResponse = {
@@ -308,6 +319,14 @@ export const ncmCatalogService = {
   status: async (): Promise<NcmStatusResponse> => {
     const res = await api.get(`${BASE}/ncm/status`);
     return res.data as NcmStatusResponse;
+  },
+  items: async (params?: {
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<NcmItemsResponse> => {
+    const res = await api.get(`${BASE}/ncm/items`, { params });
+    return res.data as NcmItemsResponse;
   },
   syncClassif: async (force?: boolean): Promise<NcmSyncPostResponse> => {
     const res = await api.post(`${BASE}/ncm/sync/classif`, {}, { params: force ? { force: '1' } : undefined });
