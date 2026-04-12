@@ -14,12 +14,15 @@
   },
   "dependencies": {
     "@hono/zod-validator": "^0.4.3",
+    "@xmldom/xmldom": "^0.8.12",
     "better-auth": "^1.2.0",
     "drizzle-orm": "^0.41.0",
     "hono": "^4.7.0",
     "node-forge": "^1.4.0",
     "stripe": "^17.0.0",
+    "xml-core": "^1.2.5",
     "xmldsigjs": "^2.8.7",
+    "xpath": "^0.0.34",
     "zod": "^3.24.0"
   },
   "devDependencies": {

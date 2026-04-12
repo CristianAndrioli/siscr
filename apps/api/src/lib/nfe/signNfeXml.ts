@@ -1,5 +1,6 @@
 import * as forge from 'node-forge'
 import { Parse, SignedXml } from 'xmldsigjs'
+import { ensureXmlCoreNodeDependencies } from './xmlCoreWorkerDeps'
 
 function isCaCert(cert: forge.pki.Certificate): boolean {
   const ext = cert.getExtension('basicConstraints') as { cA?: boolean } | undefined
@@ -105,9 +106,9 @@ export async function signNfeXmlWithA1(
   pfxBytes: ArrayBuffer,
   password: string,
 ): Promise<string> {
+  ensureXmlCoreNodeDependencies()
   const { privateKey, x509Base64 } = await pfxToWebCryptoRsaSha1(pfxBytes, password)
 
-  // Parse do xml-core (via xmldsigjs) — DOMParser não existe em todos os runtimes do Worker.
   const doc = Parse(unsignedXml)
   const root = doc.documentElement
   if (!root || root.localName !== 'NFe') {

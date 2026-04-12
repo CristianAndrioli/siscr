@@ -1,5 +1,5 @@
-import { Parse } from 'xmldsigjs'
-import { SignedXml } from 'xmldsigjs'
+import { Parse, SignedXml } from 'xmldsigjs'
+import { ensureXmlCoreNodeDependencies } from './xmlCoreWorkerDeps'
 
 const DS_NS = 'http://www.w3.org/2000/09/xmldsig#'
 
@@ -15,6 +15,7 @@ export type VerificacaoAssinaturaNfe = {
  * Valida a assinatura XML-DSig de uma NF-e (referência enveloped ao `infNFe`).
  */
 export async function verificarAssinaturaNfeXml(xml: string): Promise<VerificacaoAssinaturaNfe> {
+  ensureXmlCoreNodeDependencies()
   const doc = Parse(xml)
   const nfe = doc.documentElement
   if (!nfe || nfe.localName !== 'NFe') {
