@@ -157,6 +157,10 @@ export default function Layout({ children }: LayoutProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
         <SidebarLink to="/app" label="Início" iconD={icons.home} />
 
+        {hasModuleAccess('faturamento') && (
+          <SidebarLink to="/entrada/notas" label="NF-e de entrada" iconD={icons.truck} />
+        )}
+
         {hasModuleAccess('cadastros') && (
           <SubMenu menuKey="cadastros" label="Cadastros" iconD={icons.users}>
             <SubLink to="/cadastros/pessoas" label="Pessoas" />
@@ -178,6 +182,7 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="faturamento" label="Faturamento" iconD={icons.invoice}>
             <SubLink to="/faturamento/cotacoes" label="Cotações" />
             <SubLink to="/faturamento/nf-venda" label="NF-e Venda" />
+            <SubLink to="/entrada/notas" label="NF-e de entrada" />
             <SubLink to="/configuracoes/faturamento" label="Configuração NF-e" />
             <SubLink to="/faturamento/ncm" label="Tabela NCM" />
             <SubLink to="/faturamento/nfse" label="NFSe" />

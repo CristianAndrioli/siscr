@@ -17,6 +17,7 @@ import estoqueRoutes from './routes/estoque'
 import financeiroRoutes from './routes/financeiro'
 import bancarioRoutes from './routes/bancario'
 import faturamentoRoutes from './routes/faturamento'
+import entradaRoutes from './routes/entrada'
 import vendasRoutes from './routes/vendas'
 import stripeWebhookRoutes from './routes/stripe-webhook'
 import cronRoutes from './routes/cron'
@@ -97,6 +98,7 @@ app.use('/api/tenant/estoque', requireTenantModule('estoque'))
 app.use('/api/tenant/financeiro', requireTenantModule('financeiro'))
 app.use('/api/tenant/bancario', requireTenantModule('financeiro'))
 app.use('/api/tenant/faturamento', requireTenantModule('faturamento'))
+app.use('/api/tenant/entrada', requireTenantModule('faturamento'))
 app.use('/api/tenant/vendas', requireTenantModule('faturamento'))
 
 // ─── Rotas do tenant (autenticadas + tenant identificado) ──────
@@ -107,6 +109,7 @@ app.route('/api/tenant/estoque', estoqueRoutes)
 app.route('/api/tenant/financeiro', financeiroRoutes)
 app.route('/api/tenant/bancario', bancarioRoutes)
 app.route('/api/tenant/faturamento', faturamentoRoutes)
+app.route('/api/tenant/entrada', entradaRoutes)
 app.route('/api/tenant/vendas', vendasRoutes)
 app.route('/api/tenant/logs', logsRoutes)
 
