@@ -297,6 +297,9 @@ export type NcmItemRow = {
   descricao: string;
   vigenciaInicio: string;
   vigenciaFim: string;
+  /** dd-MM-yyyy (calculado no SQL para exibição). */
+  vigenciaInicioBr: string;
+  vigenciaFimBr: string;
 };
 
 export type NcmItemsResponse = {
@@ -324,8 +327,17 @@ export const ncmCatalogService = {
     q?: string;
     limit?: number;
     offset?: number;
+    /** Catálogo completo para grid com filtros/ordenação no cliente (até 120k linhas). */
+    full?: boolean;
   }): Promise<NcmItemsResponse> => {
-    const res = await api.get(`${BASE}/ncm/items`, { params });
+    const res = await api.get(`${BASE}/ncm/items`, {
+      params: {
+        q: params?.q,
+        limit: params?.limit,
+        offset: params?.offset,
+        full: params?.full ? '1' : undefined,
+      },
+    });
     return res.data as NcmItemsResponse;
   },
   syncClassif: async (force?: boolean): Promise<NcmSyncPostResponse> => {

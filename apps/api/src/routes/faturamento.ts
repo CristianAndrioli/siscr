@@ -847,8 +847,10 @@ app.get('/ncm/items', async (c) => {
   const db = c.env.DB_SHARED
   const qRaw = (c.req.query('q') || '').trim().slice(0, 120)
   const q = qRaw.replace(/[%_]/g, '')
-  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 200)
-  const offset = Math.max(Number(c.req.query('offset')) || 0, 0)
+  const full = c.req.query('full') === '1'
+  const limitCap = full ? 120_000 : 200
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || (full ? limitCap : 50), 1), limitCap)
+  const offset = full ? 0 : Math.max(Number(c.req.query('offset')) || 0, 0)
 
   const active = await db
     .prepare(`SELECT value FROM ncm_meta WHERE key = 'active_batch_id'`)
@@ -858,9 +860,20 @@ app.get('/ncm/items', async (c) => {
   }
   const batchId = active.value
 
+  /** Exibição dd-MM-yyyy; ordenação continua a usar vigencia_inicio / vigencia_fim (ISO) no ORDER BY. */
+  const dateBr = (col: string) =>
+    `COALESCE(strftime('%d-%m-%Y', date(${col})), ${col})`
+
   let countSql = `SELECT COUNT(*) as c FROM ncm_items WHERE batch_id = ?`
   let listSql = `
-    SELECT codigo_8, codigo_raw, descricao, vigencia_inicio, vigencia_fim
+    SELECT
+      codigo_8,
+      codigo_raw,
+      descricao,
+      vigencia_inicio,
+      vigencia_fim,
+      ${dateBr('vigencia_inicio')} AS vigencia_inicio_br,
+      ${dateBr('vigencia_fim')} AS vigencia_fim_br
     FROM ncm_items WHERE batch_id = ?
   `
   const bindCount: unknown[] = [batchId]
@@ -879,9 +892,14 @@ app.get('/ncm/items', async (c) => {
 
   listSql += `
     ORDER BY COALESCE(codigo_8, codigo_raw) COLLATE NOCASE, vigencia_inicio DESC
-    LIMIT ? OFFSET ?
   `
-  bindList.push(limit, offset)
+  if (full) {
+    listSql += ` LIMIT ?`
+    bindList.push(limit)
+  } else {
+    listSql += ` LIMIT ? OFFSET ?`
+    bindList.push(limit, offset)
+  }
 
   const countRow = await db.prepare(countSql).bind(...bindCount).first<{ c: number }>()
   const total = Number(countRow?.c ?? 0)
@@ -891,6 +909,8 @@ app.get('/ncm/items', async (c) => {
     descricao: string
     vigencia_inicio: string
     vigencia_fim: string
+    vigencia_inicio_br: string | null
+    vigencia_fim_br: string | null
   }>()
 
   return c.json({
@@ -900,6 +920,8 @@ app.get('/ncm/items', async (c) => {
       descricao: row.descricao,
       vigenciaInicio: row.vigencia_inicio,
       vigenciaFim: row.vigencia_fim,
+      vigenciaInicioBr: row.vigencia_inicio_br ?? row.vigencia_inicio,
+      vigenciaFimBr: row.vigencia_fim_br ?? row.vigencia_fim,
     })),
   })
 })
