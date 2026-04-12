@@ -13,6 +13,7 @@ import { formatDhEmiSp } from './formatDhEmi'
 import { onlyDigits } from './xmlEscape'
 import { decryptA1Bundle } from '../certBlob'
 import { signNfeXmlWithA1 } from './signNfeXml'
+import { validateNfeBeforeXml } from './validateNfeBeforeXml'
 
 export type PrepareNfeResult = {
   chaveAcesso: string
@@ -63,6 +64,12 @@ export async function prepareNfeEnvio(
 
   if (str(nota.status) === 'cancelada') {
     throw new Error('Nota cancelada.')
+  }
+
+  if (str(nota.status) === 'emitida') {
+    throw new Error(
+      'Nota já faturada no ERP (estoque/financeiro). Não é possível gerar ou regerar o XML.',
+    )
   }
 
   if (str(nota.chave_acesso) && str(nota.xml_path) && !options.force) {
@@ -125,6 +132,16 @@ export async function prepareNfeEnvio(
   const itensList = (itensRows ?? []) as Record<string, unknown>[]
   if (itensList.length === 0) {
     throw new Error('Nota sem itens.')
+  }
+
+  const val = validateNfeBeforeXml({
+    empresa,
+    filial,
+    pessoa,
+    itens: itensList,
+  })
+  if (!val.ok) {
+    throw new Error(val.errors.join(' '))
   }
 
   const cnpjEmit = onlyDigits(str(empresa.cnpj), 14)
@@ -315,6 +332,7 @@ export async function prepareNfeEnvio(
         data_emissao = ?,
         transmissao_tentativas = ?,
         transmissao_erro = NULL,
+        status = 'pendente_emissao',
         updated_at = ?
       WHERE id = ? AND tenant_id = ?`,
     )

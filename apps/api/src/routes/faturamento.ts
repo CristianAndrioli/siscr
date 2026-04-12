@@ -307,6 +307,25 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     if (!destinatarioId) destinatarioId = ped.cliente_id
   }
 
+  if (data.tipo === 'nfe' && (!empresaId || !filialId)) {
+    const row = await c.env.DB_SHARED
+      .prepare(
+        `SELECT e.id AS empresa_id,
+          (SELECT f.id FROM filiais f WHERE f.empresa_id = e.id AND f.tenant_id = e.tenant_id ORDER BY f.created_at LIMIT 1) AS filial_id
+         FROM empresas e WHERE e.tenant_id = ? ORDER BY e.created_at LIMIT 1`,
+      )
+      .bind(tenant.tenantId)
+      .first<{ empresa_id: string; filial_id: string | null }>()
+    if (!empresaId && row?.empresa_id) empresaId = row.empresa_id
+    if (!filialId && row?.filial_id) filialId = row.filial_id
+  }
+  if (data.tipo === 'nfe' && (!empresaId || !filialId)) {
+    return c.json(
+      { error: 'Cadastre empresa e pelo menos uma filial em Configurações antes de criar NF-e.' },
+      400,
+    )
+  }
+
   let serieNf = data.serie ?? '1'
   let ambienteNf = data.ambiente ?? 2
   if (empresaId) {
@@ -318,11 +337,30 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     if (em?.nfe_ambiente != null) ambienteNf = em.nfe_ambiente
   }
 
-  // Número sequencial por tipo
-  const last = await c.env.DB_SHARED
-    .prepare('SELECT numero FROM notas_fiscais WHERE tenant_id = ? AND tipo = ? ORDER BY created_at DESC LIMIT 1')
-    .bind(tenant.tenantId, data.tipo).first<{ numero: number }>()
-  const numero = (last?.numero ?? 0) + 1
+  let numero: number
+  if (data.tipo === 'nfe' && empresaId) {
+    const r = await c.env.DB_SHARED
+      .prepare(
+        `UPDATE empresas
+         SET nfe_proximo_numero = COALESCE(NULLIF(nfe_proximo_numero, 0), 1) + 1
+         WHERE id = ? AND tenant_id = ?
+         RETURNING (nfe_proximo_numero - 1) AS num`,
+      )
+      .bind(empresaId, tenant.tenantId)
+      .first<{ num: number }>()
+    if (r?.num == null || !Number.isFinite(r.num) || r.num < 1) {
+      return c.json({ error: 'Não foi possível reservar o número da NF-e na empresa.' }, 500)
+    }
+    numero = r.num
+  } else {
+    const last = await c.env.DB_SHARED
+      .prepare(
+        'SELECT numero FROM notas_fiscais WHERE tenant_id = ? AND tipo = ? ORDER BY created_at DESC LIMIT 1',
+      )
+      .bind(tenant.tenantId, data.tipo)
+      .first<{ numero: number }>()
+    numero = (last?.numero ?? 0) + 1
+  }
 
   const valorProdutos = calcTotal(data.itens)
   const valorTotal = valorProdutos - (data.desconto ?? 0)
@@ -421,8 +459,41 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
 
   if (!nota) return c.json({ error: 'Nota não encontrada.' }, 404)
   if (nota.status === 'emitida') return c.json({ error: 'Não é possível editar uma nota já emitida.' }, 400)
+  if (nota.status === 'cancelada') return c.json({ error: 'Não é possível editar uma nota cancelada.' }, 400)
+
+  const invalidateXml =
+    nota.status === 'pendente_emissao' &&
+    (data.itens !== undefined ||
+      data.destinatarioId !== undefined ||
+      data.desconto !== undefined ||
+      data.naturezaOperacao !== undefined ||
+      data.observacoes !== undefined ||
+      data.empresaId !== undefined ||
+      data.filialId !== undefined ||
+      data.pedidoId !== undefined ||
+      data.descricaoServico !== undefined ||
+      data.aliquotaIss !== undefined ||
+      data.codigoServico !== undefined ||
+      data.formaPagamento !== undefined ||
+      data.modFrete !== undefined ||
+      data.ambiente !== undefined ||
+      data.modelo !== undefined ||
+      data.serie !== undefined ||
+      data.valorTroco !== undefined)
 
   const stmts: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
+
+  if (invalidateXml) {
+    stmts.push(
+      c.env.DB_SHARED
+        .prepare(
+          `UPDATE notas_fiscais SET chave_acesso = NULL, xml_path = NULL, data_emissao = NULL, transmissao_erro = NULL,
+           transmissao_tentativas = 0, status = 'rascunho', updated_at = ?, updated_by = ?
+           WHERE id = ? AND tenant_id = ?`,
+        )
+        .bind(now, uid, id, tenant.tenantId),
+    )
+  }
 
   if (data.itens !== undefined) {
     stmts.push(

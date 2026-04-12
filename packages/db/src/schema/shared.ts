@@ -296,12 +296,42 @@ export const contasReceber = sqliteTable('contas_receber', {
   index('idx_cr_status').on(t.status),
 ])
 
+/** NF-e recebida de fornecedor (importação XML). Deve vir antes de `contasPagar` (FK opcional). */
+export const nfEntradas = sqliteTable('nf_entradas', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  empresaId: text('empresa_id').notNull().references(() => empresas.id),
+  filialId: text('filial_id').references(() => filiais.id),
+  chaveAcesso: text('chave_acesso').notNull(),
+  xmlPath: text('xml_path').notNull(),
+  emitenteCnpj: text('emitente_cnpj').notNull(),
+  emitenteNome: text('emitente_nome'),
+  destinatarioCnpj: text('destinatario_cnpj').notNull(),
+  dataEmissao: text('data_emissao'),
+  numero: integer('numero'),
+  serie: text('serie'),
+  naturezaOperacao: text('natureza_operacao'),
+  valorTotal: real('valor_total').notNull(),
+  valorProdutos: real('valor_produtos'),
+  fornecedorId: text('fornecedor_id').references(() => pessoas.id),
+  itensJson: text('itens_json'),
+  cobrancaJson: text('cobranca_json'),
+  assinaturaValida: integer('assinatura_valida', { mode: 'boolean' }),
+  status: text('status').notNull().default('importada'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at'),
+}, (t) => [
+  uniqueIndex('idx_nf_entrada_chave').on(t.tenantId, t.chaveAcesso),
+  index('idx_nf_entrada_tenant').on(t.tenantId),
+])
+
 export const contasPagar = sqliteTable('contas_pagar', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull(),
   empresaId: text('empresa_id').notNull(),
   filialId: text('filial_id').notNull(),
   pessoaId: text('pessoa_id').notNull(),
+  nfEntradaId: text('nf_entrada_id').references(() => nfEntradas.id),
   descricao: text('descricao').notNull(),
   valor: real('valor').notNull(),
   vencimento: text('vencimento').notNull(),
@@ -329,7 +359,7 @@ export const notasFiscais = sqliteTable('notas_fiscais', {
   numero: integer('numero'),
   serie: text('serie').default('1'),
   chaveAcesso: text('chave_acesso').unique(),
-  status: text('status').notNull().default('rascunho'), // rascunho | emitida | cancelada | denegada
+  status: text('status').notNull().default('rascunho'), // rascunho | pendente_emissao | emitida | cancelada | denegada
   xmlPath: text('xml_path'), // caminho no R2
   valorTotal: real('valor_total'),
   motivoCancelamento: text('motivo_cancelamento'),

@@ -9,7 +9,12 @@ export type PedidoStatus = 'rascunho' | 'confirmado' | 'faturado' | 'cancelado' 
 export type PedidoTipo = 'pedido' | 'orcamento'
 export type ContaStatus = 'pendente' | 'pago' | 'cancelado'
 export type NotaFiscalTipo = 'NFe' | 'NFSe' | 'NFCe'
-export type NotaFiscalStatus = 'rascunho' | 'emitida' | 'cancelada' | 'denegada'
+export type NotaFiscalStatus =
+  | 'rascunho'
+  | 'pendente_emissao'
+  | 'emitida'
+  | 'cancelada'
+  | 'denegada'
 
 export interface Tenant {
   id: string

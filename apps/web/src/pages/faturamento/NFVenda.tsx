@@ -22,7 +22,11 @@ const STATUS_STYLE: Record<NFStatus, string> = {
   inutilizada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 const STATUS_LABEL: Record<NFStatus, string> = {
-  rascunho: 'Rascunho', pendente_emissao: 'Pend. Emissão', emitida: 'Emitida', cancelada: 'Cancelada', inutilizada: 'Inutilizada',
+  rascunho: 'Rascunho',
+  pendente_emissao: 'XML gerado',
+  emitida: 'Faturada (ERP)',
+  cancelada: 'Cancelada',
+  inutilizada: 'Inutilizada',
 };
 
 interface Produto { id: string; descricao: string; codigo: string; unidade: string; preco_venda: number; ncm: string; }
@@ -264,9 +268,9 @@ export function NFVendaPage() {
 
   const confirmarFaturamento = () => {
     setFaturarConfirmando(true);
-    setFaturarSteps([
+      setFaturarSteps([
       { label: 'Validando nota fiscal', status: 'pending' },
-      { label: 'Emitindo nota', status: 'pending' },
+      { label: 'Registrando faturamento (sem SEFAZ)', status: 'pending' },
       { label: 'Baixando estoque dos itens', status: 'pending' },
       { label: `Gerando ${condicao.parcelas}x em Contas a Receber`, status: 'pending' },
       { label: 'Finalizando', status: 'pending' },
@@ -355,17 +359,20 @@ export function NFVendaPage() {
       <div className="bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-800 rounded-xl px-4 py-3 flex gap-3 items-start">
         <svg className="w-5 h-5 text-brand-600 dark:text-brand-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
         <div>
-          <p className="text-sm font-semibold text-brand-800 dark:text-brand-200">Integração com emissor fiscal em breve</p>
-          <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5">
-            Use o assistente para criar a nota em passos (emitente → cliente → itens → condições). A transmissão à SEFAZ virá na próxima etapa técnica.
+          <p className="text-sm font-semibold text-brand-800 dark:text-brand-200">Fluxo da NF-e neste sistema</p>
+          <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5 leading-relaxed">
+            <strong className="text-brand-800 dark:text-brand-200">XML gerado</strong> = documento montado e salvo (pronto para envio à SEFAZ quando existir transmissão).
+            {' '}
+            <strong className="text-brand-800 dark:text-brand-200">Faturada (ERP)</strong> = estoque e contas a receber lançados no sistema — não equivale à autorização pela SEFAZ.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {([
           ['Total', notas.length],
-          ['Emitidas', notas.filter(n => n.status === 'emitida').length],
+          ['XML gerado', notas.filter(n => n.status === 'pendente_emissao').length],
+          ['Faturadas (ERP)', notas.filter(n => n.status === 'emitida').length],
           ['Rascunhos', notas.filter(n => n.status === 'rascunho').length],
           ['Canceladas', notas.filter(n => n.status === 'cancelada').length],
         ] as const).map(([label, val]) => (
@@ -425,7 +432,7 @@ export function NFVendaPage() {
             </table>
             {totalEmitido > 0 && (
               <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Total emitido: <span className="text-emerald-600 dark:text-emerald-400">{fmtBRL(totalEmitido)}</span></span>
+                <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Total faturado (ERP): <span className="text-emerald-600 dark:text-emerald-400">{fmtBRL(totalEmitido)}</span></span>
               </div>
             )}
           </div>
@@ -535,6 +542,17 @@ export function NFVendaPage() {
               </div>
               <button onClick={() => setModalMode(null)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
             </div>
+
+            {(selectedNota.status === 'pendente_emissao' || selectedNota.status === 'emitida') && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/80 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
+                {selectedNota.status === 'pendente_emissao' && (
+                  <>Esta nota já tem XML e chave gerados; ainda <strong>não foi transmitida à SEFAZ</strong>. O envio e a autorização serão tratados na integração fiscal.</>
+                )}
+                {selectedNota.status === 'emitida' && (
+                  <><strong>Faturada (ERP)</strong>: estoque e financeiro foram processados neste sistema. Autorização pela SEFAZ é etapa separada.</>
+                )}
+              </p>
+            )}
 
             <div className="grid sm:grid-cols-2 gap-4 text-sm">
               <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-2">
@@ -676,7 +694,7 @@ export function NFVendaPage() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Faturar NF-e
+                    Faturar no ERP
                   </button>
                   <button onClick={() => { setMotivoCancel(''); setModalMode('cancel'); }} className="px-4 py-2.5 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors">Cancelar</button>
                 </>
@@ -796,11 +814,11 @@ export function NFVendaPage() {
                     </div>
                   )}
                   <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
-                    {faturarDone ? 'NF-e Faturada!' : 'Processando...'}
+                    {faturarDone ? 'Faturamento registrado!' : 'Processando...'}
                   </h2>
                   {faturarDone && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      NF-e {String(selectedNota.numero ?? '').padStart(6, '0')} emitida com sucesso.
+                      NF-e {String(selectedNota.numero ?? '').padStart(6, '0')} marcada como faturada no ERP (estoque/financeiro).
                     </p>
                   )}
                 </div>

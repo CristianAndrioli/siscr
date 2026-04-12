@@ -16,7 +16,11 @@ const STATUS_STYLE: Record<NFStatus, string> = {
   inutilizada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 const STATUS_LABEL: Record<NFStatus, string> = {
-  rascunho: 'Rascunho', pendente_emissao: 'Pend. Emissão', emitida: 'Emitida', cancelada: 'Cancelada', inutilizada: 'Inutilizada',
+  rascunho: 'Rascunho',
+  pendente_emissao: 'XML gerado',
+  emitida: 'Faturada (ERP)',
+  cancelada: 'Cancelada',
+  inutilizada: 'Inutilizada',
 };
 
 interface Servico { id: string; descricao: string; preco: number; }
