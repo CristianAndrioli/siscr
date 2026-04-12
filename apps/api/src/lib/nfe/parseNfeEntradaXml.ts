@@ -1,8 +1,15 @@
 import { DOMParser } from '@xmldom/xmldom'
 
 export type NfeEntradaItem = {
+  /** Índice do item na NF-e (`@nItem` do `det`). */
+  nItem: number
+  /** Código do produto no fornecedor — usado em ERPs para "de/para" e SKU. */
+  cProd?: string
+  /** EAN/UPC quando informado (ou GTIN tributável). */
+  cEAN?: string
   descricao: string
   quantidade: number
+  valorUnitario: number
   valorTotal: number
   cfop?: string
   ncm?: string
@@ -159,18 +166,31 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
   const vProd = icmsTot ? parseFloat(text(firstByLocalFrom(icmsTot, 'vProd')).replace(',', '.')) || 0 : 0
 
   const itens: NfeEntradaItem[] = []
+  let detIdx = 0
   for (const det of elementsByLocalFrom(infNFe, 'det')) {
     const prod = firstByLocalFrom(det, 'prod')
     if (!prod) continue
+    detIdx += 1
+    const nItemAttr = det.getAttribute('nItem')
+    const nItem = nItemAttr ? parseInt(nItemAttr, 10) || detIdx : detIdx
+    const cProd = text(firstByLocalFrom(prod, 'cProd')) || undefined
+    const cEANRaw = text(firstByLocalFrom(prod, 'cEAN')) || text(firstByLocalFrom(prod, 'cEANTrib')) || ''
+    const cEAN = cEANRaw.replace(/\D/g, '').length >= 8 ? cEANRaw.trim() : undefined
     const xProd = text(firstByLocalFrom(prod, 'xProd'))
     const qCom = parseFloat(text(firstByLocalFrom(prod, 'qCom')).replace(',', '.')) || 0
     const vProdItem = parseFloat(text(firstByLocalFrom(prod, 'vProd')).replace(',', '.')) || 0
+    const vUnCom = parseFloat(text(firstByLocalFrom(prod, 'vUnCom')).replace(',', '.')) || 0
     const CFOP = text(firstByLocalFrom(prod, 'CFOP'))
     const NCM = text(firstByLocalFrom(prod, 'NCM'))
     const uCom = text(firstByLocalFrom(prod, 'uCom'))
+    const vu = vUnCom > 0 ? vUnCom : qCom > 0 ? vProdItem / qCom : 0
     itens.push({
+      nItem,
+      cProd,
+      cEAN,
       descricao: xProd || 'Item',
       quantidade: qCom,
+      valorUnitario: vu,
       valorTotal: vProdItem,
       cfop: CFOP || undefined,
       ncm: NCM || undefined,

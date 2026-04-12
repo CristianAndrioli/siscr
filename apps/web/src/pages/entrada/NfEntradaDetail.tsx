@@ -195,7 +195,8 @@ export default function NfEntradaDetail() {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-3 py-2">Descrição</th>
+                <th className="px-3 py-2">Descrição (XML)</th>
+                <th className="px-3 py-2">Produto no sistema</th>
                 <th className="px-3 py-2">CFOP</th>
                 <th className="px-3 py-2 text-right">Qtd</th>
                 <th className="px-3 py-2 text-right">Valor</th>
@@ -204,7 +205,27 @@ export default function NfEntradaDetail() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {itens.map((it, i) => (
                 <tr key={i}>
-                  <td className="px-3 py-2">{it.descricao}</td>
+                  <td className="px-3 py-2">
+                    <div>{it.descricao}</div>
+                    {it.cProd && <div className="text-xs text-slate-500">cProd: {it.cProd}</div>}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {it.produto_id ? (
+                      <span>
+                        <Link
+                          to={`/cadastros/produtos/${it.produto_id}`}
+                          className="text-brand-600 dark:text-brand-400 hover:underline font-medium"
+                        >
+                          Abrir cadastro
+                        </Link>
+                        {it.criado_no_import && (
+                          <span className="ml-1 text-emerald-600 dark:text-emerald-400">(criado na importação)</span>
+                        )}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs">{it.cfop ?? '—'}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{it.quantidade}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtBRL(it.valorTotal)}</td>

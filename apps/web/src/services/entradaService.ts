@@ -16,12 +16,43 @@ export interface NfEntradaListItem {
 }
 
 export interface NfEntradaItem {
+  nItem?: number;
+  cProd?: string;
   descricao: string;
   quantidade: number;
+  valorUnitario?: number;
   valorTotal: number;
   cfop?: string;
   ncm?: string;
   unidade?: string;
+  produto_id?: string;
+  criado_no_import?: boolean;
+}
+
+export async function previewNfEntradaXml(file: File, empresaId: string) {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('empresaId', empresaId);
+  const { data } = await api.post<{
+    parsed: unknown;
+    sugestoes: { indice: number; produtoId: string | null; motivo: string; rotulo?: string }[];
+    assinatura_valida: boolean;
+    fornecedor_id: string | null;
+  }>('/tenant/entrada/nf-entradas/preview-xml', form);
+  return data;
+}
+
+export async function confirmarNfEntradaImport(payload: {
+  xmlBase64: string;
+  empresaId: string;
+  filialId?: string | null;
+  vinculos: { indice: number; produtoId?: string; criar?: boolean }[];
+}) {
+  const { data } = await api.post<{ id: string; message: string; fornecedor_vinculado: boolean; assinatura_valida: boolean }>(
+    '/tenant/entrada/nf-entradas/confirmar',
+    payload
+  );
+  return data;
 }
 
 export async function listNfEntradas(params?: { empresaId?: string; filialId?: string; page?: number; limit?: number }) {

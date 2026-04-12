@@ -49,6 +49,7 @@ import LocaisPage from './pages/estoque/LocaisPage';
 import EstoqueInstrucoes from './pages/estoque/EstoqueInstrucoes';
 import NfEntradaList from './pages/entrada/NfEntradaList';
 import NfEntradaDetail from './pages/entrada/NfEntradaDetail';
+import NfEntradaWizardPage from './pages/entrada/NfEntradaWizard';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -147,6 +148,7 @@ function App() {
         <Route path="/faturamento/nfse" element={<ProtectedRoute><Layout><NFSePage /></Layout></ProtectedRoute>} />
 
         {/* Entrada (NF-e compra) */}
+        <Route path="/entrada/nf-e/nova" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="change"><NfEntradaWizardPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/notas" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NfEntradaList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/notas/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NfEntradaDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 

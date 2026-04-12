@@ -6,7 +6,7 @@ import { useTheme } from '../hooks/useTheme';
 import OnboardingEmpresaGate from './OnboardingEmpresaGate';
 
 interface LayoutProps { children: ReactNode }
-type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'estoque' | 'configuracoes';
+type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'entrada' | 'estoque' | 'configuracoes';
 
 // ─── Ícones SVG inline ────────────────────────────────────────────
 const icons = {
@@ -36,7 +36,7 @@ function Icon({ d, className = 'w-4 h-4' }: { d: ReactNode; className?: string }
 
 export default function Layout({ children }: LayoutProps) {
   const [menuOpen, setMenuOpen] = useState<Record<MenuKey, boolean>>({
-    cadastros: false, financeiro: false, faturamento: false, estoque: false, configuracoes: false,
+    cadastros: false, financeiro: false, faturamento: false, entrada: false, estoque: false, configuracoes: false,
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -68,6 +68,12 @@ export default function Layout({ children }: LayoutProps) {
       }
     }
   }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/entrada')) {
+      setMenuOpen((prev) => ({ ...prev, entrada: true }));
+    }
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await authService.logout();
@@ -158,7 +164,10 @@ export default function Layout({ children }: LayoutProps) {
         <SidebarLink to="/app" label="Início" iconD={icons.home} />
 
         {hasModuleAccess('faturamento') && (
-          <SidebarLink to="/entrada/notas" label="NF-e de entrada" iconD={icons.truck} />
+          <SubMenu menuKey="entrada" label="Entrada" iconD={icons.truck}>
+            <SubLink to="/entrada/nf-e/nova" label="NF-e de entrada" />
+            <SubLink to="/entrada/notas" label="Notas importadas" />
+          </SubMenu>
         )}
 
         {hasModuleAccess('cadastros') && (
@@ -182,7 +191,6 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="faturamento" label="Faturamento" iconD={icons.invoice}>
             <SubLink to="/faturamento/cotacoes" label="Cotações" />
             <SubLink to="/faturamento/nf-venda" label="NF-e Venda" />
-            <SubLink to="/entrada/notas" label="NF-e de entrada" />
             <SubLink to="/configuracoes/faturamento" label="Configuração NF-e" />
             <SubLink to="/faturamento/ncm" label="Tabela NCM" />
             <SubLink to="/faturamento/nfse" label="NFSe" />
