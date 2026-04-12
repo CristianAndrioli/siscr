@@ -178,6 +178,7 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="faturamento" label="Faturamento" iconD={icons.invoice}>
             <SubLink to="/faturamento/cotacoes" label="Cotações" />
             <SubLink to="/faturamento/nf-venda" label="NF-e Venda" />
+            <SubLink to="/configuracoes/faturamento" label="Configuração NF-e" />
             <SubLink to="/faturamento/ncm" label="Tabela NCM" />
             <SubLink to="/faturamento/nfse" label="NFSe" />
           </SubMenu>
@@ -200,6 +201,7 @@ export default function Layout({ children }: LayoutProps) {
               <SubLink to="/configuracoes/usuarios" label="Usuários" />
               <SubLink to="/configuracoes/permissoes" label="Permissões" />
               <SubLink to="/configuracoes/filiais" label="Empresas e Filiais" />
+              <SubLink to="/configuracoes/faturamento" label="Faturamento (NF-e)" />
               <SubLink to="/subscription-management" label="Assinatura" />
               <SubLink to="/configuracoes/logs" label="Log de Erros" />
             </SubMenu>

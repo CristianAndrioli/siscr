@@ -40,6 +40,7 @@ import ContasBancariasPage from './pages/financeiro/ContasBancariasPage';
 import Configuracoes from './pages/Configuracoes';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
 import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
+import { FaturamentoConfigPage } from './pages/configuracoes/FaturamentoConfigPage';
 import { PermissoesPage } from './pages/configuracoes/PermissoesPage';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
 import MovimentacoesList from './pages/estoque/MovimentacoesList';
@@ -170,6 +171,7 @@ function App() {
         {/* Configurações */}
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/filiais" element={<ProtectedRoute><Layout><FiliaisPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/faturamento" element={<ProtectedRoute><Layout><FaturamentoConfigPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/permissoes" element={<ProtectedRoute><Layout><PermissoesPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs/:id" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
