@@ -116,8 +116,6 @@ export function NfeNovaWizardPage() {
       const firstE = elist[0] as EmpresaRow | undefined;
       if (firstE) {
         setEmpresaId((prev) => prev || firstE.id);
-        const fSub = flist.filter((f: FilialRow) => f.empresa_id === firstE.id);
-        if (fSub[0]) setFilialId((prev) => prev || fSub[0]!.id);
       }
     } catch {
       setError('Não foi possível carregar empresas e filiais.');
@@ -133,8 +131,12 @@ export function NfeNovaWizardPage() {
   useEffect(() => {
     if (!empresaId) return;
     const fList = filiais.filter((f) => f.empresa_id === empresaId);
-    if (fList.length && !fList.some((f) => f.id === filialId)) {
-      setFilialId(fList[0]!.id);
+    if (fList.length === 0) {
+      setFilialId('');
+      return;
+    }
+    if (filialId && !fList.some((f) => f.id === filialId)) {
+      setFilialId('');
     }
   }, [empresaId, filiais, filialId]);
 
@@ -209,7 +211,7 @@ export function NfeNovaWizardPage() {
   const total = subtotal - form.desconto;
 
   const canNext = (): boolean => {
-    if (step === 0) return Boolean(empresaId && filialId);
+    if (step === 0) return Boolean(empresaId);
     if (step === 1) return true;
     if (step === 2) return form.itens.some((i) => i.descricao.trim());
     if (step === 3) return Boolean(form.naturezaOperacao.trim());
@@ -218,8 +220,8 @@ export function NfeNovaWizardPage() {
 
   const handleSave = async () => {
     const validItens = form.itens.filter((i) => i.descricao.trim());
-    if (!empresaId || !filialId) {
-      setError('Selecione empresa e filial.');
+    if (!empresaId) {
+      setError('Selecione a empresa.');
       return;
     }
     if (validItens.length === 0) {
@@ -232,7 +234,7 @@ export function NfeNovaWizardPage() {
       await notasService.create({
         tipo: 'nfe',
         empresaId,
-        filialId,
+        ...(filialId ? { filialId } : {}),
         destinatarioId: destinatarioId || undefined,
         naturezaOperacao: form.naturezaOperacao || undefined,
         observacoes: form.observacoes || undefined,
@@ -343,20 +345,28 @@ export function NfeNovaWizardPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Filial</label>
-              <select
-                value={filialId}
-                onChange={(e) => setFilialId(e.target.value)}
-                disabled={!empresaId}
-                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
-              >
-                <option value="">Selecione…</option>
-                {filiaisDaEmpresa.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nome}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                Filial <span className="text-slate-400 font-normal">(opcional)</span>
+              </label>
+              {filiaisDaEmpresa.length > 0 ? (
+                <select
+                  value={filialId}
+                  onChange={(e) => setFilialId(e.target.value)}
+                  disabled={!empresaId}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 disabled:opacity-50"
+                >
+                  <option value="">Só matriz — sem filial nesta nota</option>
+                  {filiaisDaEmpresa.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-slate-600 dark:text-slate-400 rounded-lg border border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-3 py-2.5">
+                  Nenhuma filial cadastrada. A nota fica só na <strong className="text-slate-800 dark:text-slate-200">matriz</strong>.
+                </p>
+              )}
             </div>
             {warningsEmitente.length > 0 && (
               <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200 space-y-1">
@@ -598,7 +608,9 @@ export function NfeNovaWizardPage() {
               </div>
               <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-2">
                 <dt className="text-slate-500">Filial</dt>
-                <dd className="font-medium text-right">{filiaisDaEmpresa.find((f) => f.id === filialId)?.nome ?? '—'}</dd>
+                <dd className="font-medium text-right">
+                  {filialId ? filiaisDaEmpresa.find((f) => f.id === filialId)?.nome ?? '—' : 'Matriz (sem filial)'}
+                </dd>
               </div>
               <div className="flex justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-2">
                 <dt className="text-slate-500">Destinatário</dt>
