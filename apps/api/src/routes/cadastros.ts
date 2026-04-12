@@ -183,7 +183,11 @@ app.get('/produtos', async (c) => {
     origem, cest, icms_cst, icms_csosn, pis_cst, cofins_cst, ativo FROM produtos WHERE tenant_id = ?`
   const params: unknown[] = [tenant.tenantId]
 
-  if (empresaId) { query += ' AND empresa_id = ?'; params.push(empresaId) }
+  // Produtos sem empresa (uso geral do tenant) + produtos vinculados à empresa escolhida
+  if (empresaId) {
+    query += ' AND (empresa_id IS NULL OR empresa_id = ?)'
+    params.push(empresaId)
+  }
   if (busca) { query += ' AND (descricao LIKE ? OR codigo LIKE ? OR sku LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`, `%${busca}%`) }
 
   query += ' ORDER BY CAST(codigo AS INTEGER) LIMIT 100'

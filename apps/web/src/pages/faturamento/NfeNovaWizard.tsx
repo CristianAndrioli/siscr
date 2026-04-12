@@ -141,13 +141,20 @@ export function NfeNovaWizardPage() {
   }, [empresaId, filiais, filialId]);
 
   useEffect(() => {
-    if (step >= 2 && produtos.length === 0 && empresaId) {
-      api
-        .get('/tenant/cadastros/produtos', { params: { empresaId } })
-        .then((r) => setProdutos(r.data.produtos ?? []))
-        .catch(() => {});
-    }
-  }, [step, empresaId, produtos.length]);
+    if (!empresaId) return;
+    let cancelled = false;
+    api
+      .get('/tenant/cadastros/produtos', { params: { empresaId } })
+      .then((r) => {
+        if (!cancelled) setProdutos(r.data.produtos ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setProdutos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [empresaId]);
 
   useEffect(() => {
     if (!destinatarioId) {
@@ -456,7 +463,7 @@ export function NfeNovaWizardPage() {
                       <option value="">Produto…</option>
                       {produtos.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.codigo} — {p.descricao}
+                          {[p.codigo, p.descricao].filter(Boolean).join(' — ') || p.descricao || 'Produto'}
                         </option>
                       ))}
                     </select>
