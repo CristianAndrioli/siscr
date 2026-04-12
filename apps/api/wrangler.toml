@@ -11,6 +11,8 @@ ENVIRONMENT = "development"
 APP_URL = "http://localhost:8787"
 FRONTEND_URL = "http://localhost:5173"
 ALLOWED_ORIGINS = "http://localhost:5173"
+# "1" = permitir fluxo de XML NF-e sem certificado ICP (desenvolvimento). Produção: "0"
+NFE_DEV_MODE = "1"
 
 # ──────────────────────────────────────────────
 # D1 — Banco compartilhado (tenants, planos, billing)
@@ -73,6 +75,7 @@ ENVIRONMENT = "staging"
 APP_URL = "https://siscr-api-staging.lucaspercisi.workers.dev"
 FRONTEND_URL = "https://staging.siscr-web.pages.dev"
 ALLOWED_ORIGINS = "https://staging.siscr-web.pages.dev"
+NFE_DEV_MODE = "0"
 # Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
 
 [[env.staging.d1_databases]]
@@ -108,6 +111,7 @@ ENVIRONMENT = "production"
 APP_URL = "https://api.seudominio.com.br"
 FRONTEND_URL = "https://app.seudominio.com.br"
 ALLOWED_ORIGINS = "https://app.seudominio.com.br"
+NFE_DEV_MODE = "0"
 
 [[env.production.d1_databases]]
 binding = "DB_SHARED"

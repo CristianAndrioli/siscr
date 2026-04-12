@@ -87,6 +87,7 @@ export interface NotaFiscal {
   valor_total: number;
   status: NFStatus;
   chave_acesso?: string;
+  empresa_id?: string;
   data_emissao?: string;
   motivo_cancelamento?: string;
   created_at: string;
@@ -228,5 +229,17 @@ export const notasService = {
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/notas/${id}`);
+  },
+  /** Gera chave + XML no R2 (sem envio SOAP nesta versão). Query force=1 regera. */
+  prepararXml: async (
+    id: string,
+    opts?: { force?: boolean },
+  ): Promise<{ chaveAcesso: string; xmlPath: string; devMode: boolean; message: string }> => {
+    const res = await api.post(
+      `${BASE}/notas/${id}/preparar-xml`,
+      {},
+      { params: opts?.force ? { force: '1' } : undefined },
+    );
+    return res.data;
   },
 };

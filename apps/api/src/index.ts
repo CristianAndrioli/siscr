@@ -47,6 +47,11 @@ export type Env = {
   STRIPE_PRICE_BASICO: string
   STRIPE_PRICE_PRO: string
   STRIPE_PRICE_ENTERPRISE: string
+  /**
+   * "1" = geração de XML NF-e para desenvolvimento (sem envio SOAP real nesta versão).
+   * Produção: use "0" e implemente assinatura + SEFAZ.
+   */
+  NFE_DEV_MODE?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()

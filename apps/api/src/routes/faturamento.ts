@@ -1,8 +1,9 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
+import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -632,6 +633,38 @@ app.post('/notas/:id/faturar', async (c) => {
     parcelas_criadas: parcelasCriadas,
   })
 })
+
+async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'ID da nota inválido.' }, 400)
+  const force = c.req.query('force') === '1'
+  const devMode = c.env.NFE_DEV_MODE === '1'
+  try {
+    const r = await prepareNfeEnvio(c.env, tenant.tenantId, id, { devMode, force })
+    return c.json({
+      chaveAcesso: r.chaveAcesso,
+      xmlPath: r.xmlPath,
+      devMode: r.devMode,
+      message: r.message,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro ao gerar XML.'
+    return c.json({ error: msg }, 400)
+  }
+}
+
+/**
+ * Gera chave de acesso, monta XML NF-e 4.00 (sem assinatura digital) e grava no R2.
+ * Não envia à SEFAZ nesta versão — próximo passo: assinatura (Web Crypto) + SOAP.
+ *
+ * Query: force=1 para regerar quando já existir chave/xml.
+ * `NFE_DEV_MODE=1`: mensagem orientada a desenvolvimento sem certificado ICP-Brasil.
+ */
+app.post('/notas/:id/preparar-xml', jsonPrepareNfeXml)
+
+/** Alias até existir envio SOAP real à SEFAZ. */
+app.post('/notas/:id/transmitir', jsonPrepareNfeXml)
 
 // GET XML (mantido para futura integração)
 app.get('/notas/:id/xml', async (c) => {

@@ -48,6 +48,8 @@ export function NFVendaPage() {
   });
   const [faturarConfirmando, setFaturarConfirmando] = useState(false);
   const [motivoCancel, setMotivoCancel] = useState('');
+  const [prepararXmlBusy, setPrepararXmlBusy] = useState(false);
+  const [prepararXmlHint, setPrepararXmlHint] = useState('');
   const [destinatarioId, setDestinatarioId] = useState('');
   const [destinatarioNome, setDestinatarioNome] = useState('');
   const [form, setForm] = useState({
@@ -82,8 +84,29 @@ export function NFVendaPage() {
     try {
       const nota = await notasService.get(id);
       setSelectedNota(nota);
+      setPrepararXmlHint('');
       setModalMode('view');
     } catch { setError('Erro ao carregar nota fiscal.'); }
+  };
+
+  const handlePrepararXml = async (force?: boolean) => {
+    if (!selectedNota) return;
+    setPrepararXmlBusy(true);
+    setModalError('');
+    setPrepararXmlHint('');
+    try {
+      const r = await notasService.prepararXml(selectedNota.id, { force });
+      setPrepararXmlHint(r.message + (r.devMode ? ' (modo desenvolvimento)' : ''));
+      const updated = await notasService.get(selectedNota.id);
+      setSelectedNota(updated);
+      load();
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setModalError(ax.response?.data?.error || 'Não foi possível gerar o XML.');
+      reportError('Erro ao gerar XML da NF-e.', err, 'Faturamento NF-e');
+    } finally {
+      setPrepararXmlBusy(false);
+    }
   };
 
   const setItem = (idx: number, field: keyof NFItem, value: string | number) =>
@@ -464,6 +487,23 @@ export function NFVendaPage() {
               <span>Total NF-e: <span className="text-brand-600 dark:text-brand-400 text-base">{fmtBRL(selectedNota.valor_total)}</span></span>
             </div>
 
+            {selectedNota.chave_acesso && (
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-2 text-xs">
+                <p className="font-semibold text-slate-600 dark:text-slate-300 mb-1">Chave de acesso</p>
+                <p className="font-mono text-[11px] break-all text-slate-800 dark:text-slate-100">{selectedNota.chave_acesso}</p>
+                <p className="text-slate-500 dark:text-slate-400 mt-1">
+                  XML salvo no armazenamento — download pela API{' '}
+                  <code className="text-[10px] bg-slate-200 dark:bg-slate-900 px-1 rounded">GET …/notas/{'{id}'}/xml</code>
+                </p>
+              </div>
+            )}
+
+            {prepararXmlHint && (
+              <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-2 text-sm text-emerald-900 dark:text-emerald-200">
+                {prepararXmlHint}
+              </div>
+            )}
+
             {selectedNota.observacoes && (
               <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2">
                 <span className="font-semibold">Obs: </span>{selectedNota.observacoes}
@@ -484,6 +524,14 @@ export function NFVendaPage() {
               <button onClick={() => setModalMode(null)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Fechar</button>
               {selectedNota.status !== 'emitida' && selectedNota.status !== 'cancelada' && (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => handlePrepararXml(Boolean(selectedNota.chave_acesso))}
+                    disabled={prepararXmlBusy}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm bg-slate-700 hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {prepararXmlBusy ? 'Gerando…' : selectedNota.chave_acesso ? 'Regerar XML' : 'Gerar XML NF-e'}
+                  </button>
                   <button
                     onClick={iniciarFaturamento}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors"
