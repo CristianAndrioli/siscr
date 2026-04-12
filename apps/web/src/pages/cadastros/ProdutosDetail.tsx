@@ -1,14 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { produtosService, type Produto, type ProdutoForm } from '../../services/cadastros/produtos';
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { FieldHelp } from '../../components/cadastros/FieldHelp';
+import { NcmSearchInput } from '../../components/cadastros/NcmSearchInput';
+import {
+  ORIGEM_MERCADORIA,
+  ICMS_CST_SUGESTOES,
+  ICMS_CSOSN_SUGESTOES,
+  PIS_COFINS_CST_SUGESTOES,
+  labelOrigemMercadoria,
+} from '../../utils/nfeProdutoTaxOptions';
 
 const UNIDADES = ['UN', 'CX', 'KG', 'LT', 'MT', 'PC', 'PAR', 'RL', 'SC', 'TON'];
 
 const INPUT_CLS =
   'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500';
+
+const STEPS = [
+  { id: 0, title: 'Dados básicos', subtitle: 'Identificação, unidade e preços' },
+  { id: 1, title: 'Classificação fiscal', subtitle: 'NCM e origem da mercadoria' },
+  { id: 2, title: 'ICMS', subtitle: 'CST e CSOSN conforme o regime tributário' },
+  { id: 3, title: 'PIS, COFINS e CEST', subtitle: 'Contribuições e substituição tributária' },
+] as const;
+
+const KNOWN_ICMS_CST = new Set(ICMS_CST_SUGESTOES.map((o) => o.value).filter(Boolean));
+const KNOWN_CSOSN = new Set(ICMS_CSOSN_SUGESTOES.map((o) => o.value).filter(Boolean));
+
+function selectValueIcmsCst(v: string) {
+  if (!v) return '';
+  return KNOWN_ICMS_CST.has(v) ? v : '__custom__';
+}
+
+function selectValueCsosn(v: string) {
+  if (!v) return '';
+  return KNOWN_CSOSN.has(v) ? v : '__custom__';
+}
 
 const EMPTY: ProdutoForm = {
   sku: '',
@@ -38,12 +67,14 @@ export function ProdutosDetail() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState(0);
 
   useEffect(() => {
     if (isNew) return;
     setLoading(true);
-    produtosService.get(id!)
-      .then(data => {
+    produtosService
+      .get(id!)
+      .then((data) => {
         setRecord(data);
         setForm({
           sku: data.sku ?? '',
@@ -66,10 +97,24 @@ export function ProdutosDetail() {
   }, [id, isNew]);
 
   const set = <K extends keyof ProdutoForm>(field: K, value: ProdutoForm[K]) =>
-    setForm(prev => ({ ...prev, [field]: value }));
+    setForm((prev) => ({ ...prev, [field]: value }));
+
+  const validateStep0 = () => {
+    if (!form.descricao.trim()) {
+      setError('Informe a descrição do produto.');
+      return false;
+    }
+    if (form.precoVenda < 0) {
+      setError('Preço de venda inválido.');
+      return false;
+    }
+    setError('');
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateStep0()) return;
     setSaving(true);
     setError('');
     try {
@@ -79,6 +124,7 @@ export function ProdutosDetail() {
       } else {
         await produtosService.update(id!, form);
         setIsEditing(false);
+        setStep(0);
         const updated = await produtosService.get(id!);
         setRecord(updated);
       }
@@ -101,6 +147,8 @@ export function ProdutosDetail() {
     }
   };
 
+  const origemLabel = useMemo(() => labelOrigemMercadoria(form.origem ?? 0), [form.origem]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-64">
@@ -113,7 +161,7 @@ export function ProdutosDetail() {
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6 pb-10">
       <div className="flex items-center justify-between">
         <div>
           <button
@@ -132,7 +180,10 @@ export function ProdutosDetail() {
         {!isNew && !isEditing && (
           <div className="flex gap-2">
             <button
-              onClick={() => setIsEditing(true)}
+              onClick={() => {
+                setIsEditing(true);
+                setStep(0);
+              }}
               className="flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -159,7 +210,6 @@ export function ProdutosDetail() {
         </div>
       )}
 
-      {/* Visualização */}
       {!isNew && !isEditing && record && (
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
           <div className="mb-4">
@@ -169,11 +219,11 @@ export function ProdutosDetail() {
           </div>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
             {[
-              { label: 'SKU (Stock Keeping Unit)', value: record.sku || '—' },
+              { label: 'SKU', value: record.sku || '—' },
               { label: 'Unidade', value: record.unidade },
               { label: 'Descrição', value: record.descricao },
               { label: 'NCM', value: record.ncm ?? '—' },
-              { label: 'Origem (mercadoria)', value: record.origem != null ? String(record.origem) : '0' },
+              { label: 'Origem', value: labelOrigemMercadoria(record.origem ?? 0) },
               { label: 'CEST', value: record.cest ?? '—' },
               { label: 'ICMS CST', value: record.icms_cst ?? '—' },
               { label: 'ICMS CSOSN', value: record.icms_csosn ?? '—' },
@@ -192,176 +242,329 @@ export function ProdutosDetail() {
         </div>
       )}
 
-      {/* Formulário */}
       {(isNew || isEditing) && (
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {!isNew && record && (
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-700">
-              <span className="text-xs text-slate-500 dark:text-slate-400">Código gerado pelo sistema:</span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-mono font-semibold">
-                # {record.codigo}
-              </span>
+            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+              <span>Código:</span>
+              <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">#{record.codigo}</span>
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                SKU <span className="text-xs font-normal text-slate-400">(Stock Keeping Unit — opcional)</span>
-              </label>
-              <input
-                type="text"
-                value={form.sku ?? ''}
-                onChange={e => set('sku', e.target.value)}
-                placeholder="Ex: MESA-G-NAT, REF-001"
-                className={INPUT_CLS}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Unidade <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={form.unidade}
-                onChange={e => set('unidade', e.target.value)}
-                required
-                className={INPUT_CLS}
-              >
-                {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Descrição <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={form.descricao}
-                onChange={e => set('descricao', e.target.value)}
-                required
-                placeholder="Descrição do produto"
-                className={INPUT_CLS}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Preço de Venda <span className="text-red-500">*</span>
-              </label>
-              <CurrencyInput value={form.precoVenda} onChange={v => set('precoVenda', v)} required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Preço de Custo</label>
-              <CurrencyInput value={form.precoCusto} onChange={v => set('precoCusto', v)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">NCM</label>
-              <input
-                type="text"
-                value={form.ncm}
-                onChange={e => set('ncm', e.target.value)}
-                placeholder="00000000"
-                maxLength={8}
-                className={INPUT_CLS}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest pt-2">
-                Tributos (NF-e)
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Padrões comuns: PIS/COFINS 07 (operação isenta); ajuste CST/CSOSN conforme o regime.
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Origem (0–8)</label>
-              <input
-                type="number"
-                min={0}
-                max={8}
-                value={form.origem ?? 0}
-                onChange={e => set('origem', Math.min(8, Math.max(0, Number(e.target.value) || 0)))}
-                className={`${INPUT_CLS} font-mono`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CEST</label>
-              <input
-                type="text"
-                value={form.cest ?? ''}
-                onChange={e => set('cest', e.target.value.replace(/\D/g, '').slice(0, 7))}
-                maxLength={7}
-                placeholder="7 dígitos"
-                className={`${INPUT_CLS} font-mono`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ICMS CST</label>
-              <input
-                type="text"
-                value={form.icmsCst ?? ''}
-                onChange={e => set('icmsCst', e.target.value.toUpperCase().slice(0, 3))}
-                maxLength={3}
-                className={`${INPUT_CLS} font-mono`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ICMS CSOSN</label>
-              <input
-                type="text"
-                value={form.icmsCsosn ?? ''}
-                onChange={e => set('icmsCsosn', e.target.value.replace(/\D/g, '').slice(0, 3))}
-                maxLength={3}
-                className={`${INPUT_CLS} font-mono`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">PIS CST</label>
-              <input
-                type="text"
-                value={form.pisCst ?? ''}
-                onChange={e => set('pisCst', e.target.value.replace(/\D/g, '').slice(0, 2))}
-                maxLength={2}
-                className={`${INPUT_CLS} font-mono`}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">COFINS CST</label>
-              <input
-                type="text"
-                value={form.cofinsCst ?? ''}
-                onChange={e => set('cofinsCst', e.target.value.replace(/\D/g, '').slice(0, 2))}
-                maxLength={2}
-                className={`${INPUT_CLS} font-mono`}
-              />
-            </div>
-            <div className="flex items-center gap-3 pt-6">
-              <input
-                type="checkbox"
-                id="ativo"
-                checked={form.ativo}
-                onChange={e => set('ativo', e.target.checked)}
-                className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
-              />
-              <label htmlFor="ativo" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Produto ativo
-              </label>
-            </div>
-          </div>
 
-          <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => isNew ? navigate('/cadastros/produtos') : setIsEditing(false)}
-              className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 disabled:cursor-not-allowed rounded-lg transition-colors"
-            >
-              {saving ? 'Salvando...' : 'Salvar'}
-            </button>
+          <nav aria-label="Etapas do cadastro" className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+            {STEPS.map((s, i) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => i <= step && setStep(i)}
+                className={`flex-1 min-w-[140px] text-left rounded-xl border px-3 py-2.5 transition-colors ${
+                  i === step
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/40 ring-1 ring-brand-500/30'
+                    : i < step
+                      ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 opacity-70'
+                }`}
+              >
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Passo {i + 1}</span>
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{s.title}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">{s.subtitle}</p>
+              </button>
+            ))}
+          </nav>
+
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+            {step === 0 && (
+              <>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Identificação e preços</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      SKU
+                      <FieldHelp text="Código interno opcional (SKU). Útil para integrações e etiquetas; não substitui o código numérico do sistema." />
+                    </label>
+                    <input
+                      type="text"
+                      value={form.sku ?? ''}
+                      onChange={(e) => set('sku', e.target.value)}
+                      placeholder="Ex: MESA-G-NAT, REF-001"
+                      className={INPUT_CLS}
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Unidade <span className="text-red-500">*</span>
+                      <FieldHelp text="Unidade de medida comercializada (UN, KG, CX…). Será enviada nos itens da NF-e." />
+                    </label>
+                    <select
+                      value={form.unidade}
+                      onChange={(e) => set('unidade', e.target.value)}
+                      required
+                      className={INPUT_CLS}
+                    >
+                      {UNIDADES.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Descrição <span className="text-red-500">*</span>
+                      <FieldHelp text="Nome do produto como aparecerá na nota fiscal e nos relatórios." />
+                    </label>
+                    <input
+                      type="text"
+                      value={form.descricao}
+                      onChange={(e) => set('descricao', e.target.value)}
+                      required
+                      placeholder="Descrição do produto"
+                      className={INPUT_CLS}
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Preço de Venda <span className="text-red-500">*</span>
+                      <FieldHelp text="Valor de referência para vendas. Pode ser ajustado no momento da emissão da NF-e." />
+                    </label>
+                    <CurrencyInput value={form.precoVenda} onChange={(v) => set('precoVenda', v)} required />
+                  </div>
+                  <div>
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      Preço de Custo
+                      <FieldHelp text="Custo de aquisição ou produção — uso interno e margem; não é enviado na NF-e de venda." />
+                    </label>
+                    <CurrencyInput value={form.precoCusto} onChange={(v) => set('precoCusto', v)} />
+                  </div>
+                  <div className="sm:col-span-2 flex items-center gap-3 pt-2">
+                    <input
+                      type="checkbox"
+                      id="ativo"
+                      checked={form.ativo}
+                      onChange={(e) => set('ativo', e.target.checked)}
+                      className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                    />
+                    <label htmlFor="ativo" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Produto ativo
+                      <FieldHelp text="Desmarque para inativar o cadastro sem apagar o histórico." />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {step === 1 && (
+              <>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">NCM e origem</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  O NCM classifica a mercadoria para a NF-e; a origem indica se o item é nacional ou importado. Os valores
+                  gravados são os códigos exigidos pela SEFAZ.
+                </p>
+                <div>
+                  <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    NCM (8 dígitos)
+                    <FieldHelp text="Nomenclatura Comum do Mercosul. Use a pesquisa à direita para localizar pelo texto oficial da tabela — o sistema grava só os 8 dígitos." />
+                  </label>
+                  <NcmSearchInput value={form.ncm ?? ''} onChange={(ncm) => set('ncm', ncm)} />
+                </div>
+                <div>
+                  <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    Origem da mercadoria
+                    <FieldHelp text="Campo de origem da NF-e (código 0 a 8). Na nota é enviado apenas o número; escolha pela descrição abaixo." />
+                  </label>
+                  <select
+                    value={form.origem ?? 0}
+                    onChange={(e) => set('origem', Number(e.target.value))}
+                    className={INPUT_CLS}
+                  >
+                    {ORIGEM_MERCADORIA.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Valor gravado: {form.origem ?? 0} — {origemLabel}</p>
+                </div>
+              </>
+            )}
+
+            {step === 2 && (
+              <>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">ICMS no produto</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Empresas no <strong>Lucro Presumido/Real</strong> usam em geral <strong>CST</strong>; no{' '}
+                  <strong>Simples Nacional</strong> usa-se <strong>CSOSN</strong>. Preencha o que o seu contador indicar — os
+                  códigos são os da NF-e.
+                </p>
+                <div>
+                  <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    ICMS — CST (situação tributária)
+                    <FieldHelp text="Código de Situação Tributária do ICMS (até 3 caracteres). Escolha uma sugestão comum ou informe outro código válido para a operação." />
+                  </label>
+                  <select
+                    value={selectValueIcmsCst(form.icmsCst ?? '')}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '__custom__') set('icmsCst', '');
+                      else set('icmsCst', v);
+                    }}
+                    className={INPUT_CLS}
+                  >
+                    {ICMS_CST_SUGESTOES.map((o) => (
+                      <option key={o.value || 'empty'} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                    <option value="__custom__">Outro código (digitar)</option>
+                  </select>
+                  {selectValueIcmsCst(form.icmsCst ?? '') === '__custom__' && (
+                    <input
+                      type="text"
+                      value={form.icmsCst ?? ''}
+                      onChange={(e) => set('icmsCst', e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 3))}
+                      placeholder="Ex.: 61"
+                      className={`${INPUT_CLS} mt-2 font-mono`}
+                    />
+                  )}
+                </div>
+                <div>
+                  <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                    ICMS — CSOSN (Simples Nacional)
+                    <FieldHelp text="Código de Situação da Operação — Simples Nacional (3 dígitos). Deixe em branco se a empresa não estiver no Simples." />
+                  </label>
+                  <select
+                    value={selectValueCsosn(form.icmsCsosn ?? '')}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '__custom__') set('icmsCsosn', '');
+                      else set('icmsCsosn', v);
+                    }}
+                    className={INPUT_CLS}
+                  >
+                    {ICMS_CSOSN_SUGESTOES.map((o) => (
+                      <option key={o.value || 'empty-cs'} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                    <option value="__custom__">Outro código (digitar)</option>
+                  </select>
+                  {selectValueCsosn(form.icmsCsosn ?? '') === '__custom__' && (
+                    <input
+                      type="text"
+                      value={form.icmsCsosn ?? ''}
+                      onChange={(e) => set('icmsCsosn', e.target.value.replace(/\D/g, '').slice(0, 3))}
+                      placeholder="Ex.: 102"
+                      className={`${INPUT_CLS} mt-2 font-mono`}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+
+            {step === 3 && (
+              <>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">PIS, COFINS e CEST</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  PIS e COFINS usam CST próprio na NF-e. O CEST identifica mercadorias sujeitas à substituição tributária de
+                  ICMS/ST quando aplicável.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      PIS — CST
+                      <FieldHelp text="Código de Situação Tributária do PIS (2 dígitos). O valor gravado é o enviado na NF-e." />
+                    </label>
+                    <select
+                      value={form.pisCst ?? '07'}
+                      onChange={(e) => set('pisCst', e.target.value)}
+                      className={INPUT_CLS}
+                    >
+                      {PIS_COFINS_CST_SUGESTOES.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      COFINS — CST
+                      <FieldHelp text="Código de Situação Tributária da COFINS (2 dígitos). Em muitos casos acompanha o PIS." />
+                    </label>
+                    <select
+                      value={form.cofinsCst ?? '07'}
+                      onChange={(e) => set('cofinsCst', e.target.value)}
+                      className={INPUT_CLS}
+                    >
+                      {PIS_COFINS_CST_SUGESTOES.map((o) => (
+                        <option key={`c-${o.value}`} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="flex items-center text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      CEST
+                      <FieldHelp text="Código Especificador da ST (7 dígitos). Obrigatório apenas para mercadorias sujeitas à substituição tributária conforme convenções estaduais. Consulte a tabela do seu estado." />
+                    </label>
+                    <input
+                      type="text"
+                      value={form.cest ?? ''}
+                      onChange={(e) => set('cest', e.target.value.replace(/\D/g, '').slice(0, 7))}
+                      maxLength={7}
+                      placeholder="7 dígitos (se aplicável)"
+                      className={`${INPUT_CLS} font-mono`}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="flex flex-wrap justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+              <div className="flex gap-2">
+                {step > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setStep((s) => s - 1)}
+                    className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
+                  >
+                    Voltar
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => isNew ? navigate('/cadastros/produtos') : setIsEditing(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
+                >
+                  Cancelar
+                </button>
+              </div>
+              <div className="flex gap-2">
+                {step < STEPS.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (step === 0 && !validateStep0()) return;
+                      setError('');
+                      setStep((s) => s + 1);
+                    }}
+                    className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg"
+                  >
+                    Continuar
+                  </button>
+                )}
+                {step === STEPS.length - 1 && (
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-5 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 rounded-lg"
+                  >
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </form>
       )}
