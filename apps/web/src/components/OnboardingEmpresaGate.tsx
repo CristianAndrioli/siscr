@@ -142,6 +142,8 @@ export default function OnboardingEmpresaGate() {
   );
 }
 
+const TOTAL_STEPS = 5;
+
 function OnboardingWizard({
   certificateStorageReady,
   onLogout,
@@ -158,10 +160,24 @@ function OnboardingWizard({
   const [razaoSocial, setRazaoSocial] = useState('');
   const [nomeFantasia, setNomeFantasia] = useState('');
   const [cnpj, setCnpj] = useState('');
+  const [inscricaoEstadual, setInscricaoEstadual] = useState('');
   const [email, setEmail] = useState('');
   const [telefone, setTelefone] = useState('');
-  const [uf, setUf] = useState('');
+
+  const [cep, setCep] = useState('');
+  const [logradouro, setLogradouro] = useState('');
+  const [numero, setNumero] = useState('');
+  const [complemento, setComplemento] = useState('');
+  const [bairro, setBairro] = useState('');
   const [cidade, setCidade] = useState('');
+  const [uf, setUf] = useState('');
+  const [codigoMunicipio, setCodigoMunicipio] = useState('');
+
+  const [crt, setCrt] = useState<'1' | '2' | '3'>('1');
+  const [cnae, setCnae] = useState('');
+  const [nfeSerie, setNfeSerie] = useState('1');
+  const [nfeAmbiente, setNfeAmbiente] = useState<1 | 2>(2);
+  const [nfeProximoNumero, setNfeProximoNumero] = useState('1');
 
   const [addFilial, setAddFilial] = useState(false);
   const [filialNome, setFilialNome] = useState('');
@@ -174,16 +190,74 @@ function OnboardingWizard({
   const [certPassword, setCertPassword] = useState('');
 
   const cnpjDigits = onlyDigits(cnpj);
-  const canStep1 = razaoSocial.trim().length >= 2 && cnpjDigits.length === 14;
+  const cepDigits = onlyDigits(cep);
+  const codMunDigits = onlyDigits(codigoMunicipio);
+  const emailTrim = email.trim();
+  const emailOk = !emailTrim || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim);
+  const canStep1 = razaoSocial.trim().length >= 2 && cnpjDigits.length === 14 && emailOk;
+  const ufOk = /^[A-Za-z]{2}$/.test(uf.trim());
+  const canStep2 =
+    logradouro.trim().length >= 1 &&
+    numero.trim().length >= 1 &&
+    bairro.trim().length >= 1 &&
+    cidade.trim().length >= 1 &&
+    ufOk &&
+    cepDigits.length === 8 &&
+    codMunDigits.length === 7;
+
+  const validateStep = (s: number): string | null => {
+    if (s === 1) {
+      if (!canStep1) {
+        if (!emailOk) return 'Informe um e-mail válido ou deixe em branco.';
+        return 'Preencha razão social e CNPJ com 14 dígitos.';
+      }
+      return null;
+    }
+    if (s === 2) {
+      if (!canStep2) {
+        return 'Preencha o endereço fiscal: logradouro, número, bairro, cidade, UF (2 letras), CEP completo e código IBGE do município (7 dígitos).';
+      }
+      return null;
+    }
+    if (s === 3) {
+      const serie = nfeSerie.trim();
+      const prox = parseInt(nfeProximoNumero, 10);
+      if (!serie || serie.length > 3) return 'Informe a série da NF-e (até 3 caracteres).';
+      if (!Number.isFinite(prox) || prox < 1) return 'Informe o próximo número da NF-e (mínimo 1).';
+      return null;
+    }
+    if (s === 4) {
+      if (addFilial && filialNome.trim().length < 2) {
+        return 'Nome da filial deve ter pelo menos 2 caracteres, ou desmarque “Adicionar filial”.';
+      }
+      return null;
+    }
+    return null;
+  };
+
+  const goNext = () => {
+    setError('');
+    const msg = validateStep(step);
+    if (msg) {
+      setError(msg);
+      return;
+    }
+    setStep((x) => Math.min(x + 1, TOTAL_STEPS));
+  };
 
   const submit = async () => {
     setError('');
-    if (!canStep1) {
-      setError('Informe razão social e CNPJ com 14 dígitos.');
-      return;
+    for (let s = 1; s <= 4; s++) {
+      const msg = validateStep(s);
+      if (msg) {
+        setError(msg);
+        setStep(s);
+        return;
+      }
     }
     if (addFilial && filialNome.trim().length < 2) {
       setError('Nome da filial deve ter pelo menos 2 caracteres, ou desmarque “Adicionar filial”.');
+      setStep(4);
       return;
     }
     if (addCert && certificateStorageReady) {
@@ -199,14 +273,27 @@ function OnboardingWizard({
 
     setSaving(true);
     try {
+      const proxNfe = parseInt(nfeProximoNumero, 10);
       const { data: created } = await api.post<{ id: string }>('/tenant/info/empresas', {
         razaoSocial: razaoSocial.trim(),
         nomeFantasia: nomeFantasia.trim() || undefined,
         cnpj: cnpjDigits,
-        email: email.trim() || undefined,
+        inscricaoEstadual: inscricaoEstadual.trim() || undefined,
+        email: emailTrim || undefined,
         telefone: telefone.trim() || undefined,
-        uf: uf.trim().length === 2 ? uf.trim().toUpperCase() : undefined,
-        cidade: cidade.trim() || undefined,
+        logradouro: logradouro.trim(),
+        numero: numero.trim(),
+        complemento: complemento.trim() || undefined,
+        bairro: bairro.trim(),
+        cidade: cidade.trim(),
+        uf: uf.trim().toUpperCase(),
+        cep: cepDigits,
+        codigoMunicipio: codMunDigits,
+        crt,
+        cnae: cnae.trim() || undefined,
+        nfeSerie: nfeSerie.trim(),
+        nfeAmbiente,
+        nfeProximoNumero: Number.isFinite(proxNfe) && proxNfe >= 1 ? proxNfe : 1,
       });
       const empresaId = created.id;
 
@@ -245,18 +332,41 @@ function OnboardingWizard({
     }
   };
 
+  const stepTitle: Record<number, { title: string; hint: string }> = {
+    1: {
+      title: 'Identificação da empresa',
+      hint: 'Dados cadastrais conforme a Receita Federal. A inscrição estadual é usada na NF-e.',
+    },
+    2: {
+      title: 'Endereço fiscal',
+      hint: 'Endereço do estabelecimento matriz. O código IBGE do município (7 dígitos) é obrigatório no XML da NF-e.',
+    },
+    3: {
+      title: 'Perfil da NF-e',
+      hint: 'Regime tributário (CRT), ambiente e numeração inicial. Em homologação as notas não têm valor fiscal.',
+    },
+    4: {
+      title: 'Filial (opcional)',
+      hint: 'Se a operação usar outro CNPJ ou ponto, cadastre uma filial. Pode fazer depois em Configurações.',
+    },
+    5: {
+      title: 'Certificado digital A1',
+      hint: 'O certificado é necessário para assinar a NF-e. Você pode enviar agora ou configurar depois.',
+    },
+  };
+
+  const head = stepTitle[step] ?? stepTitle[1];
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto pointer-events-auto">
-      <div className="my-auto w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div className="my-auto w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
         <div className="border-b border-slate-800 px-6 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-brand-400">Bem-vindo</p>
-          <h2 className="font-display mt-1 text-xl font-bold text-white">Cadastre a empresa matriz</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Para usar o ERP, é obrigatório cadastrar pelo menos uma empresa (CNPJ). Filial e certificado digital A1 são opcionais.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-400">Configuração inicial</p>
+          <h2 className="font-display mt-1 text-xl font-bold text-white">{head.title}</h2>
+          <p className="mt-2 text-sm text-slate-400">{head.hint}</p>
         </div>
 
-        <div className="max-h-[min(70vh,560px)] overflow-y-auto px-6 py-5 space-y-5">
+        <div className="max-h-[min(72vh,620px)] overflow-y-auto px-6 py-5 space-y-5">
           {step === 1 && (
             <>
               <label className="block">
@@ -286,6 +396,15 @@ function OnboardingWizard({
                   placeholder="00.000.000/0000-00"
                 />
               </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-400">Inscrição estadual (IE)</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+                  value={inscricaoEstadual}
+                  onChange={(e) => setInscricaoEstadual(e.target.value)}
+                  placeholder="Número da IE ou ISENTO, se aplicável"
+                />
+              </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs font-medium text-slate-400">E-mail</span>
@@ -307,9 +426,83 @@ function OnboardingWizard({
                   />
                 </label>
               </div>
+            </>
+          )}
+
+          {step === 2 && (
+            <>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-400">UF</span>
+                  <span className="text-xs font-medium text-slate-400">CEP *</span>
+                  <MaskedInput
+                    mask="cep"
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono focus:border-brand-500 focus:outline-none"
+                    value={cep}
+                    onChange={setCep}
+                    placeholder="00000-000"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">Código IBGE do município *</span>
+                  <input
+                    inputMode="numeric"
+                    maxLength={7}
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+                    value={codigoMunicipio}
+                    onChange={(e) => setCodigoMunicipio(onlyDigits(e.target.value).slice(0, 7))}
+                    placeholder="7 dígitos"
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 -mt-2">
+                Consulte o código do município na tabela do IBGE (código de 7 dígitos do local da sede).
+              </p>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-400">Logradouro *</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  value={logradouro}
+                  onChange={(e) => setLogradouro(e.target.value)}
+                  placeholder="Rua, avenida…"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">Número *</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                    value={numero}
+                    onChange={(e) => setNumero(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">Complemento</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                    value={complemento}
+                    onChange={(e) => setComplemento(e.target.value)}
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-400">Bairro *</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  value={bairro}
+                  onChange={(e) => setBairro(e.target.value)}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">Cidade *</span>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                    value={cidade}
+                    onChange={(e) => setCidade(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">UF *</span>
                   <input
                     maxLength={2}
                     className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white uppercase focus:border-brand-500 focus:outline-none"
@@ -317,19 +510,69 @@ function OnboardingWizard({
                     onChange={(e) => setUf(e.target.value)}
                   />
                 </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-slate-400">Cidade</span>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
-                    value={cidade}
-                    onChange={(e) => setCidade(e.target.value)}
-                  />
-                </label>
               </div>
             </>
           )}
 
-          {step === 2 && (
+          {step === 3 && (
+            <>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-400">CRT (regime tributário) *</span>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  value={crt}
+                  onChange={(e) => setCrt(e.target.value as '1' | '2' | '3')}
+                >
+                  <option value="1">1 — Simples Nacional</option>
+                  <option value="2">2 — Simples Nacional (excesso de sublimite)</option>
+                  <option value="3">3 — Regime normal (Lucro Presumido / Real)</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-400">Ambiente da NF-e *</span>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  value={nfeAmbiente}
+                  onChange={(e) => setNfeAmbiente(Number(e.target.value) as 1 | 2)}
+                >
+                  <option value={2}>Homologação (testes, sem valor fiscal)</option>
+                  <option value={1}>Produção (notas válidas)</option>
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">Série *</span>
+                  <input
+                    maxLength={3}
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono focus:border-brand-500 focus:outline-none"
+                    value={nfeSerie}
+                    onChange={(e) => setNfeSerie(e.target.value)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-slate-400">Próximo número *</span>
+                  <input
+                    inputMode="numeric"
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono focus:border-brand-500 focus:outline-none"
+                    value={nfeProximoNumero}
+                    onChange={(e) => setNfeProximoNumero(e.target.value.replace(/\D/g, ''))}
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-400">CNAE fiscal (opcional)</span>
+                <input
+                  maxLength={10}
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+                  value={cnae}
+                  onChange={(e) => setCnae(e.target.value)}
+                  placeholder="Principal da empresa, se souber"
+                />
+              </label>
+            </>
+          )}
+
+          {step === 4 && (
             <>
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
                 <input
@@ -388,7 +631,7 @@ function OnboardingWizard({
             </>
           )}
 
-          {step === 3 && (
+          {step === 5 && (
             <>
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
                 <input
@@ -446,7 +689,9 @@ function OnboardingWizard({
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 px-6 py-4">
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-slate-500">Etapa {step} de 3</span>
+            <span className="text-xs text-slate-500">
+              Etapa {step} de {TOTAL_STEPS}
+            </span>
             <button
               type="button"
               onClick={() => onLogout()}
@@ -466,18 +711,11 @@ function OnboardingWizard({
                 Voltar
               </button>
             )}
-            {step < 3 ? (
+            {step < TOTAL_STEPS ? (
               <button
                 type="button"
-                disabled={saving || (step === 1 && !canStep1)}
-                onClick={() => {
-                  setError('');
-                  if (step === 1 && !canStep1) {
-                    setError('Preencha razão social e CNPJ com 14 dígitos.');
-                    return;
-                  }
-                  setStep((s) => s + 1);
-                }}
+                disabled={saving}
+                onClick={goNext}
                 className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-40"
               >
                 Continuar
