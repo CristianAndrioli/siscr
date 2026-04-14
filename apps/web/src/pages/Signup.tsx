@@ -4,6 +4,10 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
+/** Template com `{slug}` para preview; ex.: https://{slug}.app.seudominio.com.br */
+const TENANT_URL_TEMPLATE =
+  import.meta.env.VITE_TENANT_URL_TEMPLATE || 'https://{slug}.seudominio.com';
+
 const PLAN_LABELS: Record<string, string> = {
   free:       'Free',
   basico:     'Básico — R$ 99/mês',
@@ -30,6 +34,8 @@ export default function Signup() {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [slugChecking, setSlugChecking] = useState(false);
+  const [slugFeedback, setSlugFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   // Dados da empresa (step 1)
   const [empresaNome, setEmpresaNome] = useState('');
@@ -52,11 +58,61 @@ export default function Signup() {
   const handleSlugChange = (value: string) => {
     setTenantSlug(slugify(value));
     setSlugEdited(true);
+    setSlugFeedback(null);
   };
 
-  const nextStep = (e: FormEvent) => {
+  const previewSlug =
+    tenantSlug.trim().length > 0
+      ? tenantSlug.trim()
+      : slugify(empresaNome.trim()) || 'sua-empresa';
+
+  const previewUrl = TENANT_URL_TEMPLATE.replace('{slug}', previewSlug);
+
+  const runSlugAvailability = async (): Promise<boolean> => {
+    setError('');
+    setSlugFeedback(null);
+    const q = tenantSlug.trim();
+    if (!q) {
+      setSlugFeedback({
+        type: 'ok',
+        text: 'Será gerado automaticamente um subdomínio único a partir do nome da empresa.',
+      });
+      return true;
+    }
+    setSlugChecking(true);
+    try {
+      const { data } = await axios.get(`${API_BASE_URL}/api/auth/tenant-slug/availability`, {
+        params: { slug: q },
+      });
+      if (data.empty) {
+        setSlugFeedback({ type: 'ok', text: data.message });
+        return true;
+      }
+      if (data.available === false) {
+        setSlugFeedback({ type: 'err', text: data.message });
+        return false;
+      }
+      setSlugFeedback({
+        type: 'ok',
+        text: `O subdomínio "${data.normalized}" está disponível.`,
+      });
+      return true;
+    } catch {
+      setSlugFeedback({
+        type: 'err',
+        text: 'Não foi possível verificar agora. Tente de novo.',
+      });
+      return false;
+    } finally {
+      setSlugChecking(false);
+    }
+  };
+
+  const nextStep = async (e: FormEvent) => {
     e.preventDefault();
-    if (!empresaNome.trim() || !tenantSlug.trim()) return;
+    if (!empresaNome.trim()) return;
+    const ok = await runSlugAvailability();
+    if (!ok) return;
     setStep(2);
   };
 
@@ -82,7 +138,7 @@ export default function Signup() {
           email,
           password,
           tenantNome: empresaNome,
-          tenantSlug,
+          tenantSlug: tenantSlug.trim() || undefined,
           planId: plan,
         });
         // Gravar sessão no sessionStorage para o CheckoutSuccess consumir
@@ -91,7 +147,7 @@ export default function Signup() {
           user: data.user,
           tenant: data.tenant,
         }));
-        navigate(`/checkout/success?tenant=${tenantSlug}&free=1`);
+        navigate(`/checkout/success?tenant=${encodeURIComponent(data.tenant.slug)}&free=1`);
       } else {
         // Planos pagos: enviar dados ao backend que cria sessão Stripe
         const { data } = await axios.post(`${API_BASE_URL}/api/subscriptions/checkout`, {
@@ -99,7 +155,7 @@ export default function Signup() {
           email,
           password,
           tenantNome: empresaNome,
-          tenantSlug,
+          tenantSlug: tenantSlug.trim() || undefined,
           plan,
         });
         // Redirecionar para URL do Stripe
@@ -178,24 +234,51 @@ export default function Signup() {
             </div>
 
             <div>
-              <label className="input-label text-slate-300">Identificador único <span className="text-slate-500 font-normal">(usado para login)</span></label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm select-none">@</span>
-                <input
-                  type="text"
-                  value={tenantSlug}
-                  onChange={(e) => handleSlugChange(e.target.value)}
-                  placeholder="minha-empresa"
-                  required
-                  pattern="[a-z0-9\-]+"
-                  minLength={3}
-                  maxLength={30}
-                  className="input pl-8 bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
-                />
+              <label className="input-label text-slate-300">
+                Subdomínio <span className="text-slate-500 font-normal">(endereço do seu espaço)</span>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm select-none">
+                    https://
+                  </span>
+                  <input
+                    type="text"
+                    value={tenantSlug}
+                    onChange={(e) => handleSlugChange(e.target.value)}
+                    placeholder="minha-empresa"
+                    maxLength={30}
+                    autoComplete="off"
+                    className="input pl-[4.25rem] bg-surface-card border-surface-border text-white placeholder-slate-600 focus:ring-brand-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void runSlugAvailability()}
+                  disabled={slugChecking || !tenantSlug.trim()}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-surface-border text-slate-200 hover:bg-slate-800/50 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                >
+                  {slugChecking ? 'Verificando…' : 'Validar disponibilidade'}
+                </button>
               </div>
-              <p className="mt-1.5 text-xs text-slate-600">
-                Somente letras minúsculas, números e hífens. Ex: <span className="text-slate-400">minha-empresa</span>
+              <p className="mt-2 text-xs text-slate-400 leading-relaxed">
+                <span className="text-slate-300">Prévia:</span>{' '}
+                <span className="break-all font-mono text-brand-300/90">{previewUrl}</span>
               </p>
+              <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
+                Somente letras minúsculas, números e hífens (3–30 caracteres). Se deixar em branco, o subdomínio será
+                definido <strong className="text-slate-500">automaticamente</strong> a partir do nome da empresa,
+                garantindo um nome único no sistema. A disponibilidade é verificada na base de cadastro de clientes.
+              </p>
+              {slugFeedback && (
+                <p
+                  className={`mt-2 text-xs ${
+                    slugFeedback.type === 'ok' ? 'text-emerald-400/90' : 'text-red-400/90'
+                  }`}
+                >
+                  {slugFeedback.text}
+                </p>
+              )}
             </div>
 
             <button type="submit" className="btn-primary w-full py-3.5 text-base">

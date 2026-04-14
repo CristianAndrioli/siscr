@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { hashPassword, verifyPassword } from '../lib/password'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
+import { checkTenantSlugAvailability, resolveTenantSlug } from '../lib/tenantSlug'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -19,7 +20,8 @@ const signupSchema = z.object({
   password: z.string().min(8),
   nome: z.string().min(2),
   tenantNome: z.string().min(2),
-  tenantSlug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+  /** Vazio = gerado automaticamente a partir do nome da empresa. */
+  tenantSlug: z.string().max(40).optional(),
   planId: z.string().optional(),
 })
 
@@ -158,19 +160,22 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   })
 })
 
+// GET /api/auth/tenant-slug/availability?slug= — disponibilidade do subdomínio (tabela tenants)
+app.get('/tenant-slug/availability', async (c) => {
+  const slug = c.req.query('slug') ?? ''
+  const result = await checkTenantSlugAvailability(c.env.DB_SHARED, slug)
+  return c.json(result)
+})
+
 // POST /api/auth/signup — cria tenant + usuário admin (plano free)
 app.post('/signup', zValidator('json', signupSchema), async (c) => {
   const { email, password, nome, tenantNome, tenantSlug, planId } = c.req.valid('json')
 
-  // Verificar se slug já existe
-  const existing = await c.env.DB_SHARED
-    .prepare('SELECT id FROM tenants WHERE slug = ?')
-    .bind(tenantSlug)
-    .first()
-
-  if (existing) {
-    return c.json({ error: `O identificador "${tenantSlug}" já está em uso.` }, 409)
+  const resolved = await resolveTenantSlug(c.env.DB_SHARED, tenantNome, tenantSlug?.trim() || null)
+  if ('error' in resolved) {
+    return c.json({ error: resolved.error }, 400)
   }
+  const finalSlug = resolved.slug
 
   const tenantId = crypto.randomUUID()
   const userId = crypto.randomUUID()
@@ -181,7 +186,7 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
   await c.env.DB_SHARED.batch([
     c.env.DB_SHARED.prepare(
       'INSERT INTO tenants (id, slug, nome, plan_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(tenantId, tenantSlug, tenantNome, planId ?? 'free', 'active', now),
+    ).bind(tenantId, finalSlug, tenantNome, planId ?? 'free', 'active', now),
 
     c.env.DB_SHARED.prepare(
       'INSERT INTO users (id, tenant_id, email, password_hash, nome, role, ativo, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
@@ -197,7 +202,7 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
     nome,
     role: 'admin',
     tenantId,
-    tenantSlug,
+    tenantSlug: finalSlug,
     customRoleId: null,
   })
 
@@ -205,10 +210,10 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
 
   return c.json({
     message: 'Conta criada com sucesso!',
-    tenantSlug,
+    tenantSlug: finalSlug,
     token: sessionToken,
     user: { id: userId, email, nome, role: 'admin', modules: sessionData.modules, customRoleId: null },
-    tenant: { id: tenantId, slug: tenantSlug, nome: tenantNome, status: 'active' },
+    tenant: { id: tenantId, slug: finalSlug, nome: tenantNome, status: 'active' },
   }, 201)
 })
 

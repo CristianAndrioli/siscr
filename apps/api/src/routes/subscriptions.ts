@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { Env } from '../index'
+import { resolveTenantSlug } from '../lib/tenantSlug'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -49,30 +50,22 @@ app.post('/checkout', async (c) => {
     email: string
     password: string
     tenantNome: string
-    tenantSlug: string
+    /** Opcional: vazio = gerado no servidor a partir do nome da empresa. */
+    tenantSlug?: string
     plan: string
   }>()
 
   const { nome, email, password, tenantNome, tenantSlug, plan } = body
 
-  if (!nome || !email || !password || !tenantNome || !tenantSlug || !plan) {
+  if (!nome || !email || !password || !tenantNome || !plan) {
     return c.json({ error: 'Todos os campos são obrigatórios.' }, 400)
   }
 
-  // Validar slug
-  if (!/^[a-z0-9-]{3,30}$/.test(tenantSlug)) {
-    return c.json({ error: 'Identificador inválido. Use letras minúsculas, números e hífens.' }, 400)
+  const resolved = await resolveTenantSlug(c.env.DB_SHARED, tenantNome, tenantSlug?.trim() || null)
+  if ('error' in resolved) {
+    return c.json({ error: resolved.error }, 400)
   }
-
-  // Verificar se slug já existe
-  const existing = await c.env.DB_SHARED
-    .prepare('SELECT id FROM tenants WHERE slug = ?')
-    .bind(tenantSlug)
-    .first()
-
-  if (existing) {
-    return c.json({ error: 'Esse identificador já está em uso. Escolha outro.' }, 409)
-  }
+  const finalSlug = resolved.slug
 
   // Verificar se email já existe
   const existingEmail = await c.env.DB_SHARED
@@ -97,9 +90,9 @@ app.post('/checkout', async (c) => {
   }
 
   // Guardar dados pendentes no KV (expira em 1 hora)
-  const pendingKey = `pending_signup:${tenantSlug}`
+  const pendingKey = `pending_signup:${finalSlug}`
   await c.env.KV_TENANT_CACHE.put(pendingKey, JSON.stringify({
-    nome, email, password, tenantNome, tenantSlug, plan,
+    nome, email, password, tenantNome, tenantSlug: finalSlug, plan,
   }), { expirationTtl: 3600 })
 
   // Criar sessão Stripe via API REST (sem SDK, compatível com Workers)
@@ -110,9 +103,9 @@ app.post('/checkout', async (c) => {
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
     'customer_email': email,
-    'success_url': `${frontendUrl}/checkout/success?tenant=${tenantSlug}`,
+    'success_url': `${frontendUrl}/checkout/success?tenant=${encodeURIComponent(finalSlug)}`,
     'cancel_url': `${frontendUrl}/checkout/cancel`,
-    'metadata[tenantSlug]': tenantSlug,
+    'metadata[tenantSlug]': finalSlug,
     'metadata[plan]': plan,
     'allow_promotion_codes': 'true',
   })
