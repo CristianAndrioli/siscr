@@ -11,9 +11,8 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "paths": {
-      "@siscr/db/*": ["../../packages/db/src/*"],
-      "@siscr/shared/*": ["../../packages/shared/src/*"]
+      "@siscr/db/*": ["../../packages/db/src/*"]
     }
   },
-  "include": ["src/**/*", "../../packages/db/src/**/*", "../../packages/shared/src/**/*"]
+  "include": ["src/**/*", "../../packages/db/src/**/*"]
 }

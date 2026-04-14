@@ -92,8 +92,7 @@ siscr/
 │       │   └── routes/      # auth, subscriptions, tenant/*, webhooks, publicLookup, …
 │       └── wrangler.toml
 ├── packages/
-│   ├── db/migrations/shared/
-│   └── shared/
+│   └── db/migrations/shared/
 ├── doc/                     # Documentação complementar (tenant/URL, nova conta CF)
 ├── .github/workflows/
 │   └── deploy-staging.yml   # Push em `cloudflare` → D1 migrate + Worker + Pages
