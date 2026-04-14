@@ -4,6 +4,7 @@ import { authService } from '../services/auth';
 import { usePermissions } from '../hooks/usePermissions';
 import { useTheme } from '../hooks/useTheme';
 import OnboardingEmpresaGate from './OnboardingEmpresaGate';
+import WhatsAppSupportButton from './WhatsAppSupportButton';
 
 interface LayoutProps { children: ReactNode }
 type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'entrada' | 'estoque' | 'configuracoes';
@@ -318,6 +319,8 @@ export default function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
+
+      <WhatsAppSupportButton />
     </div>
   );
 }
