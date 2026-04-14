@@ -170,7 +170,7 @@ app.post('/', async (c) => {
       break
     }
 
-    // ─── Assinatura atualizada (reativação, pausa, inadimplência) ─
+    // ─── Assinatura atualizada (reativação, pausa via collection, inadimplência) ─
     case 'customer.subscription.updated': {
       const subscription = event.data.object
       const tenantRow = await c.env.DB_SHARED
@@ -179,8 +179,24 @@ app.post('/', async (c) => {
         .first<{ slug: string }>()
 
       const SUSPEND_STATUSES = ['paused', 'past_due', 'unpaid', 'canceled']
+      // pause_collection: Dashboard usa esse mecanismo para pausar cobrança
+      // mantendo status=active. Quando definido, billing está congelado.
+      const billingPaused = !!subscription.pause_collection
 
-      if (subscription.status === 'active') {
+      if (billingPaused || SUSPEND_STATUSES.includes(subscription.status)) {
+        await c.env.DB_SHARED
+          .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
+          .bind(new Date().toISOString(), subscription.customer)
+          .run()
+
+        if (tenantRow?.slug) {
+          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+          const reason = billingPaused ? 'pause_collection' : subscription.status
+          console.log(`[Webhook] Tenant suspenso (${reason}) e cache invalidado: ${tenantRow.slug}`)
+        } else {
+          console.log(`[Webhook] Tenant suspenso (${subscription.status}): customer=${subscription.customer}`)
+        }
+      } else if (subscription.status === 'active') {
         await c.env.DB_SHARED
           .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
           .bind(new Date().toISOString(), subscription.customer)
@@ -189,18 +205,6 @@ app.post('/', async (c) => {
         if (tenantRow?.slug) {
           await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
           console.log(`[Webhook] Tenant reativado e cache invalidado: ${tenantRow.slug}`)
-        }
-      } else if (SUSPEND_STATUSES.includes(subscription.status)) {
-        await c.env.DB_SHARED
-          .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
-          .bind(new Date().toISOString(), subscription.customer)
-          .run()
-
-        if (tenantRow?.slug) {
-          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-          console.log(`[Webhook] Tenant suspenso (${subscription.status}) e cache invalidado: ${tenantRow.slug}`)
-        } else {
-          console.log(`[Webhook] Tenant suspenso (${subscription.status}): customer=${subscription.customer}`)
         }
       }
       break
