@@ -5,6 +5,7 @@ import type { Env } from '../index'
 import { hashPassword, verifyPassword } from '../lib/password'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
 import { checkTenantSlugAvailability, resolveTenantSlug } from '../lib/tenantSlug'
+import { sendEmailVerification, sendPasswordResetEmail } from '../lib/email'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -288,9 +289,175 @@ app.get('/session-status', async (c) => {
   })
 })
 
+// POST /api/auth/request-email-verification — armazena dados de cadastro no KV e envia e-mail de verificação
+app.post('/request-email-verification', async (c) => {
+  const body = await c.req.json<{
+    nome: string; email: string; password: string
+    tenantNome: string; tenantSlug: string; plan: string
+  }>()
+
+  const { nome, email, password, tenantNome, tenantSlug, plan } = body
+  if (!nome || !email || !password || !tenantNome || !tenantSlug || !plan) {
+    return c.json({ error: 'Todos os campos são obrigatórios.' }, 400)
+  }
+
+  if (!c.env.RESEND_API_KEY) {
+    return c.json({ error: 'Serviço de e-mail não configurado.' }, 503)
+  }
+
+  const token = crypto.randomUUID()
+  const key = `email_verify:${token}`
+  await c.env.KV_TENANT_CACHE.put(key, JSON.stringify({ nome, email, password, tenantNome, tenantSlug, plan }), {
+    expirationTtl: 60 * 60 * 24, // 24h
+  })
+
+  await sendEmailVerification(
+    { RESEND_API_KEY: c.env.RESEND_API_KEY, EMAIL_FROM: c.env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>', FRONTEND_URL: c.env.FRONTEND_URL },
+    email, nome, token,
+  )
+
+  return c.json({ message: 'E-mail de verificação enviado.' })
+})
+
+// GET /api/auth/verify-email?token= — valida token e cria conta (free) ou retorna URL do Stripe (paid)
+app.get('/verify-email', async (c) => {
+  const token = c.req.query('token')
+  if (!token) return c.json({ error: 'Token ausente.' }, 400)
+
+  const raw = await c.env.KV_TENANT_CACHE.get(`email_verify:${token}`)
+  if (!raw) return c.json({ error: 'Link inválido ou expirado.' }, 410)
+
+  const data = JSON.parse(raw) as {
+    nome: string; email: string; password: string
+    tenantNome: string; tenantSlug: string; plan: string
+  }
+
+  await c.env.KV_TENANT_CACHE.delete(`email_verify:${token}`)
+
+  const FREE_PLANS = ['free', 'trial']
+
+  if (FREE_PLANS.includes(data.plan)) {
+    // Criar conta imediatamente
+    const resolved = await resolveTenantSlug(c.env.DB_SHARED, data.tenantNome, data.tenantSlug)
+    if ('error' in resolved) return c.json({ error: resolved.error }, 400)
+
+    const tenantId = crypto.randomUUID()
+    const userId = crypto.randomUUID()
+    const passwordHash = await hashPassword(data.password)
+    const now = new Date().toISOString()
+
+    await c.env.DB_SHARED.batch([
+      c.env.DB_SHARED.prepare(
+        'INSERT INTO tenants (id, slug, nome, plan_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(tenantId, resolved.slug, data.tenantNome, 'free', 'active', now),
+      c.env.DB_SHARED.prepare(
+        'INSERT INTO users (id, tenant_id, email, password_hash, nome, role, ativo, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)'
+      ).bind(userId, tenantId, data.email, passwordHash, data.nome, 'admin', now),
+    ])
+
+    const sessionToken = crypto.randomUUID()
+    const sessionData = await buildSessionUserPayload(c.env.DB_SHARED, {
+      userId, email: data.email, nome: data.nome, role: 'admin',
+      tenantId, tenantSlug: resolved.slug, customRoleId: null,
+    })
+    await c.env.KV_SESSIONS.put(`session:${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: 60 * 60 * 24 * 7 })
+
+    return c.json({ action: 'free', tenantSlug: resolved.slug, token: sessionToken, user: { id: userId, email: data.email, nome: data.nome, role: 'admin', modules: sessionData.modules }, tenant: { id: tenantId, slug: resolved.slug, nome: data.tenantNome, status: 'active' } })
+  }
+
+  // Plano pago: criar sessão Stripe
+  const STRIPE_PRICE_IDS: Record<string, string> = {
+    basico: c.env.STRIPE_PRICE_BASICO || '',
+    pro: c.env.STRIPE_PRICE_PRO || '',
+    enterprise: c.env.STRIPE_PRICE_ENTERPRISE || '',
+  }
+  const priceId = STRIPE_PRICE_IDS[data.plan]
+  if (!priceId) return c.json({ error: 'Plano inválido.' }, 400)
+
+  const pendingKey = `pending_signup:${data.tenantSlug}`
+  await c.env.KV_TENANT_CACHE.put(pendingKey, JSON.stringify(data), { expirationTtl: 3600 })
+
+  const frontendUrl = c.env.FRONTEND_URL
+  const params = new URLSearchParams({
+    mode: 'subscription',
+    'line_items[0][price]': priceId,
+    'line_items[0][quantity]': '1',
+    customer_email: data.email,
+    success_url: `${frontendUrl}/checkout/success?tenant=${encodeURIComponent(data.tenantSlug)}`,
+    cancel_url: `${frontendUrl}/checkout/cancel`,
+    'metadata[tenantSlug]': data.tenantSlug,
+    'metadata[plan]': data.plan,
+    allow_promotion_codes: 'true',
+  })
+
+  const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${c.env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  })
+
+  if (!stripeRes.ok) {
+    const err = await stripeRes.json() as { error?: { message?: string } }
+    return c.json({ error: err.error?.message || 'Erro ao criar sessão de pagamento.' }, 500)
+  }
+
+  const session = await stripeRes.json() as { url: string; id: string }
+  return c.json({ action: 'stripe', url: session.url, sessionId: session.id })
+})
+
+// POST /api/auth/forgot-password — gera token e envia e-mail de redefinição
+app.post('/forgot-password', zValidator('json', z.object({ email: z.string().email() })), async (c) => {
+  const { email } = c.req.valid('json')
+
+  if (!c.env.RESEND_API_KEY) {
+    return c.json({ message: 'Se o e-mail existir, você receberá as instruções em breve.' })
+  }
+
+  const user = await c.env.DB_SHARED
+    .prepare('SELECT id, nome, email FROM users WHERE LOWER(TRIM(email)) = ? AND ativo = 1 LIMIT 1')
+    .bind(email.trim().toLowerCase())
+    .first<{ id: string; nome: string; email: string }>()
+
+  if (user) {
+    const token = crypto.randomUUID()
+    await c.env.KV_SESSIONS.put(`password_reset:${user.id}:${token}`, '1', { expirationTtl: 3600 })
+
+    await sendPasswordResetEmail(
+      { RESEND_API_KEY: c.env.RESEND_API_KEY, EMAIL_FROM: c.env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>', FRONTEND_URL: c.env.FRONTEND_URL },
+      user.email, user.nome, user.id, token,
+    )
+  }
+
+  // Sempre retorna 200 para não revelar se o e-mail existe
+  return c.json({ message: 'Se o e-mail existir, você receberá as instruções em breve.' })
+})
+
+// POST /api/auth/reset-password — valida token e atualiza a senha
+app.post('/reset-password', zValidator('json', z.object({
+  uid: z.string().uuid(),
+  token: z.string().uuid(),
+  newPassword: z.string().min(8),
+})), async (c) => {
+  const { uid, token, newPassword } = c.req.valid('json')
+
+  const valid = await c.env.KV_SESSIONS.get(`password_reset:${uid}:${token}`)
+  if (!valid) return c.json({ error: 'Link inválido ou expirado.' }, 410)
+
+  const passwordHash = await hashPassword(newPassword)
+  const result = await c.env.DB_SHARED
+    .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+    .bind(passwordHash, new Date().toISOString(), uid)
+    .run()
+
+  if (!result.meta.changes) return c.json({ error: 'Usuário não encontrado.' }, 404)
+
+  await c.env.KV_SESSIONS.delete(`password_reset:${uid}:${token}`)
+
+  return c.json({ message: 'Senha redefinida com sucesso.' })
+})
+
 // POST /api/auth/logout
-app.post('/logout', async (c) => {
-  const authHeader = c.req.header('Authorization')
+app.post('/logout', async (c) => {  const authHeader = c.req.header('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7)
     await c.env.KV_SESSIONS.delete(`session:${token}`)

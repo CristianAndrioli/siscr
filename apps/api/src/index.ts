@@ -59,6 +59,10 @@ export type Env = {
    * Habilita tenant por subdomínio: {slug}.app.suaempresa.com.br (API + CORS).
    */
   TENANT_HOST_BASE?: string
+  // E-mail — Resend (wrangler secret put RESEND_API_KEY)
+  RESEND_API_KEY?: string
+  /** Remetente padrão, ex.: "SISCR <noreply@siscr.com.br>" */
+  EMAIL_FROM?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()

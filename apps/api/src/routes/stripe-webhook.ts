@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Env } from '../index'
 import { hashPassword } from '../lib/password'
+import { sendWelcomeEmail } from '../lib/email'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -118,6 +119,18 @@ app.post('/', async (c) => {
               JSON.stringify({ email: pending.email, userId, tenantId, tenantSlug }),
               { expirationTtl: 600 }
             )
+
+            // Enviar e-mail de boas-vindas
+            if (c.env.RESEND_API_KEY) {
+              try {
+                await sendWelcomeEmail(
+                  { RESEND_API_KEY: c.env.RESEND_API_KEY, EMAIL_FROM: c.env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>', FRONTEND_URL: c.env.FRONTEND_URL },
+                  pending.email, pending.nome, tenantSlug, plan || pending.plan,
+                )
+              } catch (emailErr) {
+                console.error('[Webhook] Falha ao enviar e-mail de boas-vindas:', emailErr)
+              }
+            }
 
             console.log(`[Webhook] ✅ Tenant criado com sucesso: ${tenantSlug}`)
           } else {

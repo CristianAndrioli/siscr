@@ -76,6 +76,7 @@ APP_URL = "https://api-staging.siscr.com.br"
 FRONTEND_URL = "https://staging.siscr.com.br"
 ALLOWED_ORIGINS = "https://staging.siscr.com.br"
 NFE_DEV_MODE = "0"
+EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
 # Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
 # Nota: tenant identificado via ?tenant=slug ou header X-Tenant-Slug no staging
 
@@ -113,6 +114,7 @@ APP_URL = "https://api.siscr.com.br"
 FRONTEND_URL = "https://app.siscr.com.br"
 ALLOWED_ORIGINS = "https://app.siscr.com.br"
 NFE_DEV_MODE = "0"
+EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
 # Subdomínio por tenant: {slug}.app.siscr.com.br — requer wildcard DNS *.app.siscr.com.br → Pages
 TENANT_HOST_BASE = "app.siscr.com.br"
 
