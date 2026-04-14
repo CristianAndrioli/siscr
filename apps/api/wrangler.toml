@@ -77,6 +77,7 @@ FRONTEND_URL = "https://staging.siscr.com.br"
 ALLOWED_ORIGINS = "https://staging.siscr.com.br"
 NFE_DEV_MODE = "0"
 # Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
+# Nota: tenant identificado via ?tenant=slug ou header X-Tenant-Slug no staging
 
 [[env.staging.d1_databases]]
 binding = "DB_SHARED"
