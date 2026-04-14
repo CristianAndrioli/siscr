@@ -170,7 +170,17 @@ app.post('/', async (c) => {
       break
     }
 
-    // ─── Assinatura atualizada (reativação, pausa via collection, inadimplência) ─
+    // ─── Assinatura atualizada ─────────────────────────────────
+    // Referência: https://docs.stripe.com/billing/subscriptions/overview#subscription-statuses
+    //
+    // Regras de negócio:
+    // • pause_collection definido → cobrança pausada via Dashboard; bloquear acesso
+    // • status=unpaid → todas as retentativas falharam; bloquear
+    // • status=paused → trial encerrado sem payment method; bloquear
+    // • status=past_due → Stripe ainda retentando; NÃO bloquear ainda (aguardar unpaid/deleted)
+    // • cancel_at_period_end=true + status=active → cancelamento agendado, acesso mantido até
+    //   o fim do período; NÃO alterar status (o bloqueio vem no subscription.deleted)
+    // • status=active + sem pause_collection + sem cancel pendente → reativar
     case 'customer.subscription.updated': {
       const subscription = event.data.object
       const tenantRow = await c.env.DB_SHARED
@@ -178,10 +188,9 @@ app.post('/', async (c) => {
         .bind(subscription.customer)
         .first<{ slug: string }>()
 
-      const SUSPEND_STATUSES = ['paused', 'past_due', 'unpaid', 'canceled']
-      // pause_collection: Dashboard usa esse mecanismo para pausar cobrança
-      // mantendo status=active. Quando definido, billing está congelado.
       const billingPaused = !!subscription.pause_collection
+      const SUSPEND_STATUSES = ['paused', 'unpaid']
+      const pendingCancel = subscription.cancel_at_period_end === true
 
       if (billingPaused || SUSPEND_STATUSES.includes(subscription.status)) {
         await c.env.DB_SHARED
@@ -196,7 +205,8 @@ app.post('/', async (c) => {
         } else {
           console.log(`[Webhook] Tenant suspenso (${subscription.status}): customer=${subscription.customer}`)
         }
-      } else if (subscription.status === 'active') {
+      } else if (subscription.status === 'active' && !pendingCancel) {
+        // Reativa apenas quando status é active sem cancelamento ou pausa pendentes
         await c.env.DB_SHARED
           .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
           .bind(new Date().toISOString(), subscription.customer)
@@ -206,6 +216,11 @@ app.post('/', async (c) => {
           await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
           console.log(`[Webhook] Tenant reativado e cache invalidado: ${tenantRow.slug}`)
         }
+      } else if (pendingCancel) {
+        console.log(`[Webhook] Cancelamento agendado para fim do período, acesso mantido: customer=${subscription.customer}`)
+      } else {
+        // past_due: Stripe ainda retentando, não bloquear
+        console.log(`[Webhook] subscription.updated ignorado (${subscription.status}): customer=${subscription.customer}`)
       }
       break
     }
