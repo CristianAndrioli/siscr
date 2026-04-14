@@ -48,7 +48,7 @@ jobs:
       - name: Build Frontend
         run: pnpm --filter=@siscr/web run build
         env:
-          VITE_API_URL: https://siscr-api-staging.lucaspercisi.workers.dev
+          VITE_API_URL: https://api-staging.siscr.com.br
 
       # ─── Etapa 4: Criar projeto Pages se não existir ────────────
       - name: Create Cloudflare Pages Project (if not exists)
@@ -73,5 +73,5 @@ jobs:
         run: |
           echo "## Deploy Staging Concluido!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **API (Worker):** https://siscr-api-staging.lucaspercisi.workers.dev" >> $GITHUB_STEP_SUMMARY
-          echo "- **Frontend (Pages):** https://staging.siscr-web.pages.dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **API (Worker):** https://api-staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend (Pages):** https://staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
