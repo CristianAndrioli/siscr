@@ -4,6 +4,50 @@ import { hashPassword } from '../lib/password'
 
 const app = new Hono<{ Bindings: Env }>()
 
+// ─── Helpers ──────────────────────────────────────────────────
+
+type DbEnv = Pick<Env, 'DB_SHARED' | 'KV_TENANT_CACHE'>
+
+async function suspendTenant(env: DbEnv, customerId: string, reason: string): Promise<void> {
+  const tenantRow = await env.DB_SHARED
+    .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+    .bind(customerId)
+    .first<{ slug: string }>()
+
+  await env.DB_SHARED
+    .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
+    .bind(new Date().toISOString(), customerId)
+    .run()
+
+  if (tenantRow?.slug) {
+    await env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+    console.log(`[Webhook] Tenant suspenso (${reason}) e cache invalidado: ${tenantRow.slug}`)
+  } else {
+    console.log(`[Webhook] Tenant suspenso (${reason}): customer=${customerId}`)
+  }
+}
+
+async function reactivateTenant(env: DbEnv, customerId: string, reason: string): Promise<void> {
+  const tenantRow = await env.DB_SHARED
+    .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+    .bind(customerId)
+    .first<{ slug: string }>()
+
+  await env.DB_SHARED
+    .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
+    .bind(new Date().toISOString(), customerId)
+    .run()
+
+  if (tenantRow?.slug) {
+    await env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+    console.log(`[Webhook] Tenant reativado (${reason}) e cache invalidado: ${tenantRow.slug}`)
+  } else {
+    console.log(`[Webhook] Tenant reativado (${reason}): customer=${customerId}`)
+  }
+}
+
+// ─── Webhook handler ──────────────────────────────────────────
+
 // POST /api/webhooks/stripe
 app.post('/', async (c) => {
   const signature = c.req.header('stripe-signature')
@@ -18,7 +62,7 @@ app.post('/', async (c) => {
 
   switch (event.type) {
 
-    // ─── Pagamento confirmado: criar tenant + usuário ──────────
+    // ─── Checkout concluído: criar ou atualizar tenant ─────────
     case 'checkout.session.completed': {
       try {
         const session = event.data.object
@@ -32,14 +76,12 @@ app.post('/', async (c) => {
           break
         }
 
-        // Verificar se tenant já existe (proteção contra duplicatas)
         const existing = await c.env.DB_SHARED
           .prepare('SELECT id FROM tenants WHERE slug = ?')
           .bind(tenantSlug)
           .first()
 
         if (!existing) {
-          // Recuperar dados pendentes do KV
           const pendingKey = `pending_signup:${tenantSlug}`
           const pendingRaw = await c.env.KV_TENANT_CACHE.get(pendingKey)
 
@@ -62,8 +104,6 @@ app.post('/', async (c) => {
               .bind(tenantId, pending.tenantNome, tenantSlug, plan || pending.plan, session.customer ?? null, now, now)
               .run()
 
-            console.log(`[Webhook] Tenant inserido, criando usuário...`)
-
             const userId = crypto.randomUUID()
 
             await c.env.DB_SHARED
@@ -73,7 +113,6 @@ app.post('/', async (c) => {
 
             await c.env.KV_TENANT_CACHE.delete(pendingKey)
 
-            // Gravar token de auto-login para o frontend consumir (TTL: 10 minutos)
             await c.env.KV_SESSIONS.put(
               `auto_login:${tenantSlug}`,
               JSON.stringify({ email: pending.email, userId, tenantId, tenantSlug }),
@@ -85,16 +124,13 @@ app.post('/', async (c) => {
             console.warn(`[Webhook] ⚠️ Dados pendentes expirados/ausentes para: ${tenantSlug}`)
           }
         } else {
-          // Tenant já existe (upgrade / segunda compra) — customer, plano e status
           const planId = plan || session.metadata?.plan
           await c.env.DB_SHARED
-            .prepare(
-              "UPDATE tenants SET stripe_customer_id = ?, plan_id = COALESCE(?, plan_id), status = 'active', updated_at = ? WHERE slug = ?",
-            )
+            .prepare("UPDATE tenants SET stripe_customer_id = ?, plan_id = COALESCE(?, plan_id), status = 'active', updated_at = ? WHERE slug = ?")
             .bind(session.customer, planId ?? null, new Date().toISOString(), tenantSlug)
             .run()
           await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantSlug}`)
-          console.log(`[Webhook] Tenant existente atualizado (Stripe + plano): ${tenantSlug}`)
+          console.log(`[Webhook] Tenant existente atualizado (upgrade/recompra): ${tenantSlug}`)
         }
       } catch (err) {
         console.error('[Webhook] ERRO em checkout.session.completed:', err)
@@ -103,131 +139,55 @@ app.post('/', async (c) => {
       break
     }
 
-    // ─── Assinatura pausada: suspender tenant ─────────────────
-    case 'customer.subscription.paused': {
-      const subscription = event.data.object
-      const tenantRow = await c.env.DB_SHARED
-        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-        .bind(subscription.customer)
-        .first<{ slug: string }>()
-
-      await c.env.DB_SHARED
-        .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
-        .bind(new Date().toISOString(), subscription.customer)
-        .run()
-
-      if (tenantRow?.slug) {
-        await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-        console.log(`[Webhook] Tenant suspenso (paused) e cache invalidado: ${tenantRow.slug}`)
-      } else {
-        console.log(`[Webhook] Tenant suspenso (paused): customer=${subscription.customer}`)
-      }
+    // ─── Assinatura pausada (status=paused via trial sem payment method) ───
+    case 'customer.subscription.paused':
+      await suspendTenant(c.env, event.data.object.customer, 'paused')
       break
-    }
 
-    // ─── Assinatura retomada: reativar tenant ──────────────────
-    case 'customer.subscription.resumed': {
-      const subscription = event.data.object
-      const tenantRow = await c.env.DB_SHARED
-        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-        .bind(subscription.customer)
-        .first<{ slug: string }>()
-
-      await c.env.DB_SHARED
-        .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
-        .bind(new Date().toISOString(), subscription.customer)
-        .run()
-
-      if (tenantRow?.slug) {
-        await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-        console.log(`[Webhook] Tenant reativado (resumed) e cache invalidado: ${tenantRow.slug}`)
-      } else {
-        console.log(`[Webhook] Tenant reativado (resumed): customer=${subscription.customer}`)
-      }
+    // ─── Assinatura retomada após pausa real ───────────────────
+    case 'customer.subscription.resumed':
+      await reactivateTenant(c.env, event.data.object.customer, 'resumed')
       break
-    }
 
-    // ─── Assinatura cancelada: suspender tenant ────────────────
-    case 'customer.subscription.deleted': {
-      const subscription = event.data.object
-      const tenantRow = await c.env.DB_SHARED
-        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-        .bind(subscription.customer)
-        .first<{ slug: string }>()
-
-      await c.env.DB_SHARED
-        .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
-        .bind(new Date().toISOString(), subscription.customer)
-        .run()
-
-      // Invalidar cache KV para forçar o middleware a reler do banco
-      if (tenantRow?.slug) {
-        await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-        console.log(`[Webhook] Tenant suspenso e cache invalidado: ${tenantRow.slug}`)
-      } else {
-        console.log(`[Webhook] Tenant suspenso: customer=${subscription.customer}`)
-      }
+    // ─── Assinatura cancelada definitivamente ─────────────────
+    case 'customer.subscription.deleted':
+      await suspendTenant(c.env, event.data.object.customer, 'deleted')
       break
-    }
 
     // ─── Assinatura atualizada ─────────────────────────────────
     // Referência: https://docs.stripe.com/billing/subscriptions/overview#subscription-statuses
     //
-    // Regras de negócio:
-    // • pause_collection definido → cobrança pausada via Dashboard; bloquear acesso
-    // • status=unpaid → todas as retentativas falharam; bloquear
-    // • status=paused → trial encerrado sem payment method; bloquear
-    // • status=past_due → Stripe ainda retentando; NÃO bloquear ainda (aguardar unpaid/deleted)
-    // • cancel_at_period_end=true + status=active → cancelamento agendado, acesso mantido até
-    //   o fim do período; NÃO alterar status (o bloqueio vem no subscription.deleted)
-    // • status=active + sem pause_collection + sem cancel pendente → reativar
+    // status=active + pause_collection definido  → cobrança pausada via Dashboard → suspender
+    // status=unpaid                              → todas retentativas falharam    → suspender
+    // status=paused                              → trial sem payment method       → suspender
+    // status=past_due                            → Stripe ainda retentando        → ignorar (aguardar unpaid/deleted)
+    // status=active + cancel_at_period_end=true  → cancelamento agendado          → ignorar (bloqueio vem no deleted)
+    // status=active + sem pendências             → pagamento normalizado           → reativar
     case 'customer.subscription.updated': {
-      const subscription = event.data.object
-      const tenantRow = await c.env.DB_SHARED
-        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-        .bind(subscription.customer)
-        .first<{ slug: string }>()
-
-      const billingPaused = !!subscription.pause_collection
+      const sub = event.data.object
+      const billingPaused = !!sub.pause_collection
+      const pendingCancel = sub.cancel_at_period_end === true
       const SUSPEND_STATUSES = ['paused', 'unpaid']
-      const pendingCancel = subscription.cancel_at_period_end === true
 
-      if (billingPaused || SUSPEND_STATUSES.includes(subscription.status)) {
-        await c.env.DB_SHARED
-          .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
-          .bind(new Date().toISOString(), subscription.customer)
-          .run()
-
-        if (tenantRow?.slug) {
-          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-          const reason = billingPaused ? 'pause_collection' : subscription.status
-          console.log(`[Webhook] Tenant suspenso (${reason}) e cache invalidado: ${tenantRow.slug}`)
-        } else {
-          console.log(`[Webhook] Tenant suspenso (${subscription.status}): customer=${subscription.customer}`)
-        }
-      } else if (subscription.status === 'active' && !pendingCancel) {
-        // Reativa apenas quando status é active sem cancelamento ou pausa pendentes
-        await c.env.DB_SHARED
-          .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
-          .bind(new Date().toISOString(), subscription.customer)
-          .run()
-
-        if (tenantRow?.slug) {
-          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-          console.log(`[Webhook] Tenant reativado e cache invalidado: ${tenantRow.slug}`)
-        }
+      if (billingPaused || SUSPEND_STATUSES.includes(sub.status)) {
+        const reason = billingPaused ? 'pause_collection' : sub.status
+        await suspendTenant(c.env, sub.customer, reason)
+      } else if (sub.status === 'active' && !pendingCancel) {
+        await reactivateTenant(c.env, sub.customer, 'active')
       } else if (pendingCancel) {
-        console.log(`[Webhook] Cancelamento agendado para fim do período, acesso mantido: customer=${subscription.customer}`)
+        console.log(`[Webhook] Cancelamento agendado p/ fim do período, acesso mantido: customer=${sub.customer}`)
       } else {
-        // past_due: Stripe ainda retentando, não bloquear
-        console.log(`[Webhook] subscription.updated ignorado (${subscription.status}): customer=${subscription.customer}`)
+        // past_due: Stripe retentando via Smart Retries — não bloquear
+        console.log(`[Webhook] subscription.updated ignorado (${sub.status}): customer=${sub.customer}`)
       }
       break
     }
 
-    // ─── Pagamento falhou: notificar ──────────────────────────
+    // ─── Falha de pagamento: Stripe retenta automaticamente ───
+    // Não bloquear aqui; aguardar status=unpaid ou subscription.deleted
     case 'invoice.payment_failed': {
-      console.warn('[Webhook] Pagamento falhou para customer:', event.data.object.customer)
+      const invoice = event.data.object
+      console.warn(`[Webhook] Pagamento falhou (tentativa ${invoice.attempt_count ?? '?'}): customer=${invoice.customer} invoice=${invoice.id}`)
       break
     }
   }
