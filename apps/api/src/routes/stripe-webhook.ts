@@ -103,6 +103,50 @@ app.post('/', async (c) => {
       break
     }
 
+    // ─── Assinatura pausada: suspender tenant ─────────────────
+    case 'customer.subscription.paused': {
+      const subscription = event.data.object
+      const tenantRow = await c.env.DB_SHARED
+        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+        .bind(subscription.customer)
+        .first<{ slug: string }>()
+
+      await c.env.DB_SHARED
+        .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
+        .bind(new Date().toISOString(), subscription.customer)
+        .run()
+
+      if (tenantRow?.slug) {
+        await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+        console.log(`[Webhook] Tenant suspenso (paused) e cache invalidado: ${tenantRow.slug}`)
+      } else {
+        console.log(`[Webhook] Tenant suspenso (paused): customer=${subscription.customer}`)
+      }
+      break
+    }
+
+    // ─── Assinatura retomada: reativar tenant ──────────────────
+    case 'customer.subscription.resumed': {
+      const subscription = event.data.object
+      const tenantRow = await c.env.DB_SHARED
+        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+        .bind(subscription.customer)
+        .first<{ slug: string }>()
+
+      await c.env.DB_SHARED
+        .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
+        .bind(new Date().toISOString(), subscription.customer)
+        .run()
+
+      if (tenantRow?.slug) {
+        await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+        console.log(`[Webhook] Tenant reativado (resumed) e cache invalidado: ${tenantRow.slug}`)
+      } else {
+        console.log(`[Webhook] Tenant reativado (resumed): customer=${subscription.customer}`)
+      }
+      break
+    }
+
     // ─── Assinatura cancelada: suspender tenant ────────────────
     case 'customer.subscription.deleted': {
       const subscription = event.data.object
@@ -126,15 +170,17 @@ app.post('/', async (c) => {
       break
     }
 
-    // ─── Assinatura reativada (ex: via Customer Portal) ───────
+    // ─── Assinatura atualizada (reativação, pausa, inadimplência) ─
     case 'customer.subscription.updated': {
       const subscription = event.data.object
-      if (subscription.status === 'active') {
-        const tenantRow = await c.env.DB_SHARED
-          .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-          .bind(subscription.customer)
-          .first<{ slug: string }>()
+      const tenantRow = await c.env.DB_SHARED
+        .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+        .bind(subscription.customer)
+        .first<{ slug: string }>()
 
+      const SUSPEND_STATUSES = ['paused', 'past_due', 'unpaid', 'canceled']
+
+      if (subscription.status === 'active') {
         await c.env.DB_SHARED
           .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
           .bind(new Date().toISOString(), subscription.customer)
@@ -143,6 +189,18 @@ app.post('/', async (c) => {
         if (tenantRow?.slug) {
           await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
           console.log(`[Webhook] Tenant reativado e cache invalidado: ${tenantRow.slug}`)
+        }
+      } else if (SUSPEND_STATUSES.includes(subscription.status)) {
+        await c.env.DB_SHARED
+          .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
+          .bind(new Date().toISOString(), subscription.customer)
+          .run()
+
+        if (tenantRow?.slug) {
+          await c.env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+          console.log(`[Webhook] Tenant suspenso (${subscription.status}) e cache invalidado: ${tenantRow.slug}`)
+        } else {
+          console.log(`[Webhook] Tenant suspenso (${subscription.status}): customer=${subscription.customer}`)
         }
       }
       break

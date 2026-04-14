@@ -108,10 +108,12 @@ name = "siscr-api-production"
 
 [env.production.vars]
 ENVIRONMENT = "production"
-APP_URL = "https://api.seudominio.com.br"
-FRONTEND_URL = "https://app.seudominio.com.br"
-ALLOWED_ORIGINS = "https://app.seudominio.com.br"
+APP_URL = "https://api.siscr.com.br"
+FRONTEND_URL = "https://app.siscr.com.br"
+ALLOWED_ORIGINS = "https://app.siscr.com.br"
 NFE_DEV_MODE = "0"
+# Subdomínio por tenant: {slug}.app.siscr.com.br — requer wildcard DNS *.app.siscr.com.br → Pages
+TENANT_HOST_BASE = "app.siscr.com.br"
 
 [[env.production.d1_databases]]
 binding = "DB_SHARED"

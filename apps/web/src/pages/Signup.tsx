@@ -4,9 +4,9 @@ import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
-/** Template com `{slug}` para preview; ex.: https://{slug}.app.seudominio.com.br */
+/** Template com `{slug}` para preview; ex.: https://{slug}.app.siscr.com.br */
 const TENANT_URL_TEMPLATE =
-  import.meta.env.VITE_TENANT_URL_TEMPLATE || 'https://{slug}.seudominio.com';
+  import.meta.env.VITE_TENANT_URL_TEMPLATE || 'https://{slug}.app.siscr.com.br';
 
 const PLAN_LABELS: Record<string, string> = {
   free:       'Free',
