@@ -1,11 +1,23 @@
 # SISCR Web — frontend (React + Vite)
 
-Aplicação **React 19** com **TypeScript**, **Vite** e **Tailwind**, implantada em **Cloudflare Pages** a partir do diretório `apps/web`.
+Aplicação **React 19** com **TypeScript**, **Vite** e **Tailwind**, implantada em **Cloudflare Pages** a partir de `apps/web`.
 
-## Staging
+## URLs e API
 
-- **URL pública:** [https://staging.siscr-web.pages.dev/](https://staging.siscr-web.pages.dev/)
-- A API de staging é definida no build via variável **`VITE_API_URL`** (no CI aponta para o Worker `siscr-api-staging` — ver `.github/workflows/deploy-staging.yml`).
+- **Staging (exemplo):** `https://staging.siscr-web.pages.dev/` — o build recebe **`VITE_API_URL`** no CI (`.github/workflows/deploy-staging.yml`).
+- Em outra conta Cloudflare, atualize o workflow e o projeto Pages para refletir a nova URL da API.
+
+## Variáveis de ambiente (Vite)
+
+Definidas no **build** (GitHub Actions ou painel Pages). Prefixo obrigatório: `VITE_`.
+
+| Variável | Obrigatória | Descrição |
+|----------|-------------|-----------|
+| `VITE_API_URL` | Sim (staging/prod) | URL base do Worker (ex.: `https://siscr-api-staging.xxx.workers.dev`). Usada por `api.ts`, `auth.ts`, signup, etc. |
+| `VITE_TENANT_HOST_BASE` | Não | Se alinhada à API (`TENANT_HOST_BASE`), habilita leitura do tenant pelo hostname (`lib/tenantUrl.ts`). |
+| `VITE_TENANT_URL_TEMPLATE` | Não | Template com `{slug}` na tela de cadastro (preview). Default conceitual no código. |
+
+Com `VITE_API_URL` definida, **CEP** e **CNAE** podem usar os proxies **`/api/public/cep`** e **`/api/public/cnae`** no mesmo host da API (evita CORS).
 
 ## Desenvolvimento local
 
@@ -16,22 +28,22 @@ pnpm install
 pnpm dev:web
 ```
 
-Por padrão o Vite sobe em `http://localhost:5173`. Crie `apps/web/.env` (ou `.env.local`) se precisar:
+Crie `apps/web/.env` ou `.env.local`:
 
 ```env
 VITE_API_URL=http://localhost:8787
 ```
 
-Para subir a API localmente, use na raiz `pnpm dev:api` (Worker com D1 local via Wrangler).
+Para a API: `pnpm dev:api` na raiz (Worker + D1 local via Wrangler, porta típica **8787**).
 
-## Build de produção / Pages
+## Build
 
 ```bash
 pnpm --filter=@siscr/web run build
 ```
 
-O artefato fica em `apps/web/dist`. O deploy para Cloudflare Pages é feito pelo workflow do repositório (não é necessário Docker).
+Saída: `apps/web/dist`. Deploy via workflow do repositório para Cloudflare Pages.
 
-## Documentação do monorepo
+## Documentação
 
-Arquitetura completa, banco **D1 compartilhado**, multi-tenant, migrações e deploy: **[README.md na raiz do repositório](../../README.md)**.
+- Monorepo, multi-tenant, deploy, nova conta Cloudflare: **[README na raiz](../../README.md)** e **[`doc/`](../../doc/README.md)**.
