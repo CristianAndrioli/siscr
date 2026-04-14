@@ -4,6 +4,8 @@ import axios from 'axios';
 import api from '../services/api';
 import { authService } from '../services/auth';
 import MaskedInput from './common/MaskedInput';
+import { fetchCepComIbge } from '../services/brasilCepIbge';
+import { CnaeLookupInput } from './cadastros/CnaeLookupInput';
 
 type OnboardingStatus = {
   needsEmpresaOnboarding: boolean;
@@ -156,6 +158,7 @@ function OnboardingWizard({
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadingCep, setLoadingCep] = useState(false);
 
   const [razaoSocial, setRazaoSocial] = useState('');
   const [nomeFantasia, setNomeFantasia] = useState('');
@@ -233,6 +236,23 @@ function OnboardingWizard({
       return null;
     }
     return null;
+  };
+
+  const handleCepBlur = async () => {
+    if (cepDigits.length !== 8) return;
+    setLoadingCep(true);
+    try {
+      const r = await fetchCepComIbge(cep);
+      if (r) {
+        setLogradouro((prev) => (r.logradouro ? r.logradouro : prev));
+        setBairro((prev) => (r.bairro ? r.bairro : prev));
+        setCidade((prev) => (r.cidade ? r.cidade : prev));
+        setUf((prev) => (r.uf ? r.uf : prev));
+        if (r.codigoMunicipioIbge) setCodigoMunicipio(r.codigoMunicipioIbge);
+      }
+    } finally {
+      setLoadingCep(false);
+    }
   };
 
   const goNext = () => {
@@ -433,14 +453,20 @@ function OnboardingWizard({
             <>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-slate-400">CEP *</span>
+                  <span className="text-xs font-medium text-slate-400">
+                    CEP * {loadingCep ? <span className="text-slate-500">(buscando…)</span> : null}
+                  </span>
                   <MaskedInput
                     mask="cep"
                     className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono focus:border-brand-500 focus:outline-none"
                     value={cep}
                     onChange={setCep}
+                    onBlur={() => void handleCepBlur()}
                     placeholder="00000-000"
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Ao sair do campo com 8 dígitos, preenchemos o endereço e o código IBGE (ViaCEP + IBGE).
+                  </p>
                 </label>
                 <label className="block">
                   <span className="text-xs font-medium text-slate-400">Código IBGE do município *</span>
@@ -455,7 +481,8 @@ function OnboardingWizard({
                 </label>
               </div>
               <p className="text-xs text-slate-500 -mt-2">
-                Consulte o código do município na tabela do IBGE (código de 7 dígitos do local da sede).
+                Preenchido automaticamente ao buscar pelo CEP (código de 7 dígitos do município, exigido no XML da NF-e).
+                Você pode ajustar manualmente se necessário.
               </p>
               <label className="block">
                 <span className="text-xs font-medium text-slate-400">Logradouro *</span>
@@ -559,16 +586,16 @@ function OnboardingWizard({
                   />
                 </label>
               </div>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-400">CNAE fiscal (opcional)</span>
-                <input
-                  maxLength={10}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+              <div>
+                <span className="text-xs font-medium text-slate-400 block mb-1">CNAE fiscal (opcional)</span>
+                <CnaeLookupInput
                   value={cnae}
-                  onChange={(e) => setCnae(e.target.value)}
-                  placeholder="Principal da empresa, se souber"
+                  onChange={setCnae}
+                  inputClassName="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white font-mono placeholder:text-slate-600 focus:border-brand-500 focus:outline-none"
+                  hintClassName="text-xs text-slate-500"
+                  buttonClassName="shrink-0 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
                 />
-              </label>
+              </div>
             </>
           )}
 

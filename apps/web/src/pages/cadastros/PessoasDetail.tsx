@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { pessoasService, type Pessoa, type PessoaForm } from '../../services/cadastros/pessoas';
+import { fetchCepComIbge } from '../../services/brasilCepIbge';
 import MaskedInput from '../../components/common/MaskedInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
@@ -44,27 +45,6 @@ const EMPTY: PessoaForm = {
 
 const INPUT_CLS =
   'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500';
-
-interface ViaCEP {
-  logradouro: string;
-  bairro: string;
-  localidade: string;
-  uf: string;
-  erro?: boolean;
-}
-
-async function fetchViaCEP(cep: string): Promise<ViaCEP | null> {
-  const digits = cep.replace(/\D/g, '');
-  if (digits.length !== 8) return null;
-  try {
-    const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`);
-    const data: ViaCEP = await res.json();
-    if (data.erro) return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
 
 export function PessoasDetail() {
   const { id } = useParams<{ id: string }>();
@@ -118,14 +98,15 @@ export function PessoasDetail() {
   const handleCepBlur = async () => {
     if (!form.cep) return;
     setLoadingCep(true);
-    const data = await fetchViaCEP(form.cep);
+    const data = await fetchCepComIbge(form.cep);
     if (data) {
       setForm(prev => ({
         ...prev,
         logradouro: data.logradouro || prev.logradouro,
         bairro: data.bairro || prev.bairro,
-        cidade: data.localidade || prev.cidade,
+        cidade: data.cidade || prev.cidade,
         uf: data.uf || prev.uf,
+        codigoMunicipio: data.codigoMunicipioIbge || prev.codigoMunicipio,
       }));
     }
     setLoadingCep(false);

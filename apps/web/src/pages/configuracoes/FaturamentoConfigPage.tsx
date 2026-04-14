@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { CnaeLookupInput } from '../../components/cadastros/CnaeLookupInput';
 
 interface EmpresaRow {
   id: string;
@@ -247,12 +248,12 @@ export function FaturamentoConfigPage() {
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 CNAE fiscal (opcional)
               </label>
-              <input
+              <CnaeLookupInput
                 value={cnae}
-                onChange={(e) => setCnae(e.target.value)}
-                maxLength={10}
-                className={`${FIELD} font-mono`}
-                placeholder="Principal da empresa"
+                onChange={setCnae}
+                disabled={saving}
+                inputClassName={`${FIELD} font-mono`}
+                hintClassName="text-xs text-slate-500 dark:text-slate-400"
               />
             </div>
           </div>

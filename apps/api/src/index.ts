@@ -20,6 +20,7 @@ import faturamentoRoutes from './routes/faturamento'
 import entradaRoutes from './routes/entrada'
 import vendasRoutes from './routes/vendas'
 import stripeWebhookRoutes from './routes/stripe-webhook'
+import publicLookupRoutes from './routes/publicLookup'
 import cronRoutes from './routes/cron'
 import queueRoutes from './routes/queue'
 import logsRoutes from './routes/logs'
@@ -86,6 +87,9 @@ app.route('/api/webhooks/stripe', stripeWebhookRoutes)
 
 // ─── Rotas de planos/assinaturas (públicas para signup) ───────
 app.route('/api/subscriptions', subscriptionRoutes)
+
+// ─── Proxies públicos (CEP / CNAE) — sem auth ─────────────────
+app.route('/api/public', publicLookupRoutes)
 
 // ─── Middleware de tenant (identifica tenant pelo header/subdomain)
 app.use('/api/tenant/*', tenantMiddleware)
