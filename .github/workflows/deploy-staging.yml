@@ -3,7 +3,7 @@ name: Deploy Staging (Cloudflare)
 on:
   push:
     branches:
-      - cloudflare  # Esta branch é o ambiente de staging/teste
+      - staging
 
 jobs:
   deploy:
