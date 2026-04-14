@@ -54,15 +54,36 @@ export type Env = {
    * Produção: use "0" e implemente assinatura + SEFAZ.
    */
   NFE_DEV_MODE?: string
+  /**
+   * Host “pai” do app (sem esquema), ex.: app.suaempresa.com.br
+   * Habilita tenant por subdomínio: {slug}.app.suaempresa.com.br (API + CORS).
+   */
+  TENANT_HOST_BASE?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
 
 // ─── Middlewares globais ───────────────────────────────────────
 app.use('*', async (c, next) => {
-  const allowedOrigins = c.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:5173']
+  const list =
+    c.env.ALLOWED_ORIGINS?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) ?? ['http://localhost:5173']
+  const tenantBase = c.env.TENANT_HOST_BASE?.trim().toLowerCase()
   return cors({
-    origin: allowedOrigins,
+    origin: (origin) => {
+      if (!origin) return list[0]
+      if (list.includes(origin)) return origin
+      if (tenantBase) {
+        try {
+          const host = new URL(origin).hostname.toLowerCase()
+          if (host === tenantBase || host.endsWith(`.${tenantBase}`)) return origin
+        } catch {
+          /* ignore */
+        }
+      }
+      return list[0]
+    },
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Slug'],
     credentials: true,

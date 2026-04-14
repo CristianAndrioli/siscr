@@ -28,9 +28,10 @@ export default function CheckoutSuccess() {
   const doAutoLogin = (data: { token: string; user: { id: string; email: string; nome: string; role: string }; tenant: { id: string; slug: string } }) => {
     setPhase('logging-in');
     authService.saveSession(data);
+    const slug = data.tenant.slug;
     setTimeout(() => {
       setPhase('done');
-      navigate('/app', { replace: true });
+      navigate(`/app?tenant=${encodeURIComponent(slug)}`, { replace: true });
     }, 800);
   };
 

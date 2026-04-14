@@ -91,7 +91,18 @@ export default function Login() {
     try {
       const slug = tenantSlug.trim() ? tenantSlug.toLowerCase().trim() : undefined;
       await authService.login(email, password, slug);
-      navigate(redirectTo);
+      const savedSlug = authService.getTenantSlug();
+      if (savedSlug) {
+        try {
+          const u = new URL(redirectTo, window.location.origin);
+          u.searchParams.set('tenant', savedSlug);
+          navigate(`${u.pathname}${u.search}${u.hash}`);
+        } catch {
+          navigate(redirectTo);
+        }
+      } else {
+        navigate(redirectTo);
+      }
     } catch (err: unknown) {
       const ax = err as {
         response?: {

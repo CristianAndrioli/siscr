@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import TenantUrlSync from './components/TenantUrlSync';
 import { useState, useEffect, ReactNode } from 'react';
 import { authService } from './services/auth';
 import { ErrorNotificationProvider } from './context/ErrorNotificationContext';
@@ -116,6 +117,7 @@ function RootRoute() {
 function App() {
   return (
     <Router>
+      <TenantUrlSync />
       <ErrorNotificationProvider>
         <ErrorToastStack />
       <Routes>

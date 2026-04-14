@@ -30,13 +30,17 @@ export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, ne
     }
   }
 
-  // 3. Último recurso: subdomínio (para custom domains tipo tenant.app.com)
+  // 3. Subdomínio quando TENANT_HOST_BASE está definido (ex.: acme.app.empresa.com)
   if (!slug) {
-    const host = c.req.header('host') ?? ''
-    const parts = host.split('.')
-    // Só usa subdomain se parecer um slug de tenant (não contém "workers" ou "pages")
-    if (parts.length >= 3 && !host.includes('workers.dev') && !host.includes('pages.dev')) {
-      slug = parts[0]
+    const base = c.env.TENANT_HOST_BASE?.trim().toLowerCase()
+    if (base) {
+      const host = (c.req.header('host') ?? '').split(':')[0].toLowerCase()
+      if (host && host !== base && host.endsWith(`.${base}`)) {
+        const sub = host.slice(0, -(base.length + 1))
+        if (sub && !sub.includes('.')) {
+          slug = sub
+        }
+      }
     }
   }
 
