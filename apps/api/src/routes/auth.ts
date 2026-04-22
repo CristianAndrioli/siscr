@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
-import { hashPassword, verifyPassword } from '../lib/password'
+import { PasswordHasher } from '../lib/password'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
 import { checkTenantSlugAvailability, resolveTenantSlug } from '../lib/tenantSlug'
 
@@ -102,7 +102,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   const matches: LoginRow[] = []
   for (const row of rows) {
     if (row.tenant_status !== 'active') continue
-    if (await verifyPassword(password, row.password_hash)) matches.push(row)
+    if (await PasswordHasher.verify(password, row.password_hash)) matches.push(row)
   }
 
   if (matches.length === 0) {
@@ -131,6 +131,22 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   }
 
   const row = matches[0]!
+
+  // Rehash transparente: se o hash armazenado estiver em formato legado
+  // ou com iterações abaixo do alvo atual, gera um novo e atualiza.
+  // Melhora a segurança da base gradualmente, sem forçar reset de senha.
+  if (PasswordHasher.needsRehash(row.password_hash)) {
+    try {
+      const fresh = await PasswordHasher.hash(password)
+      await c.env.DB_SHARED
+        .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
+        .bind(fresh, new Date().toISOString(), row.user_id)
+        .run()
+    } catch (err) {
+      console.error('[auth.login] Falha ao rehashing senha:', err)
+    }
+  }
+
   const sessionToken = crypto.randomUUID()
   const SESSION_TTL = 60 * 60 * 24 * 7
 
@@ -179,7 +195,7 @@ app.post('/signup', zValidator('json', signupSchema), async (c) => {
 
   const tenantId = crypto.randomUUID()
   const userId = crypto.randomUUID()
-  const passwordHash = await hashPassword(password)
+  const passwordHash = await PasswordHasher.hash(password)
   const now = new Date().toISOString()
 
   // Criar tenant e usuário admin atomicamente

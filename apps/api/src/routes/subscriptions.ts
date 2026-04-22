@@ -1,7 +1,23 @@
 import { Hono } from 'hono'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
 import type { Env } from '../index'
 import { resolveTenantSlug } from '../lib/tenantSlug'
+import { PasswordHasher } from '../lib/password'
 
+/**
+ * Rotas públicas de planos e checkout Stripe (signup pago).
+ *
+ * SEGURANÇA
+ * -----------------------------------------------------------------
+ * O `/checkout` grava dados do signup pendente no KV durante a janela
+ * em que o usuário finaliza o pagamento no Stripe. Para NUNCA manter a
+ * senha em plaintext no KV, o hash é calculado aqui e só o `passwordHash`
+ * vai para o KV. O webhook (`routes/stripe-webhook.ts`) persiste o hash
+ * direto em `users.password_hash`.
+ *
+ * O body do KV é validado com Zod no webhook antes de ser consumido.
+ */
 const app = new Hono<{ Bindings: Env }>()
 
 // ─── Planos públicos ───────────────────────────────────────────
@@ -42,24 +58,21 @@ app.get('/plans', async (c) => {
 })
 
 // ─── Criar sessão de checkout Stripe ──────────────────────────
-// POST /api/subscriptions/checkout
-// Body: { nome, email, password, tenantNome, tenantSlug, plan }
-app.post('/checkout', async (c) => {
-  const body = await c.req.json<{
-    nome: string
-    email: string
-    password: string
-    tenantNome: string
-    /** Opcional: vazio = gerado no servidor a partir do nome da empresa. */
-    tenantSlug?: string
-    plan: string
-  }>()
+/**
+ * Schema partilhado com o webhook para deserialização segura do body
+ * gravado em KV. Ver `routes/stripe-webhook.ts`.
+ */
+const checkoutBodySchema = z.object({
+  nome: z.string().trim().min(2),
+  email: z.string().email(),
+  password: z.string().min(8),
+  tenantNome: z.string().trim().min(2),
+  tenantSlug: z.string().trim().max(40).optional(),
+  plan: z.string().trim().min(1),
+})
 
-  const { nome, email, password, tenantNome, tenantSlug, plan } = body
-
-  if (!nome || !email || !password || !tenantNome || !plan) {
-    return c.json({ error: 'Todos os campos são obrigatórios.' }, 400)
-  }
+app.post('/checkout', zValidator('json', checkoutBodySchema), async (c) => {
+  const { nome, email, password, tenantNome, tenantSlug, plan } = c.req.valid('json')
 
   const resolved = await resolveTenantSlug(c.env.DB_SHARED, tenantNome, tenantSlug?.trim() || null)
   if ('error' in resolved) {
@@ -68,9 +81,10 @@ app.post('/checkout', async (c) => {
   const finalSlug = resolved.slug
 
   // Verificar se email já existe
+  const emailNorm = email.trim().toLowerCase()
   const existingEmail = await c.env.DB_SHARED
-    .prepare('SELECT id FROM users WHERE email = ?')
-    .bind(email)
+    .prepare('SELECT id FROM users WHERE LOWER(TRIM(email)) = ?')
+    .bind(emailNorm)
     .first()
 
   if (existingEmail) {
@@ -89,11 +103,27 @@ app.post('/checkout', async (c) => {
     return c.json({ error: 'Plano inválido para checkout.' }, 400)
   }
 
-  // Guardar dados pendentes no KV (expira em 1 hora)
+  // ─── Hash da senha ANTES de gravar no KV ──────────────────────
+  // A senha nunca trafega ao KV em plaintext. Em caso de vazamento
+  // do token de API do KV, as credenciais pendentes permanecem
+  // protegidas pelo mesmo esquema que a base (PBKDF2 600k).
+  const passwordHash = await PasswordHasher.hash(password)
+
+  // Guardar dados pendentes no KV (expira em 1 hora — TTL estreito
+  // proposital: pagamento Stripe normalmente demora < 5 min).
   const pendingKey = `pending_signup:${finalSlug}`
-  await c.env.KV_TENANT_CACHE.put(pendingKey, JSON.stringify({
-    nome, email, password, tenantNome, tenantSlug: finalSlug, plan,
-  }), { expirationTtl: 3600 })
+  await c.env.KV_TENANT_CACHE.put(
+    pendingKey,
+    JSON.stringify({
+      nome,
+      email: emailNorm,
+      passwordHash,
+      tenantNome,
+      tenantSlug: finalSlug,
+      plan,
+    }),
+    { expirationTtl: 3600 },
+  )
 
   // Criar sessão Stripe via API REST (sem SDK, compatível com Workers)
   const frontendUrl = c.env.FRONTEND_URL || 'http://localhost:5173'
@@ -102,7 +132,7 @@ app.post('/checkout', async (c) => {
     mode: 'subscription',
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
-    'customer_email': email,
+    'customer_email': emailNorm,
     'success_url': `${frontendUrl}/checkout/success?tenant=${encodeURIComponent(finalSlug)}`,
     'cancel_url': `${frontendUrl}/checkout/cancel`,
     'metadata[tenantSlug]': finalSlug,
@@ -181,6 +211,16 @@ app.post('/reactivation-portal', async (c) => {
 
   const portalSession = await portalRes.json() as { url: string }
   return c.json({ url: portalSession.url })
+})
+
+/** Exportar schema para o webhook reutilizar a validação do body persistido em KV. */
+export const pendingSignupSchema = z.object({
+  nome: z.string().min(2),
+  email: z.string().email(),
+  passwordHash: z.string().min(10),
+  tenantNome: z.string().min(2),
+  tenantSlug: z.string().min(1),
+  plan: z.string().min(1),
 })
 
 export default app
