@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { authService } from '../../services/auth';
 import { permissoesApi } from '../../services/permissoesApi';
 import { usePermissions } from '../../hooks/usePermissions';
+import { formatApiError } from '../../utils/helpers';
 
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 
@@ -121,8 +122,8 @@ export function UsuariosPage() {
         });
       }
       setShowModal(false); load();
-    } catch (err: any) {
-      setModalError(err?.response?.data?.error || 'Erro ao salvar.');
+    } catch (err: unknown) {
+      setModalError(formatApiError(err, 'Erro ao salvar.'));
     } finally { setSaving(false); }
   };
 
@@ -130,8 +131,8 @@ export function UsuariosPage() {
     try {
       await api.delete(`/tenant/info/usuarios/${id}`);
       setDeleteConfirm(null); load();
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Erro ao excluir.');
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Erro ao excluir.'));
     }
   };
 

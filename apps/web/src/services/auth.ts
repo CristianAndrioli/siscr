@@ -1,8 +1,16 @@
 /**
- * Service de autenticação — API REST (Hono)
+ * Service de autenticação — API REST (Hono).
+ *
+ * Persistência
+ * -----------------------------------------------------------------
+ * Este service NÃO toca em `localStorage` diretamente — toda leitura/
+ * escrita passa por `sessionStore` (ver `./sessionStore.ts`). Isso
+ * mantém a decisão de "onde a sessão mora" num único módulo e abre
+ * caminho para migrar para cookies HttpOnly sem tocar aqui.
  */
 import axios from 'axios';
 import api from './api';
+import { sessionStore } from './sessionStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
@@ -52,14 +60,7 @@ export const authService = {
 
     const response = await axios.post<LoginResponse>(`${API_BASE_URL}/api/auth/login`, body);
 
-    const { token, user, tenant } = response.data;
-
-    localStorage.setItem('access_token', token);
-    localStorage.setItem('tenant_slug', tenant.slug);
-    localStorage.setItem('tenant_status', tenant.status ?? 'active');
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('user_nome', user.nome || user.email || '');
-
+    sessionStore.save(response.data);
     return response.data;
   },
 
@@ -82,57 +83,36 @@ export const authService = {
   },
 
   /**
-   * Logout — invalida sessão no servidor e limpa localStorage
+   * Logout — invalida sessão no servidor e limpa sessão local.
+   * Sempre limpa o localStorage, mesmo se o POST falhar (ex.: offline).
    */
   logout: async (): Promise<void> => {
     try {
       await api.post('/auth/logout');
     } finally {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('tenant_slug');
-      localStorage.removeItem('tenant_status');
-      localStorage.removeItem('user');
-      localStorage.removeItem('user_nome');
+      sessionStore.clear();
     }
   },
 
   /**
-   * Retorna o usuário logado atual
+   * Retorna o usuário logado atual (GET /auth/me).
    */
   getCurrentUser: async () => {
     const response = await api.get('/auth/me');
     return response.data;
   },
 
-  /**
-   * Verifica se há sessão ativa
-   */
-  isAuthenticated: (): boolean => {
-    return !!localStorage.getItem('access_token');
-  },
+  /** Verifica se há sessão ativa (presença do token no store). */
+  isAuthenticated: (): boolean => sessionStore.isAuthenticated(),
 
-  /**
-   * Retorna o token de sessão atual
-   */
-  getToken: (): string | null => {
-    return localStorage.getItem('access_token');
-  },
+  /** Retorna o token de sessão atual. */
+  getToken: (): string | null => sessionStore.getToken(),
 
-  /**
-   * Retorna o slug do tenant atual
-   */
-  getTenantSlug: (): string | null => {
-    return localStorage.getItem('tenant_slug');
-  },
+  /** Retorna o slug do tenant atual. */
+  getTenantSlug: (): string | null => sessionStore.getTenantSlug(),
 
-  /**
-   * Retorna o usuário salvo no localStorage
-   */
-  getLocalUser: () => {
-    const str = localStorage.getItem('user');
-    if (!str) return null;
-    try { return JSON.parse(str); } catch { return null; }
-  },
+  /** Retorna o usuário cache local (para UI; não é source of truth). */
+  getLocalUser: () => sessionStore.getLocalUser(),
 
   /**
    * Verifica se o tenant já foi criado após pagamento no Stripe.
@@ -147,26 +127,13 @@ export const authService = {
     return response.data;
   },
 
-  /**
-   * Retorna o status do tenant salvo no localStorage
-   */
-  getTenantStatus: (): string | null => {
-    return localStorage.getItem('tenant_status');
-  },
+  /** Status cache do tenant (active/suspended). */
+  getTenantStatus: (): string | null => sessionStore.getTenantStatus(),
 
-  /**
-   * Salva sessão no localStorage (usado após auto-login).
-   */
+  /** Salva sessão após auto-login pós-checkout. */
   saveSession: (data: {
     token: string;
     user: LoginResponse['user'];
     tenant: TenantInfo;
-  }) => {
-    localStorage.setItem('access_token', data.token);
-    localStorage.setItem('tenant_slug', data.tenant.slug);
-    localStorage.setItem('tenant_status', data.tenant.status ?? 'active');
-    localStorage.setItem('user', JSON.stringify(data.user));
-    localStorage.setItem('user_nome', data.user.nome || data.user.email || '');
-  },
+  }) => sessionStore.save(data),
 };
-

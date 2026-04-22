@@ -68,37 +68,55 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /**
- * Formata erro da API para exibição
+ * Extrai uma mensagem de erro amigável de uma exceção qualquer.
+ *
+ * Ordem de precedência
+ * -----------------------------------------------------------------
+ *   1) response.data.error           ← formato do backend SISCR (Hono)
+ *   2) response.data.detail          ← formato DRF-like
+ *   3) response.data.message
+ *   4) response.data.non_field_errors[0]
+ *   5) primeiro valor de campo em response.data (erros de validação)
+ *   6) response.data quando string
+ *   7) error.message (Error nativo)
+ *   8) fallback fornecido (ou 'Erro ao processar requisição')
+ *
+ * Sempre retorna uma string exibível — nunca `undefined` — para que
+ * o caller possa fazer `setError(formatApiError(err, 'Erro ao salvar.'))`
+ * sem precisar de lógica extra.
  */
-export function formatApiError(error: unknown): string {
-  if (!error) return 'Erro desconhecido';
-  
-  if (typeof error === 'object' && 'response' in error) {
-    // Erro da API (Axios)
+export function formatApiError(error: unknown, fallback = 'Erro ao processar requisição'): string {
+  if (!error) return fallback;
+
+  if (typeof error === 'object' && error !== null && 'response' in error) {
     const axiosError = error as { response?: { data?: unknown } };
     const data = axiosError.response?.data;
-    
+
     if (data && typeof data === 'object') {
-      if ('detail' in data && typeof data.detail === 'string') return data.detail;
-      if ('message' in data && typeof data.message === 'string') return data.message;
-      if ('non_field_errors' in data && Array.isArray(data.non_field_errors) && data.non_field_errors.length > 0) {
-        return String(data.non_field_errors[0]);
+      const record = data as Record<string, unknown>;
+      if (typeof record.error === 'string') return record.error;
+      if (typeof record.detail === 'string') return record.detail;
+      if (typeof record.message === 'string') return record.message;
+
+      const nonField = record.non_field_errors;
+      if (Array.isArray(nonField) && nonField.length > 0) {
+        return String(nonField[0]);
       }
-      
-      // Erros de campo
-      const fieldErrors = Object.values(data).flat();
-      if (Array.isArray(fieldErrors) && fieldErrors.length > 0) {
+
+      // Erros de campo (ex.: Zod flatten ou DRF): pega o primeiro disponível.
+      const fieldErrors = Object.values(record).flat();
+      if (Array.isArray(fieldErrors) && fieldErrors.length > 0 && fieldErrors[0]) {
         return String(fieldErrors[0]);
       }
     }
-    
+
     if (typeof data === 'string') return data;
   }
-  
-  if (typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+
+  if (error instanceof Error && error.message) {
     return error.message;
   }
-  
-  return 'Erro ao processar requisição';
+
+  return fallback;
 }
 

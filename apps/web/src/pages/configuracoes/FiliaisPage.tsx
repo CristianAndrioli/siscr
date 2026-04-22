@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { authService } from '../../services/auth';
 import MaskedInput from '../../components/common/MaskedInput';
+import { formatApiError } from '../../utils/helpers';
 import type { ComponentProps } from 'react';
 
 const UF_LIST = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
@@ -305,8 +306,8 @@ export function FiliaisPage() {
         await api.post('/tenant/info/empresas', payload);
       }
       setShowEmpresaModal(false); load();
-    } catch (err: any) {
-      setEmpresaModalError(err?.response?.data?.error || 'Erro ao salvar empresa.');
+    } catch (err: unknown) {
+      setEmpresaModalError(formatApiError(err, 'Erro ao salvar empresa.'));
     } finally { setEmpresaSaving(false); }
   };
 
@@ -426,8 +427,8 @@ export function FiliaisPage() {
         await api.post(`/tenant/info/empresas/${filialParentId}/filiais`, payload);
       }
       setShowFilialModal(false); load();
-    } catch (err: any) {
-      setFilialModalError(err?.response?.data?.error || 'Erro ao salvar filial.');
+    } catch (err: unknown) {
+      setFilialModalError(formatApiError(err, 'Erro ao salvar filial.'));
     } finally { setFilialSaving(false); }
   };
 
@@ -442,8 +443,8 @@ export function FiliaisPage() {
         await api.delete(`/tenant/info/filiais/${deleteTarget.id}`);
       }
       setDeleteTarget(null); load();
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'Erro ao excluir.'); setDeleteTarget(null);
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Erro ao excluir.')); setDeleteTarget(null);
     }
   };
 

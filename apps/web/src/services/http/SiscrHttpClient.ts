@@ -1,11 +1,20 @@
 import axios, { AxiosError, AxiosHeaders, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import { sessionStore } from '../sessionStore'
 
 export type CreateSiscrHttpClientOptions = {
   baseURL: string
 }
 
 /**
- * Cliente HTTP compartilhado: base URL, headers JSON e interceptors de auth/tenant/erros globais.
+ * Cliente HTTP compartilhado: base URL, headers JSON e interceptors de
+ * auth/tenant/erros globais.
+ *
+ * Persistência de sessão
+ * -----------------------------------------------------------------
+ * Os headers `Authorization` e `X-Tenant-Slug` são lidos via
+ * `sessionStore`. Em 401, a sessão é limpa e redireciona para /login.
+ * NÃO acessar `localStorage` direto — quando migrarmos para cookies
+ * HttpOnly, basta atualizar o `sessionStore`.
  */
 export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): AxiosInstance {
   const instance = axios.create({
@@ -28,11 +37,11 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
         }
       }
 
-      const token = localStorage.getItem('access_token')
+      const token = sessionStore.getToken()
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
       }
-      const tenantSlug = localStorage.getItem('tenant_slug')
+      const tenantSlug = sessionStore.getTenantSlug()
       if (tenantSlug) {
         config.headers['X-Tenant-Slug'] = tenantSlug
       }
@@ -45,9 +54,7 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
     (response) => response,
     (error: AxiosError) => {
       if (error.response?.status === 401) {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('tenant_slug')
-        localStorage.removeItem('tenant_status')
+        sessionStore.clear()
         window.location.href = '/login'
         return Promise.reject(error)
       }
@@ -58,7 +65,7 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
         (error.response?.status === 404 || error.response?.status === 403) &&
         (msg.includes('inativo') || msg.includes('suspenso') || msg.includes('suspensa'))
       ) {
-        localStorage.setItem('tenant_status', 'suspended')
+        sessionStore.setTenantStatus('suspended')
         if (!window.location.pathname.startsWith('/subscription-expired')) {
           window.location.href = '/subscription-expired'
         }

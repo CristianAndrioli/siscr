@@ -4,6 +4,7 @@ import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
 import { fmtBRL } from '../../utils/format';
+import { formatApiError } from '../../utils/helpers';
 import CurrencyInput from '../../components/common/CurrencyInput';
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 
@@ -100,8 +101,8 @@ export function CotacoesPage() {
       if (editingId) await cotacoesService.update(editingId, payload as any);
       else await cotacoesService.create(payload as any);
       setShowModal(false); load();
-    } catch (err: any) {
-      setModalError(err?.response?.data?.error || 'Erro ao salvar cotação.');
+    } catch (err: unknown) {
+      setModalError(formatApiError(err, 'Erro ao salvar cotação.'));
     } finally { setSaving(false); }
   };
 
