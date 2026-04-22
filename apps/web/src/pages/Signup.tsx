@@ -1,12 +1,13 @@
 import { useState, FormEvent } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { authService } from '../services/auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
-/** Template com `{slug}` para preview; ex.: https://{slug}.app.seudominio.com.br */
+/** Template com `{slug}` para preview; ex.: https://{slug}.app.siscr.com.br */
 const TENANT_URL_TEMPLATE =
-  import.meta.env.VITE_TENANT_URL_TEMPLATE || 'https://{slug}.seudominio.com';
+  import.meta.env.VITE_TENANT_URL_TEMPLATE || 'https://{slug}.app.siscr.com.br';
 
 const PLAN_LABELS: Record<string, string> = {
   free:       'Free',
@@ -131,41 +132,19 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      if (plan === 'free' || plan === 'trial') {
-        // Plano free: criar conta, receber sessão e redirecionar direto ao app
-        const { data } = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
-          nome,
-          email,
-          password,
-          tenantNome: empresaNome,
-          tenantSlug: tenantSlug.trim() || undefined,
-          planId: plan,
-        });
-        // Gravar sessão no sessionStorage para o CheckoutSuccess consumir
-        sessionStorage.setItem('signup_session', JSON.stringify({
-          token: data.token,
-          user: data.user,
-          tenant: data.tenant,
-        }));
-        navigate(`/checkout/success?tenant=${encodeURIComponent(data.tenant.slug)}&free=1`);
-      } else {
-        // Planos pagos: enviar dados ao backend que cria sessão Stripe
-        const { data } = await axios.post(`${API_BASE_URL}/api/subscriptions/checkout`, {
-          nome,
-          email,
-          password,
-          tenantNome: empresaNome,
-          tenantSlug: tenantSlug.trim() || undefined,
-          plan,
-        });
-        // Redirecionar para URL do Stripe
-        if (data.url) {
-          window.location.href = data.url;
-        }
-      }
+      const finalSlug = tenantSlug.trim() || slugify(empresaNome.trim());
+      await authService.requestEmailVerification({
+        nome,
+        email,
+        password,
+        tenantNome: empresaNome,
+        tenantSlug: finalSlug,
+        plan,
+      });
+      setStep(3);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: string } } };
-      setError(axiosError.response?.data?.error || 'Erro ao criar conta. Tente novamente.');
+      setError(axiosError.response?.data?.error || 'Erro ao enviar e-mail. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -188,13 +167,13 @@ export default function Signup() {
           </div>
           <h1 className="font-display text-3xl font-bold text-white mb-2">Criar conta</h1>
           <p className="text-slate-400">
-            {step === 1 ? 'Vamos começar com sua empresa.' : 'Agora crie seu acesso de administrador.'}
+            {step === 1 ? 'Vamos começar com sua empresa.' : step === 2 ? 'Agora crie seu acesso de administrador.' : 'Quase lá!'}
           </p>
         </div>
 
         {/* Indicador de etapas */}
         <div className="flex items-center gap-3 mb-8">
-          {[1, 2].map((s) => (
+          {[1, 2, 3].map((s) => (
             <div key={s} className="flex items-center gap-2">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                 s === step ? 'bg-brand-600 text-white' :
@@ -204,9 +183,9 @@ export default function Signup() {
                 {s < step ? '✓' : s}
               </div>
               <span className={`text-sm ${s === step ? 'text-white font-semibold' : 'text-slate-500'}`}>
-                {s === 1 ? 'Empresa' : 'Acesso'}
+                {s === 1 ? 'Empresa' : s === 2 ? 'Acesso' : 'E-mail'}
               </span>
-              {s < 2 && <div className="w-8 h-px bg-surface-border mx-1" />}
+              {s < 3 && <div className="w-8 h-px bg-surface-border mx-1" />}
             </div>
           ))}
         </div>
@@ -364,6 +343,32 @@ export default function Signup() {
               </button>
             </div>
           </form>
+        )}
+
+        {/* Step 3 — Verificar e-mail */}
+        {step === 3 && (
+          <div className="text-center space-y-6 py-4">
+            <div className="w-16 h-16 bg-brand-600/15 rounded-full flex items-center justify-center mx-auto">
+              <svg className="w-8 h-8 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-white mb-2">Verifique seu e-mail</h2>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Enviamos um link de confirmação para <strong className="text-slate-200">{email}</strong>.
+                <br />Clique no link para continuar o cadastro.
+              </p>
+            </div>
+            <p className="text-xs text-slate-600">O link expira em 24 horas. Verifique também a pasta de spam.</p>
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="text-sm text-brand-400 hover:text-brand-300 transition-colors"
+            >
+              ← Corrigir e-mail
+            </button>
+          </div>
         )}
 
         <p className="mt-6 text-center text-sm text-slate-600">

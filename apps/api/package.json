@@ -19,6 +19,7 @@
     "drizzle-orm": "^0.41.0",
     "hono": "^4.7.0",
     "node-forge": "^1.4.0",
+    "resend": "^6.11.0",
     "stripe": "^17.0.0",
     "xml-core": "^1.2.5",
     "xmldsigjs": "^2.8.7",

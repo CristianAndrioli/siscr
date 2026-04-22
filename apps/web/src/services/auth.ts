@@ -136,4 +136,41 @@ export const authService = {
     user: LoginResponse['user'];
     tenant: TenantInfo;
   }) => sessionStore.save(data),
+
+  /**
+   * Solicita verificação de e-mail antes do cadastro.
+   * Armazena os dados no KV e envia o link por e-mail.
+   */
+  requestEmailVerification: async (data: {
+    nome: string; email: string; password: string;
+    tenantNome: string; tenantSlug: string; plan: string;
+  }): Promise<void> => {
+    await axios.post(`${API_BASE_URL}/api/auth/request-email-verification`, data);
+  },
+
+  /**
+   * Valida o token de verificação de e-mail.
+   * Retorna action='free' com sessão, ou action='stripe' com URL de pagamento.
+   */
+  verifyEmail: async (token: string): Promise<
+    | { action: 'free'; tenantSlug: string; token: string; user: LoginResponse['user']; tenant: TenantInfo }
+    | { action: 'stripe'; url: string; sessionId: string }
+  > => {
+    const response = await axios.get(`${API_BASE_URL}/api/auth/verify-email`, { params: { token } });
+    return response.data;
+  },
+
+  /**
+   * Solicita redefinição de senha — envia e-mail se o endereço existir.
+   */
+  requestPasswordReset: async (email: string): Promise<void> => {
+    await axios.post(`${API_BASE_URL}/api/auth/forgot-password`, { email });
+  },
+
+  /**
+   * Confirma a redefinição de senha com uid + token do link recebido por e-mail.
+   */
+  confirmPasswordReset: async (uid: string, token: string, newPassword: string): Promise<void> => {
+    await axios.post(`${API_BASE_URL}/api/auth/reset-password`, { uid, token, newPassword });
+  },
 };

@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { authService } from '../services/auth';
 
 type TenantChoice = { slug: string; nome: string };
+type SuspendedTenant = { slug: string; nome: string };
 
 /* ---------- mini mockup do dashboard (SVG decorativo) ---------- */
 function DashboardPreview() {
@@ -81,12 +82,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showTenantField, setShowTenantField] = useState(!!(slugFromUrl || slugFromStorage));
   const [tenantChoices, setTenantChoices] = useState<TenantChoice[]>([]);
+  const [suspendedTenant, setSuspendedTenant] = useState<SuspendedTenant | null>(null);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setTenantChoices([]);
+    setSuspendedTenant(null);
     setLoading(true);
     try {
       const slug = tenantSlug.trim() ? tenantSlug.toLowerCase().trim() : undefined;
@@ -107,7 +110,13 @@ export default function Login() {
       const ax = err as {
         response?: {
           status?: number;
-          data?: { error?: string; code?: string; tenants?: TenantChoice[] };
+          data?: {
+            error?: string;
+            code?: string;
+            tenants?: TenantChoice[];
+            tenantStatus?: string;
+            tenant?: SuspendedTenant;
+          };
         };
       };
       const status = ax.response?.status;
@@ -119,6 +128,12 @@ export default function Login() {
         setError(data.error || 'Informe o identificador da empresa.');
         return;
       }
+
+      if (status === 403 && data?.tenantStatus && data.tenantStatus !== 'active' && data.tenant) {
+        setSuspendedTenant(data.tenant);
+        return;
+      }
+
       setError(data?.error || 'Credenciais inválidas. Verifique seus dados.');
     } finally {
       setLoading(false);
@@ -194,8 +209,45 @@ export default function Login() {
             </p>
           </div>
 
+          {/* assinatura suspensa */}
+          {suspendedTenant && (
+            <div className="mb-5 rounded-xl overflow-hidden border border-red-200">
+              <div className="bg-red-50 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-red-800 mb-0.5">Assinatura suspensa</p>
+                    <p className="text-xs text-red-600">
+                      A assinatura de <strong>{suspendedTenant.nome}</strong> está suspensa ou cancelada.
+                      Reative para voltar a usar o sistema.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-col gap-2">
+                  <a
+                    href="/plans"
+                    className="w-full text-center py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+                  >
+                    Ver planos e reativar
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setSuspendedTenant(null)}
+                    className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                  >
+                    Voltar ao login
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* erro */}
-          {error && (
+          {!suspendedTenant && error && (
             <div className="mb-5 flex items-start gap-2.5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
               <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -205,7 +257,7 @@ export default function Login() {
           )}
 
           {/* formulário */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className={`space-y-4 ${suspendedTenant ? 'hidden' : ''}`}>
             {/* email */}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">E-mail</label>

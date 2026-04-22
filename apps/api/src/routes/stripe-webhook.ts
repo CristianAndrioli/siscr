@@ -3,6 +3,7 @@ import type { Env } from '../index'
 import { StripeWebhookVerifier } from '../lib/stripe/StripeWebhookVerifier'
 import { StripeEventIdempotency } from '../lib/stripe/StripeEventIdempotency'
 import { pendingSignupSchema } from './subscriptions'
+import { sendWelcomeEmail } from '../lib/email'
 
 /**
  * Webhook Stripe.
@@ -13,14 +14,78 @@ import { pendingSignupSchema } from './subscriptions'
  *   2) Claim do event.id em `stripe_events` (idempotência).
  *   3) Dispatch por `event.type` — handlers puros, sem I/O redundante.
  *
+ * Eventos tratados
+ * -----------------------------------------------------------------
+ *   - `checkout.session.completed`        → cria ou atualiza tenant
+ *   - `customer.subscription.paused`      → suspende (trial sem pm)
+ *   - `customer.subscription.resumed`     → reativa após pausa
+ *   - `customer.subscription.deleted`     → suspende definitivamente
+ *   - `customer.subscription.updated`     → suspende/reativa conforme
+ *                                            `pause_collection`, `status`
+ *                                            e `cancel_at_period_end`
+ *   - `invoice.payment_failed`            → apenas logga (Stripe retenta)
+ *
  * Logs
  * -----------------------------------------------------------------
- * Mensagens de debug removidas/reduzidas para não escrever PII
- * (e-mail, slug) em logs de produção. Use nível de log apropriado
- * ao plugar um agregador (ex.: Logpush / Sentry).
+ * Mensagens de debug reduzidas para não escrever PII (e-mail, slug)
+ * em logs de produção. Use nível de log apropriado ao plugar um
+ * agregador (ex.: Logpush / Sentry).
  */
 const app = new Hono<{ Bindings: Env }>()
 
+// ─── Helpers: suspender / reativar tenant por customerId ────────
+
+type TenantDbEnv = Pick<Env, 'DB_SHARED' | 'KV_TENANT_CACHE'>
+
+async function suspendTenant(
+  env: TenantDbEnv,
+  customerId: string,
+  reason: string,
+): Promise<void> {
+  const tenantRow = await env.DB_SHARED
+    .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+    .bind(customerId)
+    .first<{ slug: string }>()
+
+  await env.DB_SHARED
+    .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
+    .bind(new Date().toISOString(), customerId)
+    .run()
+
+  if (tenantRow?.slug) {
+    await env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+    console.log(`[stripe-webhook] Tenant suspenso (${reason}) e cache invalidado: ${tenantRow.slug}`)
+  } else {
+    console.log(`[stripe-webhook] Tenant suspenso (${reason}): customer=${customerId}`)
+  }
+}
+
+async function reactivateTenant(
+  env: TenantDbEnv,
+  customerId: string,
+  reason: string,
+): Promise<void> {
+  const tenantRow = await env.DB_SHARED
+    .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
+    .bind(customerId)
+    .first<{ slug: string }>()
+
+  await env.DB_SHARED
+    .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
+    .bind(new Date().toISOString(), customerId)
+    .run()
+
+  if (tenantRow?.slug) {
+    await env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+    console.log(`[stripe-webhook] Tenant reativado (${reason}) e cache invalidado: ${tenantRow.slug}`)
+  } else {
+    console.log(`[stripe-webhook] Tenant reativado (${reason}): customer=${customerId}`)
+  }
+}
+
+// ─── Webhook handler ────────────────────────────────────────────
+
+// POST /api/webhooks/stripe
 app.post('/', async (c) => {
   const signature = c.req.header('stripe-signature')
   const rawBody = await c.req.text()
@@ -79,6 +144,10 @@ async function dispatch(
   switch (type) {
     case 'checkout.session.completed':
       return handleCheckoutCompleted(env, object)
+    case 'customer.subscription.paused':
+      return handleSubscriptionPaused(env, object)
+    case 'customer.subscription.resumed':
+      return handleSubscriptionResumed(env, object)
     case 'customer.subscription.deleted':
       return handleSubscriptionDeleted(env, object)
     case 'customer.subscription.updated':
@@ -176,6 +245,43 @@ async function handleCheckoutCompleted(
     JSON.stringify({ email: pending.email, userId, tenantId, tenantSlug }),
     { expirationTtl: 600 },
   )
+
+  // E-mail de boas-vindas (best-effort; falha aqui não aborta o webhook).
+  if (env.RESEND_API_KEY) {
+    try {
+      await sendWelcomeEmail(
+        {
+          RESEND_API_KEY: env.RESEND_API_KEY,
+          EMAIL_FROM: env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>',
+          FRONTEND_URL: env.FRONTEND_URL,
+        },
+        pending.email,
+        pending.nome,
+        tenantSlug,
+        plan ?? pending.plan,
+      )
+    } catch (emailErr) {
+      console.error('[stripe-webhook] Falha ao enviar e-mail de boas-vindas:', emailErr)
+    }
+  }
+}
+
+async function handleSubscriptionPaused(
+  env: Env,
+  subscription: Record<string, unknown>,
+): Promise<void> {
+  const customer = subscription.customer as string | null | undefined
+  if (!customer) return
+  await suspendTenant(env, customer, 'paused')
+}
+
+async function handleSubscriptionResumed(
+  env: Env,
+  subscription: Record<string, unknown>,
+): Promise<void> {
+  const customer = subscription.customer as string | null | undefined
+  if (!customer) return
+  await reactivateTenant(env, customer, 'resumed')
 }
 
 async function handleSubscriptionDeleted(
@@ -184,49 +290,64 @@ async function handleSubscriptionDeleted(
 ): Promise<void> {
   const customer = subscription.customer as string | null | undefined
   if (!customer) return
-
-  const tenantRow = await env.DB_SHARED
-    .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-    .bind(customer)
-    .first<{ slug: string }>()
-
-  await env.DB_SHARED
-    .prepare("UPDATE tenants SET status = 'suspended', updated_at = ? WHERE stripe_customer_id = ?")
-    .bind(new Date().toISOString(), customer)
-    .run()
-
-  if (tenantRow?.slug) {
-    await env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
-  }
+  await suspendTenant(env, customer, 'deleted')
 }
 
+/**
+ * customer.subscription.updated
+ *
+ * Referência: https://docs.stripe.com/billing/subscriptions/overview#subscription-statuses
+ *
+ *   status=active + pause_collection definido  → cobrança pausada via Dashboard → suspender
+ *   status=unpaid                              → todas retentativas falharam     → suspender
+ *   status=paused                              → trial sem payment method        → suspender
+ *   status=past_due                            → Stripe ainda retentando         → ignorar
+ *                                                 (aguardar unpaid/deleted)
+ *   status=active + cancel_at_period_end=true  → cancelamento agendado           → ignorar
+ *                                                 (bloqueio vem no deleted)
+ *   status=active + sem pendências             → pagamento normalizado            → reativar
+ */
 async function handleSubscriptionUpdated(
   env: Env,
   subscription: Record<string, unknown>,
 ): Promise<void> {
   const customer = subscription.customer as string | null | undefined
-  const status = subscription.status as string | undefined
-  if (!customer || status !== 'active') return
+  if (!customer) return
 
-  const tenantRow = await env.DB_SHARED
-    .prepare('SELECT slug FROM tenants WHERE stripe_customer_id = ?')
-    .bind(customer)
-    .first<{ slug: string }>()
+  const status = (subscription.status as string | undefined) ?? ''
+  const billingPaused = !!subscription.pause_collection
+  const pendingCancel = subscription.cancel_at_period_end === true
+  const SUSPEND_STATUSES = new Set(['paused', 'unpaid'])
 
-  await env.DB_SHARED
-    .prepare("UPDATE tenants SET status = 'active', updated_at = ? WHERE stripe_customer_id = ?")
-    .bind(new Date().toISOString(), customer)
-    .run()
-
-  if (tenantRow?.slug) {
-    await env.KV_TENANT_CACHE.delete(`tenant:${tenantRow.slug}`)
+  if (billingPaused || SUSPEND_STATUSES.has(status)) {
+    const reason = billingPaused ? 'pause_collection' : status
+    await suspendTenant(env, customer, reason)
+    return
   }
+
+  if (status === 'active' && !pendingCancel) {
+    await reactivateTenant(env, customer, 'active')
+    return
+  }
+
+  if (pendingCancel) {
+    console.log(
+      `[stripe-webhook] Cancelamento agendado p/ fim do período, acesso mantido: customer=${customer}`,
+    )
+    return
+  }
+
+  // past_due e outros status transientes — Stripe retenta via Smart Retries.
+  console.log(`[stripe-webhook] subscription.updated ignorado (${status}): customer=${customer}`)
 }
 
 async function handlePaymentFailed(object: Record<string, unknown>): Promise<void> {
-  // Hook de notificação — hoje só registra. Integração com Resend virá
-  // pela queue de tasks (ver `routes/queue.ts`).
-  console.warn('[stripe-webhook] invoice.payment_failed:', object.customer)
+  // Hook de notificação — hoje só registra. Stripe retenta automaticamente
+  // via Smart Retries; só bloqueamos no `subscription.deleted`/`.updated`.
+  const attemptCount = object.attempt_count ?? '?'
+  console.warn(
+    `[stripe-webhook] invoice.payment_failed (tentativa ${attemptCount}): customer=${object.customer} invoice=${object.id}`,
+  )
 }
 
 export default app
