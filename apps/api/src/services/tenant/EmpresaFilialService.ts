@@ -1,42 +1,30 @@
-import { EmpresaRepository, type EmpresaInsertRow } from '../../repositories/EmpresaRepository'
-import { FilialRepository, type FilialInsertRow } from '../../repositories/FilialRepository'
+import {
+  EmpresaRepository,
+  type EmpresaInsertRow,
+  type EmpresaUpdateFields,
+} from '../../repositories/EmpresaRepository'
+import {
+  FilialRepository,
+  type FilialInsertRow,
+  type FilialUpdateFields,
+} from '../../repositories/FilialRepository'
 
-const EMPRESA_FIELD_MAP: Record<string, string> = {
-  razaoSocial: 'razao_social',
-  nomeFantasia: 'nome_fantasia',
-  cnpj: 'cnpj',
-  inscricaoEstadual: 'inscricao_estadual',
-  email: 'email',
-  telefone: 'telefone',
-  logradouro: 'logradouro',
-  numero: 'numero',
-  complemento: 'complemento',
-  bairro: 'bairro',
-  cidade: 'cidade',
-  uf: 'uf',
-  cep: 'cep',
-  codigoMunicipio: 'codigo_municipio',
-  crt: 'crt',
-  cnae: 'cnae',
-  nfeSerie: 'nfe_serie',
-  nfeAmbiente: 'nfe_ambiente',
-  nfeProximoNumero: 'nfe_proximo_numero',
-}
-
-const FILIAL_FIELD_MAP: Record<string, string> = {
-  nome: 'nome',
-  cnpj: 'cnpj',
-  uf: 'uf',
-  cidade: 'cidade',
-  logradouro: 'logradouro',
-  numero: 'numero',
-  complemento: 'complemento',
-  bairro: 'bairro',
-  cep: 'cep',
-  codigoMunicipio: 'codigo_municipio',
-  inscricaoEstadual: 'inscricao_estadual',
-}
-
+/**
+ * Regras de negócio para Empresas e Filiais do tenant.
+ *
+ * Responsabilidade
+ * -----------------------------------------------------------------
+ * - Validar invariantes entre entidades (ex.: filial só existe se a
+ *   empresa pertencer ao tenant).
+ * - Coerção de input de API para a "shape" aceita pelo repositório.
+ * - Orquestrar operações compostas (create + audit, update com
+ *   normalização de booleano, etc.).
+ *
+ * NÃO é responsabilidade do service
+ * -----------------------------------------------------------------
+ * - Escrever SQL. (fica no repo)
+ * - Ler headers/body de HTTP. (fica na rota)
+ */
 export class EmpresaFilialService {
   constructor(
     private readonly empresas: EmpresaRepository,
@@ -48,27 +36,7 @@ export class EmpresaFilialService {
   }
 
   async createEmpresa(
-    input: {
-      razaoSocial: string
-      nomeFantasia?: string
-      cnpj: string
-      inscricaoEstadual?: string
-      email?: string
-      telefone?: string
-      logradouro?: string
-      numero?: string
-      complemento?: string
-      bairro?: string
-      cidade?: string
-      uf?: string
-      cep?: string
-      codigoMunicipio?: string
-      crt?: string
-      cnae?: string
-      nfeSerie?: string
-      nfeAmbiente?: number
-      nfeProximoNumero?: number
-    },
+    input: EmpresaCreateInput,
     auditUserId: string | null,
   ): Promise<string> {
     const id = crypto.randomUUID()
@@ -101,17 +69,16 @@ export class EmpresaFilialService {
     return id
   }
 
-  async updateEmpresa(id: string, data: Record<string, unknown>, auditUserId: string | null): Promise<void> {
-    const now = new Date().toISOString()
-    const fields: string[] = ['updated_at = ?', 'updated_by = ?']
-    const vals: unknown[] = [now, auditUserId]
-    for (const [k, col] of Object.entries(EMPRESA_FIELD_MAP)) {
-      if (data[k] !== undefined) {
-        fields.push(`${col} = ?`)
-        vals.push(data[k])
-      }
-    }
-    await this.empresas.update(id, fields.join(', '), vals)
+  /**
+   * Atualiza campos opcionais da empresa. Retorna `false` se nenhum
+   * campo válido foi informado — caller pode responder 400.
+   */
+  async updateEmpresa(
+    id: string,
+    patch: EmpresaUpdateFields,
+    auditUserId: string | null,
+  ): Promise<boolean> {
+    return this.empresas.update(id, patch, auditUserId)
   }
 
   deleteEmpresa(id: string) {
@@ -121,8 +88,8 @@ export class EmpresaFilialService {
   private async ensureEmpresaDoTenant(empresaId: string): Promise<void> {
     const found = await this.empresas.findIdByTenant(empresaId)
     if (!found) {
-      const err = new Error('Empresa não encontrada.')
-      ;(err as Error & { status: number }).status = 404
+      const err = new Error('Empresa não encontrada.') as Error & { status: number }
+      err.status = 404
       throw err
     }
   }
@@ -134,19 +101,7 @@ export class EmpresaFilialService {
 
   async createFilial(
     empresaId: string,
-    input: {
-      nome: string
-      cnpj?: string
-      uf?: string
-      cidade?: string
-      logradouro?: string
-      numero?: string
-      complemento?: string
-      bairro?: string
-      cep?: string
-      codigoMunicipio?: string
-      inscricaoEstadual?: string
-    },
+    input: FilialCreateInput,
     auditUserId: string | null,
   ): Promise<string> {
     await this.ensureEmpresaDoTenant(empresaId)
@@ -178,28 +133,75 @@ export class EmpresaFilialService {
     return this.filiais.listAllWithEmpresa()
   }
 
+  /**
+   * Atualiza a filial normalizando o booleano `ativa` para inteiro.
+   * Demais campos são whitelistados no repo.
+   */
   async updateFilial(
     id: string,
-    data: Record<string, unknown> & { ativa?: boolean },
+    input: FilialUpdateInput,
     auditUserId: string | null,
-  ): Promise<void> {
-    const now = new Date().toISOString()
-    const fields: string[] = ['updated_at = ?', 'updated_by = ?']
-    const vals: unknown[] = [now, auditUserId]
-    for (const [k, col] of Object.entries(FILIAL_FIELD_MAP)) {
-      if (data[k] !== undefined) {
-        fields.push(`${col} = ?`)
-        vals.push(data[k])
-      }
+  ): Promise<boolean> {
+    const patch: FilialUpdateFields = {
+      nome: input.nome,
+      cnpj: input.cnpj,
+      uf: input.uf,
+      cidade: input.cidade,
+      logradouro: input.logradouro,
+      numero: input.numero,
+      complemento: input.complemento,
+      bairro: input.bairro,
+      cep: input.cep,
+      codigoMunicipio: input.codigoMunicipio,
+      inscricaoEstadual: input.inscricaoEstadual,
     }
-    if (data.ativa !== undefined) {
-      fields.push('ativa = ?')
-      vals.push(data.ativa ? 1 : 0)
+    if (input.ativa !== undefined) {
+      patch.ativa = input.ativa ? 1 : 0
     }
-    await this.filiais.update(id, fields.join(', '), vals)
+    return this.filiais.update(id, patch, auditUserId)
   }
 
   deleteFilial(id: string) {
     return this.filiais.delete(id)
   }
 }
+
+// ─── Tipos de entrada (contratos públicos do service) ──────────────
+
+export type EmpresaCreateInput = {
+  razaoSocial: string
+  nomeFantasia?: string
+  cnpj: string
+  inscricaoEstadual?: string
+  email?: string
+  telefone?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  uf?: string
+  cep?: string
+  codigoMunicipio?: string
+  crt?: string
+  cnae?: string
+  nfeSerie?: string
+  nfeAmbiente?: number
+  nfeProximoNumero?: number
+}
+
+export type FilialCreateInput = {
+  nome: string
+  cnpj?: string
+  uf?: string
+  cidade?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cep?: string
+  codigoMunicipio?: string
+  inscricaoEstadual?: string
+}
+
+export type FilialUpdateInput = FilialUpdateFields & { ativa?: boolean }

@@ -1,6 +1,18 @@
 import type { D1Database } from '@cloudflare/workers-types'
 import { BaseTenantRepository } from './BaseTenantRepository'
 
+/**
+ * Repositório de `empresas` — escopado por tenant.
+ *
+ * Convenções
+ * -----------------------------------------------------------------
+ * - Todo método SQL filtra por `tenant_id = ?` — herança estrita do
+ *   BaseTenantRepository. O caller NÃO passa tenantId por parâmetro.
+ * - `update(id, patch)` recebe um objeto tipado `EmpresaUpdateFields`
+ *   (não SQL). O fragmento é montado internamente com whitelist.
+ */
+
+/** Linha pronta para INSERT (após validação e mapeamento no service). */
 export type EmpresaInsertRow = {
   id: string
   razaoSocial: string
@@ -27,27 +39,73 @@ export type EmpresaInsertRow = {
   auditUserId: string | null
 }
 
+/**
+ * Campos permitidos para atualização (whitelist). Novos campos devem
+ * ser adicionados aqui e no `EMPRESA_COLUMN_MAP` abaixo — NUNCA
+ * aceitar colunas arbitrárias do body.
+ */
+export type EmpresaUpdateFields = {
+  razaoSocial?: string
+  nomeFantasia?: string | null
+  cnpj?: string
+  inscricaoEstadual?: string | null
+  email?: string | null
+  telefone?: string | null
+  logradouro?: string | null
+  numero?: string | null
+  complemento?: string | null
+  bairro?: string | null
+  cidade?: string | null
+  uf?: string | null
+  cep?: string | null
+  codigoMunicipio?: string | null
+  crt?: string | null
+  cnae?: string | null
+  nfeSerie?: string | null
+  nfeAmbiente?: number | null
+  nfeProximoNumero?: number | null
+}
+
+const EMPRESA_COLUMN_MAP: Record<keyof EmpresaUpdateFields, string> = {
+  razaoSocial: 'razao_social',
+  nomeFantasia: 'nome_fantasia',
+  cnpj: 'cnpj',
+  inscricaoEstadual: 'inscricao_estadual',
+  email: 'email',
+  telefone: 'telefone',
+  logradouro: 'logradouro',
+  numero: 'numero',
+  complemento: 'complemento',
+  bairro: 'bairro',
+  cidade: 'cidade',
+  uf: 'uf',
+  cep: 'cep',
+  codigoMunicipio: 'codigo_municipio',
+  crt: 'crt',
+  cnae: 'cnae',
+  nfeSerie: 'nfe_serie',
+  nfeAmbiente: 'nfe_ambiente',
+  nfeProximoNumero: 'nfe_proximo_numero',
+}
+
 export class EmpresaRepository extends BaseTenantRepository {
   constructor(db: D1Database, tenantId: string) {
     super(db, tenantId)
   }
 
   async listWithFilialCount(): Promise<unknown[]> {
-    const { results } = await this.db
-      .prepare(
-        `
+    const { results } = await this.prepareTenant(
+      `
       SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.inscricao_estadual, e.email, e.telefone,
              e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf, e.cep,
              e.codigo_municipio, e.crt, e.cnae, e.nfe_serie, e.nfe_ambiente, e.nfe_proximo_numero,
              e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta,
-             (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id) as total_filiais
+             (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id AND f.tenant_id = e.tenant_id) as total_filiais
       FROM empresas e
       WHERE e.tenant_id = ?
       ORDER BY e.razao_social
-    `,
-      )
-      .bind(this.tenantId)
-      .all()
+      `,
+    ).all()
     return results ?? []
   }
 
@@ -93,26 +151,25 @@ export class EmpresaRepository extends BaseTenantRepository {
   }
 
   async findIdByTenant(id: string): Promise<string | null> {
-    const row = await this.db
-      .prepare('SELECT id FROM empresas WHERE id = ? AND tenant_id = ?')
-      .bind(id, this.tenantId)
-      .first<{ id: string }>()
+    const row = await this.prepareTenant(
+      'SELECT id FROM empresas WHERE id = ? AND tenant_id = ?',
+      [id],
+    ).first<{ id: string }>()
     return row?.id ?? null
   }
 
   async count(): Promise<number> {
-    const row = await this.db
-      .prepare('SELECT COUNT(*) AS n FROM empresas WHERE tenant_id = ?')
-      .bind(this.tenantId)
-      .first<{ n: number }>()
+    const row = await this.prepareTenant(
+      'SELECT COUNT(*) AS n FROM empresas WHERE tenant_id = ?',
+    ).first<{ n: number }>()
     return row?.n ?? 0
   }
 
   async getA1ObjectKey(empresaId: string): Promise<string | null> {
-    const row = await this.db
-      .prepare('SELECT a1_r2_object_key FROM empresas WHERE id = ? AND tenant_id = ?')
-      .bind(empresaId, this.tenantId)
-      .first<{ a1_r2_object_key: string | null }>()
+    const row = await this.prepareTenant(
+      'SELECT a1_r2_object_key FROM empresas WHERE id = ? AND tenant_id = ?',
+      [empresaId],
+    ).first<{ a1_r2_object_key: string | null }>()
     return row?.a1_r2_object_key ?? null
   }
 
@@ -141,11 +198,25 @@ export class EmpresaRepository extends BaseTenantRepository {
       .run()
   }
 
-  async update(id: string, setSql: string, values: unknown[]): Promise<void> {
+  /**
+   * Atualiza colunas permitidas pela whitelist (`EMPRESA_COLUMN_MAP`).
+   * Retorna `false` quando nenhum campo válido foi fornecido.
+   */
+  async update(
+    id: string,
+    patch: EmpresaUpdateFields,
+    auditUserId: string | null,
+  ): Promise<boolean> {
+    const frag = this.buildUpdateSet(patch, EMPRESA_COLUMN_MAP)
+    if (!frag) return false
+
+    const now = new Date().toISOString()
+    const sql = `UPDATE empresas SET ${frag.sql}, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`
     await this.db
-      .prepare(`UPDATE empresas SET ${setSql} WHERE id = ? AND tenant_id = ?`)
-      .bind(...values, id, this.tenantId)
+      .prepare(sql)
+      .bind(...frag.values, now, auditUserId, id, this.tenantId)
       .run()
+    return true
   }
 
   async delete(id: string): Promise<void> {

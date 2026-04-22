@@ -2,7 +2,9 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
-import { hashPassword } from '../lib/password'
+import { PasswordHasher } from '../lib/password'
+import type { EmpresaUpdateFields } from '../repositories/EmpresaRepository'
+import type { FilialUpdateFields } from '../repositories/FilialRepository'
 import { decryptA1Bundle, encryptA1Bundle } from '../lib/certBlob'
 import { extractA1CertPublicMeta } from '../lib/pfxMetadata'
 import { EmpresaRepository } from '../repositories/EmpresaRepository'
@@ -291,10 +293,15 @@ app.post('/empresas/:id/certificado-a1/atualizar-metadados', async (c) => {
 // PUT /api/tenant/info/empresas/:id — atualizar empresa
 app.put('/empresas/:id', zValidator('json', empresaSchema.partial()), async (c) => {
   const tenant = c.get('tenant')
-  const data = c.req.valid('json') as Record<string, unknown>
+  // O schema parcial do Zod já garante que os campos presentes casam com
+  // `EmpresaUpdateFields`; o repositório ainda aplica whitelist defensiva.
+  const data = c.req.valid('json') as EmpresaUpdateFields
   const id = c.req.param('id')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  await svc.updateEmpresa(id, data, auditUserId(c))
+  const updated = await svc.updateEmpresa(id, data, auditUserId(c))
+  if (!updated) {
+    return c.json({ error: 'Nenhum campo válido foi informado para atualização.' }, 400)
+  }
   return c.json({ message: 'Empresa atualizada.' })
 })
 
@@ -479,10 +486,15 @@ app.post('/filiais/:id/certificado-a1/atualizar-metadados', async (c) => {
 // PUT /api/tenant/info/filiais/:id
 app.put('/filiais/:id', zValidator('json', filialSchema.partial().extend({ ativa: z.boolean().optional() })), async (c) => {
   const tenant = c.get('tenant')
-  const data = c.req.valid('json') as Record<string, unknown> & { ativa?: boolean }
+  // `ativa` chega como boolean; o service converte para INTEGER (0/1) e
+  // aplica whitelist via `FILIAL_COLUMN_MAP`.
+  const data = c.req.valid('json') as FilialUpdateFields & { ativa?: boolean }
   const id = c.req.param('id')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  await svc.updateFilial(id, data, auditUserId(c))
+  const updated = await svc.updateFilial(id, data, auditUserId(c))
+  if (!updated) {
+    return c.json({ error: 'Nenhum campo válido foi informado para atualização.' }, 400)
+  }
   return c.json({ message: 'Filial atualizada.' })
 })
 
@@ -547,7 +559,9 @@ app.post('/usuarios', zValidator('json', userSchema), async (c) => {
 
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
-  const passwordHash = await hashPassword(data.senha ?? 'Mudar@123')
+  // Usa o formato canônico `pbkdf2$<iter>$<saltHex>$<hashHex>` com 600k iterações.
+  // Senhas legadas são aceitas no login via `PasswordHasher.verify()` e promovidas transparentemente.
+  const passwordHash = await PasswordHasher.hash(data.senha ?? 'Mudar@123')
 
   const actor = auditUserId(c)
   await c.env.DB_SHARED.prepare(

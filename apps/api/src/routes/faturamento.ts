@@ -12,60 +12,33 @@ import {
   fetchClassifNcmJson,
   runNcmSync,
 } from '../lib/ncm/syncNcmCatalog'
+import { createCotacaoService } from '../services/faturamento/factory'
+import type {
+  CotacaoCreateInput,
+  CotacaoUpdateInput,
+} from '../services/faturamento/CotacaoService'
 
 const app = new Hono<{ Bindings: Env }>()
 
-// ─── Helpers ──────────────────────────────────────────────────────
-
-function calcTotal(itens: { quantidade: number; valorUnitario: number; desconto: number }[]) {
-  return itens.reduce((s, i) => s + (i.quantidade * i.valorUnitario - (i.desconto ?? 0)), 0)
-}
-
 // ─── Cotações ─────────────────────────────────────────────────────
+//
+// Rotas finas: toda regra (cálculo de total, numeração, batch
+// atômica) está em `CotacaoService` + `CotacaoRepository`.
 
 app.get('/cotacoes', async (c) => {
   const tenant = c.get('tenant')
   const { status, busca } = c.req.query()
-
-  let query = `
-    SELECT co.id, co.numero, co.status, co.validade, co.valor_total, co.created_at,
-           p.nome as cliente
-    FROM cotacoes co
-    LEFT JOIN pessoas p ON p.id = co.pessoa_id
-    WHERE co.tenant_id = ?
-  `
-  const params: unknown[] = [tenant.tenantId]
-  if (status) { query += ' AND co.status = ?'; params.push(status) }
-  if (busca) { query += ' AND (p.nome LIKE ? OR co.numero LIKE ?)'; params.push(`%${busca}%`, `%${busca}%`) }
-  query += ' ORDER BY co.created_at DESC LIMIT 100'
-
-  const { results } = await c.env.DB_SHARED.prepare(query).bind(...params).all()
-  return c.json({ cotacoes: results })
+  const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
+  const cotacoes = await svc.list({ status, busca })
+  return c.json({ cotacoes })
 })
 
 app.get('/cotacoes/:id', async (c) => {
   const tenant = c.get('tenant')
-  const id = c.req.param('id')
-
-  const cotacao = await c.env.DB_SHARED.prepare(`
-    SELECT co.*, p.nome as cliente, p.cpf_cnpj, p.email, p.telefone
-    FROM cotacoes co
-    LEFT JOIN pessoas p ON p.id = co.pessoa_id
-    WHERE co.id = ? AND co.tenant_id = ?
-  `).bind(id, tenant.tenantId).first()
-
-  if (!cotacao) return c.json({ error: 'Cotação não encontrada.' }, 404)
-
-  const { results: itens } = await c.env.DB_SHARED.prepare(`
-    SELECT ci.*, pr.descricao as produto_nome, pr.codigo as produto_codigo,
-           sv.descricao as servico_nome
-    FROM cotacao_itens ci
-    LEFT JOIN produtos pr ON pr.id = ci.produto_id
-    LEFT JOIN servicos sv ON sv.id = ci.servico_id
-    WHERE ci.cotacao_id = ?
-  `).bind(id).all()
-
-  return c.json({ cotacao: { ...cotacao, itens } })
+  const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
+  const found = await svc.findById(c.req.param('id'))
+  if (!found) return c.json({ error: 'Cotação não encontrada.' }, 404)
+  return c.json({ cotacao: { ...(found.header as object), itens: found.itens } })
 })
 
 const itemSchema = z.object({
@@ -89,93 +62,24 @@ const cotacaoSchema = z.object({
 
 app.post('/cotacoes', zValidator('json', cotacaoSchema), async (c) => {
   const tenant = c.get('tenant')
-  const data = c.req.valid('json')
-  const id = crypto.randomUUID()
-  const now = new Date().toISOString()
-  const uid = auditUserId(c)
-
-  // Gerar número sequencial simples
-  const last = await c.env.DB_SHARED
-    .prepare('SELECT numero FROM cotacoes WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1')
-    .bind(tenant.tenantId).first<{ numero: string }>()
-  const seq = last?.numero ? parseInt(last.numero.replace(/\D/g, '') || '0') + 1 : 1
-  const numero = `COT-${String(seq).padStart(4, '0')}`
-
-  const valorTotal = calcTotal(data.itens) - (data.desconto ?? 0)
-
-  const stmts = [
-    c.env.DB_SHARED.prepare(`
-      INSERT INTO cotacoes (id, tenant_id, numero, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, tenant.tenantId, numero, data.pessoaId ?? null, data.validade ?? null,
-        data.observacoes ?? null, data.desconto, valorTotal, data.status, now, now, uid, uid),
-  ]
-
-  for (const item of data.itens) {
-    const itemTotal = item.quantidade * item.valorUnitario - item.desconto
-    stmts.push(
-      c.env.DB_SHARED.prepare(`
-        INSERT INTO cotacao_itens (id, cotacao_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at, updated_at, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
-          item.descricao, item.quantidade, item.valorUnitario, item.desconto, itemTotal, item.unidade, now, now, uid, uid)
-    )
-  }
-
-  await c.env.DB_SHARED.batch(stmts)
+  const data = c.req.valid('json') as CotacaoCreateInput
+  const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
+  const { id, numero } = await svc.create(data, auditUserId(c))
   return c.json({ id, numero, message: 'Cotação criada.' }, 201)
 })
 
 app.put('/cotacoes/:id', zValidator('json', cotacaoSchema.partial()), async (c) => {
   const tenant = c.get('tenant')
-  const id = c.req.param('id')
-  const data = c.req.valid('json')
-  const now = new Date().toISOString()
-  const uid = auditUserId(c)
-
-  const stmts: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
-
-  if (data.itens !== undefined) {
-    stmts.push(
-      c.env.DB_SHARED.prepare('DELETE FROM cotacao_itens WHERE cotacao_id = ? AND tenant_id = ?')
-        .bind(id, tenant.tenantId)
-    )
-    for (const item of data.itens) {
-      const itemTotal = item.quantidade! * item.valorUnitario! - (item.desconto ?? 0)
-      stmts.push(
-        c.env.DB_SHARED.prepare(`
-          INSERT INTO cotacao_itens (id, cotacao_id, tenant_id, produto_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at, updated_at, created_by, updated_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(crypto.randomUUID(), id, tenant.tenantId, item.produtoId ?? null, item.servicoId ?? null,
-            item.descricao!, item.quantidade!, item.valorUnitario!, item.desconto ?? 0, itemTotal, item.unidade ?? 'UN', now, now, uid, uid)
-      )
-    }
-  }
-
-  const valorTotal = data.itens ? calcTotal(data.itens as typeof data.itens) - (data.desconto ?? 0) : undefined
-
-  const fields: string[] = ['updated_at = ?', 'updated_by = ?']
-  const vals: unknown[] = [now, uid]
-  if (data.pessoaId !== undefined) { fields.push('pessoa_id = ?'); vals.push(data.pessoaId) }
-  if (data.validade !== undefined) { fields.push('validade = ?'); vals.push(data.validade) }
-  if (data.observacoes !== undefined) { fields.push('observacoes = ?'); vals.push(data.observacoes) }
-  if (data.desconto !== undefined) { fields.push('desconto = ?'); vals.push(data.desconto) }
-  if (valorTotal !== undefined) { fields.push('valor_total = ?'); vals.push(valorTotal) }
-  if (data.status !== undefined) { fields.push('status = ?'); vals.push(data.status) }
-
-  stmts.push(
-    c.env.DB_SHARED.prepare(`UPDATE cotacoes SET ${fields.join(', ')} WHERE id = ? AND tenant_id = ?`)
-      .bind(...vals, id, tenant.tenantId)
-  )
-
-  await c.env.DB_SHARED.batch(stmts)
+  const data = c.req.valid('json') as CotacaoUpdateInput
+  const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
+  await svc.update(c.req.param('id'), data, auditUserId(c))
   return c.json({ message: 'Cotação atualizada.' })
 })
 
 app.delete('/cotacoes/:id', async (c) => {
   const tenant = c.get('tenant')
-  await c.env.DB_SHARED.prepare('DELETE FROM cotacoes WHERE id = ? AND tenant_id = ?')
-    .bind(c.req.param('id'), tenant.tenantId).run()
+  const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
+  await svc.delete(c.req.param('id'))
   return c.json({ message: 'Cotação removida.' })
 })
 
