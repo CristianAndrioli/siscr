@@ -4,6 +4,14 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
 import { parseListPagination } from '../lib/listPagination'
+import {
+  assertImportacaoEntradaPermitida,
+  assertPreviewDestinatarioPermitido,
+  cnpjDestinatarioParaGravacao,
+  classificarNfeEntradaKind,
+  detectarFamiliaXmlFiscal,
+  erroSeFamiliaNaoSuportadaEntrada,
+} from '../lib/fiscal-import'
 import type { NfeEntradaItem, NfeEntradaParsed } from '../lib/nfe/parseNfeEntradaXml'
 import { normalizarCnpj, parseNfeEntradaXml } from '../lib/nfe/parseNfeEntradaXml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
@@ -130,93 +138,6 @@ async function findFornecedorPorCnpj(
     .bind(tenantId, empresaId, c)
     .first<{ id: string }>()
   return row?.id ?? null
-}
-
-/** Valida se o destinatário do XML é a empresa cadastrada (CNPJ). */
-async function assertDestinatarioEhEmpresa(
-  db: D1Database,
-  tenantId: string,
-  empresaId: string,
-  destDoc: string,
-  destTipo: 'CNPJ' | 'CPF',
-): Promise<void> {
-  if (destTipo !== 'CNPJ') {
-    throw new Error('NF-e com destinatário CPF não pode ser importada como entrada de PJ (use empresa CNPJ).')
-  }
-  const emp = await db
-    .prepare(
-      `SELECT cnpj FROM empresas WHERE id = ? AND tenant_id = ?`,
-    )
-    .bind(empresaId, tenantId)
-    .first<{ cnpj: string }>()
-  if (!emp) throw new Error('Empresa não encontrada.')
-  if (normalizarCnpj(emp.cnpj) !== normalizarCnpj(destDoc)) {
-    throw new Error(
-      'O destinatário da NF-e não corresponde ao CNPJ da empresa selecionada. Verifique o XML e a empresa/filial.',
-    )
-  }
-}
-
-/** CNPJ a gravar em `nf_entradas.destinatario_cnpj` (XML ou empresa quando NFC-e sem dest). */
-async function cnpjDestinatarioParaGravacao(
-  db: D1Database,
-  tenantId: string,
-  empresaId: string,
-  parsed: NfeEntradaParsed,
-): Promise<string> {
-  if (!parsed.destinatarioAusente) {
-    return parsed.destinatarioDoc
-  }
-  const emp = await db
-    .prepare(`SELECT cnpj FROM empresas WHERE id = ? AND tenant_id = ?`)
-    .bind(empresaId, tenantId)
-    .first<{ cnpj: string }>()
-  if (!emp) throw new Error('Empresa não encontrada.')
-  return normalizarCnpj(emp.cnpj)
-}
-
-/**
- * Pré-visualização: permite NFC-e (65) sem dest; demais exigem casamento de CNPJ com a empresa.
- */
-async function assertPreviewDestinatarioPermitido(
-  db: D1Database,
-  tenantId: string,
-  empresaId: string,
-  parsed: NfeEntradaParsed,
-): Promise<void> {
-  if (parsed.destinatarioAusente && parsed.modelo === 65) {
-    const emp = await db
-      .prepare(`SELECT id FROM empresas WHERE id = ? AND tenant_id = ?`)
-      .bind(empresaId, tenantId)
-      .first<{ id: string }>()
-    if (!emp) throw new Error('Empresa não encontrada.')
-    return
-  }
-  await assertDestinatarioEhEmpresa(db, tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
-}
-
-/** Na gravação, NFC-e sem dest exige confirmação explícita do usuário. */
-async function assertImportacaoEntradaPermitida(
-  db: D1Database,
-  tenantId: string,
-  empresaId: string,
-  parsed: NfeEntradaParsed,
-  confirmarDestinoEmpresa: boolean,
-): Promise<void> {
-  if (parsed.destinatarioAusente && parsed.modelo === 65) {
-    if (!confirmarDestinoEmpresa) {
-      throw new Error(
-        'Esta NFC-e não identifica o destinatário no XML. Confirme que a compra é da empresa selecionada para continuar.',
-      )
-    }
-    const emp = await db
-      .prepare(`SELECT id FROM empresas WHERE id = ? AND tenant_id = ?`)
-      .bind(empresaId, tenantId)
-      .first<{ id: string }>()
-    if (!emp) throw new Error('Empresa não encontrada.')
-    return
-  }
-  await assertDestinatarioEhEmpresa(db, tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
 }
 
 async function garantirFornecedorDoEmitente(
@@ -479,6 +400,10 @@ app.post('/nf-entradas/preview-xml', async (c) => {
   }
   const ab = await (file as File).arrayBuffer()
   const xml = new TextDecoder('utf-8').decode(ab)
+  const detPv = detectarFamiliaXmlFiscal(xml)
+  const errFamPv = erroSeFamiliaNaoSuportadaEntrada(detPv)
+  if (errFamPv) return c.json({ error: errFamPv }, 400)
+
   let parsed
   try {
     parsed = parseNfeEntradaXml(xml)
@@ -519,6 +444,7 @@ app.post('/nf-entradas/preview-xml', async (c) => {
 
   const fornecedorId = await findFornecedorPorCnpj(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.emitenteCnpj)
   const nfceSemDest = parsed.destinatarioAusente && parsed.modelo === 65
+  const importKind = classificarNfeEntradaKind(parsed)
 
   return c.json({
     parsed,
@@ -528,6 +454,9 @@ app.post('/nf-entradas/preview-xml', async (c) => {
     fornecedor_sera_cadastrado: !fornecedorId,
     xml_tamanho_bytes: ab.byteLength,
     nfce_sem_dest: nfceSemDest,
+    import_kind: importKind,
+    modelo_fiscal: parsed.modelo,
+    fiscal_xml_family: 'nfe_icms',
   })
 })
 
@@ -563,6 +492,10 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
   } catch {
     return c.json({ error: 'xmlBase64 inválido.' }, 400)
   }
+
+  const det = detectarFamiliaXmlFiscal(xml)
+  const errFam = erroSeFamiliaNaoSuportadaEntrada(det)
+  if (errFam) return c.json({ error: errFam }, 400)
 
   let parsed
   try {
@@ -763,6 +696,8 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
     {
       id,
       message: 'NF-e importada com vínculo de produtos.',
+      import_kind: classificarNfeEntradaKind(parsed),
+      modelo_fiscal: parsed.modelo,
       fornecedor_vinculado: true,
       fornecedor_criado: fornecedorRes.criado,
       assinatura_valida: assinaturaValida,
@@ -853,6 +788,11 @@ app.post('/nf-entradas/importar-xml', async (c) => {
 
   const ab = await (file as File).arrayBuffer()
   const xml = new TextDecoder('utf-8').decode(ab)
+
+  const detImp = detectarFamiliaXmlFiscal(xml)
+  const errFamImp = erroSeFamiliaNaoSuportadaEntrada(detImp)
+  if (errFamImp) return c.json({ error: errFamImp }, 400)
+
   let parsed
   try {
     parsed = parseNfeEntradaXml(xml)
@@ -990,6 +930,8 @@ app.post('/nf-entradas/importar-xml', async (c) => {
     {
       id,
       message: 'NF-e importada com sucesso.',
+      import_kind: classificarNfeEntradaKind(parsed),
+      modelo_fiscal: parsed.modelo,
       fornecedor_vinculado: true,
       fornecedor_criado: fornecedorRes.criado,
       assinatura_valida: assinaturaValida,

@@ -40,6 +40,9 @@ export async function previewNfEntradaXml(file: File, empresaId: string) {
     fornecedor_id: string | null;
     fornecedor_sera_cadastrado?: boolean;
     nfce_sem_dest?: boolean;
+    import_kind?: 'nfe' | 'nfce';
+    modelo_fiscal?: number;
+    fiscal_xml_family?: string;
   }>('/tenant/entrada/nf-entradas/preview-xml', form);
   return data;
 }
