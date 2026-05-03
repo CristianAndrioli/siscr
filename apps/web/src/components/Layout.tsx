@@ -5,6 +5,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useTheme } from '../hooks/useTheme';
 import OnboardingEmpresaGate from './OnboardingEmpresaGate';
 import WhatsAppSupportButton from './WhatsAppSupportButton';
+import CommandPalette from './commandPalette/CommandPalette';
 
 interface LayoutProps { children: ReactNode }
 type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'entrada' | 'estoque' | 'configuracoes';
@@ -45,6 +46,22 @@ export default function Layout({ children }: LayoutProps) {
   const { hasModuleAccess } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
   const [permAlert, setPermAlert] = useState<string | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const modKey = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || '')
+    ? '⌘'
+    : 'Ctrl';
 
   useEffect(() => {
     const fn = (e: Event) => {
@@ -286,9 +303,24 @@ export default function Layout({ children }: LayoutProps) {
             <Icon d={icons.menu} className="w-5 h-5" />
           </button>
 
-          <div className="flex-1 text-sm text-slate-400 dark:text-slate-500 capitalize truncate">
+          <div className="flex-1 text-sm text-slate-400 dark:text-slate-500 capitalize truncate min-w-0">
             {location.pathname.replace(/^\//, '').replace(/\//g, ' › ') || 'Início'}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-sm text-slate-500 dark:text-slate-400 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors flex-none"
+            title="Busca universal"
+          >
+            <svg className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span className="hidden md:inline">Buscar</span>
+            <kbd className="hidden md:inline font-mono text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600">
+              {modKey}K
+            </kbd>
+          </button>
 
           {/* Toggle de tema (topbar mobile) */}
           <button
@@ -321,6 +353,8 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       <WhatsAppSupportButton />
+
+      <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
     </div>
   );
 }
