@@ -56,6 +56,13 @@ export const COMMAND_PALETTE_ITEMS: CommandPaletteItem[] = [
     module: 'financeiro',
   },
   {
+    id: 'fin-regua',
+    title: 'Régua de cobrança',
+    path: '/financeiro/regua-cobranca',
+    keywords: ['regua', 'régua', 'lembrete', 'vencimento', 'cobrança automática', 'email', 'whatsapp'],
+    module: 'financeiro',
+  },
+  {
     id: 'fin-cp',
     title: 'Contas a pagar',
     path: '/financeiro/contas-pagar',

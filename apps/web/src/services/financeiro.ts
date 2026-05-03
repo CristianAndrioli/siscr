@@ -23,6 +23,8 @@ export interface ContaReceber {
   parcela?: number;
   total_parcelas?: number;
   nota_fiscal_id?: string;
+  regua_id?: string | null;
+  regua_nome?: string | null;
 }
 
 export interface ContaPagar {
@@ -54,6 +56,7 @@ export interface ContaForm {
   vencimento: string;
   categoria?: string;
   observacoes?: string;
+  reguaId?: string | null;
   // Issue #8
   nr_documento?: string;
   especie?: string;
@@ -163,5 +166,73 @@ export const financeiroService = {
   dashboard: async (): Promise<DashboardData> => {
     const res = await api.get(`${BASE}/dashboard`);
     return res.data;
+  },
+};
+
+export type ReguaPerfil =
+  | 'geral'
+  | 'novo_cliente'
+  | 'bom_pagador'
+  | 'pagador_duvidoso'
+  | 'mau_pagador';
+
+export interface ReguaCobrancaListItem {
+  id: string;
+  nome: string;
+  perfil: ReguaPerfil;
+  descricao: string | null;
+  ativo: number;
+  eh_padrao: number;
+  created_at: string;
+  updated_at: string;
+  etapa_count: number;
+}
+
+export interface ReguaCobrancaEtapa {
+  id: string;
+  ordem: number;
+  offset_dias: number;
+  canal: 'email' | 'sms' | 'whatsapp';
+  mensagem_template: string;
+}
+
+export interface ReguaCobrancaDetail extends ReguaCobrancaListItem {
+  etapas: ReguaCobrancaEtapa[];
+}
+
+export interface ReguaCobrancaFormEtapa {
+  ordem: number;
+  offsetDias: number;
+  canal: 'email' | 'sms' | 'whatsapp';
+  mensagemTemplate: string;
+}
+
+export interface ReguaCobrancaForm {
+  nome: string;
+  perfil: ReguaPerfil;
+  descricao: string;
+  ativo: boolean;
+  ehPadrao: boolean;
+  etapas: ReguaCobrancaFormEtapa[];
+}
+
+export const reguaCobrancaService = {
+  list: async (): Promise<{ reguas: ReguaCobrancaListItem[] }> => {
+    const res = await api.get(`${BASE}/reguas-cobranca`);
+    return res.data;
+  },
+  get: async (id: string): Promise<ReguaCobrancaDetail> => {
+    const res = await api.get(`${BASE}/reguas-cobranca/${id}`);
+    return res.data;
+  },
+  create: async (data: ReguaCobrancaForm): Promise<{ id: string }> => {
+    const res = await api.post(`${BASE}/reguas-cobranca`, data);
+    return res.data;
+  },
+  update: async (id: string, data: ReguaCobrancaForm): Promise<void> => {
+    await api.put(`${BASE}/reguas-cobranca/${id}`, data);
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(`${BASE}/reguas-cobranca/${id}`);
   },
 };

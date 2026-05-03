@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { contasReceberService, type ContaReceber, type ContaForm } from '../../services/financeiro';
+import {
+  contasReceberService,
+  reguaCobrancaService,
+  type ContaReceber,
+  type ContaForm,
+  type ReguaCobrancaListItem,
+} from '../../services/financeiro';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
@@ -26,7 +32,8 @@ const ESPECIES_LABEL: Record<string, string> = {
 const MOEDAS = ['BRL', 'USD', 'EUR'];
 const EMPTY: ContaForm = {
   pessoaId: '', descricao: '', valor: 0, vencimento: '',
-  categoria: '', observacoes: '', nr_documento: '',
+  categoria: '', observacoes: '', reguaId: '',
+  nr_documento: '',
   especie: 'DM', data_emissao: '', data_lancamento: new Date().toISOString().slice(0, 10), moeda: 'BRL',
 };
 
@@ -47,8 +54,10 @@ export function ContasReceberDetail() {
   const [showPagarModal, setShowPagarModal] = useState(false);
   const [pagarData, setPagarData] = useState({ dataPagamento: new Date().toISOString().slice(0, 10), valorPago: 0, contaBancariaId: '' });
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
+  const [reguas, setReguas] = useState<ReguaCobrancaListItem[]>([]);
 
   useEffect(() => {
+    reguaCobrancaService.list().then((r) => setReguas(r.reguas ?? [])).catch(() => {});
     pessoasService
       .list({ search: '', page: 0, limit: 200 })
       .then((r) => setPessoas(r.pessoas))
@@ -70,6 +79,7 @@ export function ContasReceberDetail() {
             data_emissao: data.data_emissao ?? '',
             data_lancamento: data.data_lancamento ?? new Date().toISOString().slice(0, 10),
             moeda: data.moeda ?? 'BRL',
+            reguaId: data.regua_id ?? '',
           });
           setPagarData(prev => ({ ...prev, valorPago: data.valor }));
         })
@@ -78,7 +88,7 @@ export function ContasReceberDetail() {
     }
   }, [id, isNew]);
 
-  const set = (field: keyof ContaForm, value: string | number) =>
+  const set = (field: keyof ContaForm, value: string | number | null) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,12 +100,16 @@ export function ContasReceberDetail() {
 
     setSaving(true);
     setError('');
+    const payload: ContaForm = {
+      ...form,
+      reguaId: form.reguaId ? form.reguaId : null,
+    };
     try {
       if (isNew) {
-        await contasReceberService.create(form);
+        await contasReceberService.create(payload);
         navigate('/financeiro/contas-receber');
       } else {
-        await contasReceberService.update(id!, form);
+        await contasReceberService.update(id!, payload);
         const updated = await contasReceberService.get(id!);
         setRecord(updated);
         setIsEditing(false);
@@ -270,6 +284,12 @@ export function ContasReceberDetail() {
                   { label: 'Cliente', value: record.cliente || '—' },
                   { label: 'Valor', value: fmt(record.valor) },
                   { label: 'Valor Recebido', value: record.valor_pago ? fmt(record.valor_pago) : '—' },
+                  {
+                    label: 'Régua de cobrança',
+                    value:
+                      record.regua_nome ||
+                      (record.regua_id ? '—' : 'Automático (régua padrão do tenant, se houver)'),
+                  },
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
@@ -436,6 +456,29 @@ export function ContasReceberDetail() {
                 onChange={e => set('observacoes', e.target.value)}
                 className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
               />
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Cobrança</p>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Régua de cobrança</label>
+              <select
+                value={form.reguaId ?? ''}
+                onChange={(e) => set('reguaId', e.target.value || null)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">Automático (usar régua padrão do tenant)</option>
+                {reguas
+                  .filter((r) => r.ativo === 1 || (!isNew && r.id === record?.regua_id))
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.nome}
+                      {r.eh_padrao === 1 ? ' (padrão)' : ''}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                Cadastre e edite réguas em <span className="font-medium">Financeiro → Régua de cobrança</span>. Envio automático de e-mail/SMS será habilitado em versão futura.
+              </p>
             </div>
           </div>
 

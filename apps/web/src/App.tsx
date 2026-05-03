@@ -38,6 +38,8 @@ import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
 import ContasPagarDetail from './pages/financeiro/ContasPagarDetail';
 import FinanceiroDashboard from './pages/financeiro/FinanceiroDashboard';
+import ReguaCobrancaList from './pages/financeiro/ReguaCobrancaList';
+import ReguaCobrancaDetail from './pages/financeiro/ReguaCobrancaDetail';
 import ContasBancariasPage from './pages/financeiro/ContasBancariasPage';
 import Configuracoes from './pages/Configuracoes';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
@@ -138,6 +140,8 @@ function App() {
 
         {/* Financeiro */}
         <Route path="/financeiro/dashboard" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="financeiro" requiredAction="view"><FinanceiroDashboard /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/financeiro/regua-cobranca" element={<ProtectedRoute><Layout><ReguaCobrancaList /></Layout></ProtectedRoute>} />
+        <Route path="/financeiro/regua-cobranca/:id" element={<ProtectedRoute><Layout><ReguaCobrancaDetail /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-receber" element={<ProtectedRoute><Layout><ContasReceberList /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-receber/:id" element={<ProtectedRoute><Layout><ContasReceberDetail /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-pagar" element={<ProtectedRoute><Layout><ContasPagarList /></Layout></ProtectedRoute>} />

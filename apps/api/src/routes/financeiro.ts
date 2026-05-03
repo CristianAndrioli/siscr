@@ -17,12 +17,29 @@ const contaSchema = z.object({
   observacoes: z.string().optional(),
   empresaId: z.string().uuid().optional(),
   filialId: z.string().uuid().optional(),
+  reguaId: z.string().uuid().optional().nullable(),
   // Issue #8 — campos financeiros
   nr_documento: z.string().optional(),
   especie: z.string().optional(),
   data_emissao: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   data_lancamento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   moeda: z.string().length(3).optional(),
+})
+
+const etapaReguaSchema = z.object({
+  ordem: z.number().int(),
+  offsetDias: z.number().int(),
+  canal: z.enum(['email', 'sms', 'whatsapp']),
+  mensagemTemplate: z.string().max(16000).optional().default(''),
+})
+
+const reguaCobrancaBodySchema = z.object({
+  nome: z.string().min(2),
+  perfil: z.enum(['geral', 'novo_cliente', 'bom_pagador', 'pagador_duvidoso', 'mau_pagador']),
+  descricao: z.string().optional().nullable(),
+  ativo: z.boolean().optional(),
+  ehPadrao: z.boolean().optional(),
+  etapas: z.array(etapaReguaSchema).optional().default([]),
 })
 
 // ─── Contas a Receber ─────────────────────────────────────────────
@@ -36,6 +53,7 @@ app.get('/receber', async (c) => {
   let where = `
     FROM contas_receber cr
     LEFT JOIN pessoas p ON p.id = cr.pessoa_id
+    LEFT JOIN regua_cobranca rg ON rg.id = cr.regua_id AND rg.tenant_id = cr.tenant_id
     WHERE cr.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
@@ -49,8 +67,9 @@ app.get('/receber', async (c) => {
   const selectList = `
     SELECT cr.id, cr.codigo, cr.descricao, cr.valor, cr.vencimento, cr.status,
            cr.categoria, cr.observacoes, cr.data_pagamento, cr.valor_pago,
-           cr.created_at, cr.pessoa_id, cr.pedido_id,
-           p.nome as cliente
+           cr.created_at, cr.pessoa_id, cr.pedido_id, cr.regua_id,
+           p.nome as cliente,
+           rg.nome as regua_nome
   `
 
   const query = `${selectList} ${where} ORDER BY cr.vencimento`
@@ -92,9 +111,10 @@ app.get('/receber/:id', async (c) => {
   const tenant = c.get('tenant')
   const result = await c.env.DB_SHARED
     .prepare(`
-      SELECT cr.*, p.nome as cliente
+      SELECT cr.*, p.nome as cliente, rg.nome as regua_nome
       FROM contas_receber cr
       LEFT JOIN pessoas p ON p.id = cr.pessoa_id
+      LEFT JOIN regua_cobranca rg ON rg.id = cr.regua_id AND rg.tenant_id = cr.tenant_id
       WHERE cr.id = ? AND cr.tenant_id = ?
     `)
     .bind(c.req.param('id'), tenant.tenantId)
@@ -107,6 +127,13 @@ app.get('/receber/:id', async (c) => {
 app.post('/receber', zValidator('json', contaSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
+  if (data.reguaId) {
+    const ok = await c.env.DB_SHARED
+      .prepare('SELECT 1 AS x FROM regua_cobranca WHERE id = ? AND tenant_id = ?')
+      .bind(data.reguaId, tenant.tenantId)
+      .first()
+    if (!ok) return c.json({ error: 'Régua de cobrança inválida ou inexistente.' }, 400)
+  }
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const uid = auditUserId(c)
@@ -116,8 +143,8 @@ app.post('/receber', zValidator('json', contaSchema), async (c) => {
       INSERT INTO contas_receber
         (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
          categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda,
-         created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         regua_id, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .bind(
       id, tenant.tenantId,
@@ -127,6 +154,7 @@ app.post('/receber', zValidator('json', contaSchema), async (c) => {
       data.nr_documento ?? null, data.especie ?? 'DM',
       data.data_emissao ?? null, data.data_lancamento ?? now.slice(0, 10),
       data.moeda ?? 'BRL',
+      data.reguaId ?? null,
       now, now, uid, uid,
     )
     .run()
@@ -137,11 +165,19 @@ app.post('/receber', zValidator('json', contaSchema), async (c) => {
 app.put('/receber/:id', zValidator('json', contaSchema.partial()), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
+  if (data.reguaId) {
+    const ok = await c.env.DB_SHARED
+      .prepare('SELECT 1 AS x FROM regua_cobranca WHERE id = ? AND tenant_id = ?')
+      .bind(data.reguaId, tenant.tenantId)
+      .first()
+    if (!ok) return c.json({ error: 'Régua de cobrança inválida ou inexistente.' }, 400)
+  }
 
   const fieldMap: Record<string, string> = {
     pessoaId: 'pessoa_id', descricao: 'descricao', valor: 'valor',
     vencimento: 'vencimento', categoria: 'categoria', observacoes: 'observacoes',
     empresaId: 'empresa_id', filialId: 'filial_id',
+    reguaId: 'regua_id',
     nr_documento: 'nr_documento', especie: 'especie',
     data_emissao: 'data_emissao', data_lancamento: 'data_lancamento', moeda: 'moeda',
   }
@@ -366,6 +402,165 @@ app.patch('/pagar/:id/pagar', async (c) => {
 
   await c.env.DB_SHARED.batch(stmts)
   return c.json({ message: 'Pagamento registrado.', movimento_gerado: !!contaBancariaId })
+})
+
+// ─── Régua de cobrança (issue #21) ────────────────────────────────
+
+app.get('/reguas-cobranca', async (c) => {
+  const tenant = c.get('tenant')
+  const { results } = await c.env.DB_SHARED.prepare(`
+    SELECT r.id, r.nome, r.perfil, r.descricao, r.ativo, r.eh_padrao, r.created_at, r.updated_at,
+           (SELECT COUNT(*) FROM regua_cobranca_etapa e WHERE e.regua_id = r.id) AS etapa_count
+    FROM regua_cobranca r
+    WHERE r.tenant_id = ?
+    ORDER BY r.perfil, r.nome
+  `).bind(tenant.tenantId).all()
+  return c.json({ reguas: results ?? [] })
+})
+
+app.get('/reguas-cobranca/:id', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const regua = await c.env.DB_SHARED
+    .prepare('SELECT * FROM regua_cobranca WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first()
+  if (!regua) return c.json({ error: 'Régua não encontrada.' }, 404)
+
+  const { results: etapasRows } = await c.env.DB_SHARED.prepare(`
+    SELECT id, ordem, offset_dias, canal, mensagem_template, created_at, updated_at
+    FROM regua_cobranca_etapa WHERE regua_id = ?
+    ORDER BY ordem ASC, offset_dias ASC
+  `).bind(id).all()
+
+  return c.json({ ...regua, etapas: etapasRows ?? [] })
+})
+
+app.post('/reguas-cobranca', zValidator('json', reguaCobrancaBodySchema), async (c) => {
+  const tenant = c.get('tenant')
+  const data = c.req.valid('json')
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+
+  if (data.ehPadrao) {
+    await c.env.DB_SHARED
+      .prepare('UPDATE regua_cobranca SET eh_padrao = 0 WHERE tenant_id = ?')
+      .bind(tenant.tenantId)
+      .run()
+  }
+
+  await c.env.DB_SHARED.prepare(`
+    INSERT INTO regua_cobranca
+      (id, tenant_id, nome, perfil, descricao, ativo, eh_padrao, created_at, updated_at, created_by, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id,
+    tenant.tenantId,
+    data.nome,
+    data.perfil,
+    data.descricao ?? null,
+    data.ativo === false ? 0 : 1,
+    data.ehPadrao ? 1 : 0,
+    now,
+    now,
+    uid,
+    uid,
+  ).run()
+
+  const etapas = data.etapas ?? []
+  if (etapas.length > 0) {
+    const stmts = etapas.map((e) =>
+      c.env.DB_SHARED.prepare(`
+        INSERT INTO regua_cobranca_etapa
+          (id, regua_id, ordem, offset_dias, canal, mensagem_template, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        id,
+        e.ordem,
+        e.offsetDias,
+        e.canal,
+        e.mensagemTemplate ?? '',
+        now,
+        now,
+      ))
+    await c.env.DB_SHARED.batch(stmts)
+  }
+
+  return c.json({ id, message: 'Régua criada.' }, 201)
+})
+
+app.put('/reguas-cobranca/:id', zValidator('json', reguaCobrancaBodySchema), async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const data = c.req.valid('json')
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+
+  const existing = await c.env.DB_SHARED
+    .prepare('SELECT id FROM regua_cobranca WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first()
+  if (!existing) return c.json({ error: 'Régua não encontrada.' }, 404)
+
+  if (data.ehPadrao) {
+    await c.env.DB_SHARED
+      .prepare('UPDATE regua_cobranca SET eh_padrao = 0 WHERE tenant_id = ? AND id != ?')
+      .bind(tenant.tenantId, id)
+      .run()
+  }
+
+  await c.env.DB_SHARED.prepare(`
+    UPDATE regua_cobranca SET
+      nome = ?, perfil = ?, descricao = ?, ativo = ?, eh_padrao = ?, updated_at = ?, updated_by = ?
+    WHERE id = ? AND tenant_id = ?
+  `).bind(
+    data.nome,
+    data.perfil,
+    data.descricao ?? null,
+    data.ativo === false ? 0 : 1,
+    data.ehPadrao ? 1 : 0,
+    now,
+    uid,
+    id,
+    tenant.tenantId,
+  ).run()
+
+  await c.env.DB_SHARED.prepare('DELETE FROM regua_cobranca_etapa WHERE regua_id = ?').bind(id).run()
+
+  const etapas = data.etapas ?? []
+  if (etapas.length > 0) {
+    const stmts = etapas.map((e) =>
+      c.env.DB_SHARED.prepare(`
+        INSERT INTO regua_cobranca_etapa
+          (id, regua_id, ordem, offset_dias, canal, mensagem_template, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        id,
+        e.ordem,
+        e.offsetDias,
+        e.canal,
+        e.mensagemTemplate ?? '',
+        now,
+        now,
+      ))
+    await c.env.DB_SHARED.batch(stmts)
+  }
+
+  return c.json({ message: 'Régua atualizada.' })
+})
+
+app.delete('/reguas-cobranca/:id', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const r = await c.env.DB_SHARED
+    .prepare('DELETE FROM regua_cobranca WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .run()
+  if (!r.meta?.changes) return c.json({ error: 'Régua não encontrada.' }, 404)
+  return c.json({ message: 'Régua removida.' })
 })
 
 // ─── Dashboard ────────────────────────────────────────────────────
