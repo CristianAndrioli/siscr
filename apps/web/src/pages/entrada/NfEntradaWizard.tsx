@@ -91,6 +91,7 @@ export default function NfEntradaWizardPage() {
     sugestoes: SugestaoRow[];
     assinatura_valida: boolean;
     fornecedor_id: string | null;
+    fornecedor_sera_cadastrado?: boolean;
     nfce_sem_dest?: boolean;
   } | null>(null);
   /** Confirmação explícita para NFC-e sem CNPJ do destinatário no XML (issue #13 / cupom). */
@@ -374,11 +375,15 @@ export default function NfEntradaWizardPage() {
               </p>
             )}
             <p className="text-xs text-slate-500">
-              Fornecedor no cadastro:{' '}
+              Fornecedor (emitente):{' '}
               {preview.fornecedor_id ? (
-                <span className="text-emerald-600 font-medium">encontrado pelo CNPJ do emitente</span>
+                <span className="text-emerald-600 font-medium">já cadastrado pelo CNPJ do emitente</span>
+              ) : preview.fornecedor_sera_cadastrado ? (
+                <span className="text-amber-700 dark:text-amber-300">
+                  será criado automaticamente ao confirmar (contas a pagar e estoque usam esse cadastro)
+                </span>
               ) : (
-                <span>vincule depois na tela da nota, se necessário para contas a pagar.</span>
+                <span>—</span>
               )}
             </p>
           </>

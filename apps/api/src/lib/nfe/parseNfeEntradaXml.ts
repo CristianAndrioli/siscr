@@ -43,6 +43,16 @@ export type NfeEntradaParsed = {
   valorProdutos: number
   itens: NfeEntradaItem[]
   duplicatas: NfeEntradaDuplicata[]
+  /** Dados extras do emitente (cadastro automático de fornecedor). */
+  emitIe?: string
+  emitTelefone?: string
+  emitCep?: string
+  emitLogradouro?: string
+  emitNumero?: string
+  emitBairro?: string
+  emitCidade?: string
+  emitUf?: string
+  emitCodigoMunicipio?: string
 }
 
 function onlyDigits(s: string): string {
@@ -142,6 +152,23 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
   if (emitCnpj.length !== 14) {
     throw new Error('Emitente sem CNPJ válido (esperado para NF-e de mercadoria).')
   }
+
+  const emitIeRaw = text(firstByLocalFrom(emit, 'IE'))
+  const emitIe = emitIeRaw ? emitIeRaw.slice(0, 20) : undefined
+  const enderEmit = firstByLocalFrom(emit, 'enderEmit')
+  const emitCepRaw = enderEmit ? onlyDigits(text(firstByLocalFrom(enderEmit, 'CEP'))) : ''
+  const emitCep = emitCepRaw.length >= 5 ? emitCepRaw.slice(0, 9) : undefined
+  const emitLogradouro = enderEmit
+    ? text(firstByLocalFrom(enderEmit, 'xLgr')).slice(0, 200) || undefined
+    : undefined
+  const emitNumero = enderEmit ? text(firstByLocalFrom(enderEmit, 'nro')).slice(0, 20) || undefined : undefined
+  const emitBairro = enderEmit ? text(firstByLocalFrom(enderEmit, 'xBairro')).slice(0, 120) || undefined : undefined
+  const cMunDig = enderEmit ? onlyDigits(text(firstByLocalFrom(enderEmit, 'cMun'))) : ''
+  const emitCodigoMunicipio = cMunDig.length > 0 ? cMunDig.slice(0, 7) : undefined
+  const emitCidade = enderEmit ? text(firstByLocalFrom(enderEmit, 'xMun')).slice(0, 120) || undefined : undefined
+  const emitUf = enderEmit ? text(firstByLocalFrom(enderEmit, 'UF')).slice(0, 2).toUpperCase() || undefined : undefined
+  const foneDigits = enderEmit ? onlyDigits(text(firstByLocalFrom(enderEmit, 'fone'))) : ''
+  const emitTelefone = foneDigits.length >= 8 ? foneDigits.slice(0, 20) : undefined
 
   const ide = firstByLocalFrom(infNFe, 'ide')
   const dhEmi = ide ? text(firstByLocalFrom(ide, 'dhEmi')) : ''
@@ -254,6 +281,15 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
     valorProdutos: vProd,
     itens,
     duplicatas,
+    emitIe,
+    emitTelefone,
+    emitCep,
+    emitLogradouro,
+    emitNumero,
+    emitBairro,
+    emitCidade,
+    emitUf,
+    emitCodigoMunicipio,
   }
 }
 

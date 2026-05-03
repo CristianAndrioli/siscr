@@ -38,6 +38,7 @@ export async function previewNfEntradaXml(file: File, empresaId: string) {
     sugestoes: { indice: number; produtoId: string | null; motivo: string; rotulo?: string }[];
     assinatura_valida: boolean;
     fornecedor_id: string | null;
+    fornecedor_sera_cadastrado?: boolean;
     nfce_sem_dest?: boolean;
   }>('/tenant/entrada/nf-entradas/preview-xml', form);
   return data;

@@ -219,6 +219,209 @@ async function assertImportacaoEntradaPermitida(
   await assertDestinatarioEhEmpresa(db, tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
 }
 
+async function garantirFornecedorDoEmitente(
+  db: D1Database,
+  tenantId: string,
+  empresaId: string,
+  filialId: string | null,
+  parsed: NfeEntradaParsed,
+  uid: string | null,
+): Promise<{ id: string; criado: boolean }> {
+  const existente = await findFornecedorPorCnpj(db, tenantId, empresaId, parsed.emitenteCnpj)
+  if (existente) return { id: existente, criado: false }
+
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const nome = (parsed.emitenteNome || `Fornecedor ${parsed.emitenteCnpj}`).slice(0, 500)
+  const doc = normalizarCnpj(parsed.emitenteCnpj)
+
+  await db
+    .prepare(
+      `INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone,
+         cep, logradouro, numero, complemento, bairro, cidade, uf,
+         inscricao_estadual, ind_ie_dest, codigo_municipio, codigo_pais,
+         ativo, created_at, updated_at, created_by, updated_by)
+       VALUES (?, ?, ?, ?, 'PJ', 'fornecedor', ?, ?, NULL, ?, ?, ?, NULL, ?, ?, ?, ?, ?, '9', ?, '1058', 1, ?, ?, ?, ?)`,
+    )
+    .bind(
+      id,
+      tenantId,
+      empresaId,
+      filialId,
+      nome,
+      doc,
+      parsed.emitTelefone ?? null,
+      parsed.emitCep ?? null,
+      parsed.emitLogradouro ?? null,
+      parsed.emitNumero ?? null,
+      parsed.emitBairro ?? null,
+      parsed.emitCidade ?? null,
+      parsed.emitUf ?? null,
+      parsed.emitIe ?? null,
+      parsed.emitCodigoMunicipio ?? null,
+      now,
+      now,
+      uid,
+      uid,
+    )
+    .run()
+
+  return { id, criado: true }
+}
+
+type DupParcela = { numero?: string; vencimento: string; valor: number }
+
+function duplicatasParaCp(ne: {
+  cobranca_json: string | null
+  data_emissao: string | null
+  valor_total: number
+}): DupParcela[] {
+  let duplicatas: DupParcela[] = []
+  try {
+    duplicatas = JSON.parse(ne.cobranca_json || '[]') as DupParcela[]
+  } catch {
+    duplicatas = []
+  }
+  if (!duplicatas.length) {
+    const venc = ne.data_emissao?.slice(0, 10) || new Date().toISOString().slice(0, 10)
+    duplicatas = [{ vencimento: venc, valor: Number(ne.valor_total) || 0 }]
+  }
+  return duplicatas
+}
+
+function appendStmtContasPagarNfEntrada(
+  db: D1Database,
+  stmts: ReturnType<D1Database['prepare']>[],
+  idsCriados: string[],
+  tenantId: string,
+  uid: string | null,
+  now: string,
+  ne: {
+    id: string
+    empresa_id: string
+    filial_id: string | null
+    fornecedor_id: string | null
+    cobranca_json: string | null
+    data_emissao: string | null
+    valor_total: number
+    numero: number | null
+    serie: string | null
+    emitente_nome: string | null
+    emitente_cnpj: string
+    chave_acesso: string
+  },
+  categoria: string,
+): void {
+  if (!ne.fornecedor_id) return
+  if ((Number(ne.valor_total) || 0) <= 0) return
+
+  const duplicatas = duplicatasParaCp(ne)
+  const nrDoc = `NFe ${ne.numero}/${ne.serie || '1'}`
+  const descBase = `NF-e entrada ${ne.emitente_nome || ne.emitente_cnpj} — chave ${ne.chave_acesso}`
+
+  for (let i = 0; i < duplicatas.length; i++) {
+    const dup = duplicatas[i]!
+    const cid = crypto.randomUUID()
+    idsCriados.push(cid)
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO contas_pagar
+          (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
+           categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda, nf_entrada_id,
+           created_at, updated_at, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, 'DM', ?, ?, 'BRL', ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          cid,
+          tenantId,
+          ne.empresa_id,
+          ne.filial_id,
+          ne.fornecedor_id,
+          duplicatas.length > 1 ? `${descBase} — parcela ${i + 1}` : descBase,
+          dup.valor,
+          dup.vencimento,
+          categoria,
+          `Gerado automaticamente a partir da NF-e de entrada.`,
+          nrDoc,
+          ne.data_emissao?.slice(0, 10) || null,
+          now.slice(0, 10),
+          ne.id,
+          now,
+          now,
+          uid,
+          uid,
+        ),
+    )
+  }
+}
+
+function appendStmtEntradaEstoquePorItens(
+  db: D1Database,
+  stmts: ReturnType<D1Database['prepare']>[],
+  tenantId: string,
+  nfEntradaId: string,
+  itensOut: Record<string, unknown>[],
+  usuarioId: string | null,
+  uid: string | null,
+  now: string,
+): void {
+  for (const row of itensOut) {
+    const produtoId = typeof row.produto_id === 'string' ? row.produto_id : ''
+    const qtd = Number(row.quantidade) || 0
+    if (!produtoId || qtd <= 0) continue
+
+    const movId = crypto.randomUUID()
+    const desc = String(row.descricao ?? 'Item').slice(0, 120)
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO movimentacoes_estoque
+        (id, tenant_id, produto_id, tipo, quantidade, location, motivo, referencia_id, usuario_id, created_at, created_by, updated_by, updated_at)
+       VALUES (?, ?, ?, 'entrada', ?, 'GERAL', ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          movId,
+          tenantId,
+          produtoId,
+          qtd,
+          `NF-e entrada — ${desc}`,
+          nfEntradaId,
+          usuarioId,
+          now,
+          uid,
+          uid,
+          now,
+        ),
+    )
+
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO estoque (id, tenant_id, produto_id, location, quantidade, updated_at, created_at, created_by, updated_by)
+       VALUES (?, ?, ?, 'GERAL', ?, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id, produto_id, location) DO UPDATE SET
+         quantidade = quantidade + ?,
+         updated_at = ?,
+         updated_by = ?`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          tenantId,
+          produtoId,
+          qtd,
+          now,
+          now,
+          uid,
+          uid,
+          qtd,
+          now,
+          uid,
+        ),
+    )
+  }
+}
+
 // GET /nf-entradas
 app.get('/nf-entradas', async (c) => {
   const tenant = c.get('tenant')
@@ -322,6 +525,7 @@ app.post('/nf-entradas/preview-xml', async (c) => {
     sugestoes,
     assinatura_valida: assinaturaValida,
     fornecedor_id: fornecedorId,
+    fornecedor_sera_cadastrado: !fornecedorId,
     xml_tamanho_bytes: ab.byteLength,
     nfce_sem_dest: nfceSemDest,
   })
@@ -456,7 +660,18 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
     assinaturaValida = false
   }
 
-  const fornecedorId = await findFornecedorPorCnpj(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.emitenteCnpj)
+  const usuarioMov = (c.get('user') as { userId?: string } | undefined)?.userId ?? null
+
+  const fornecedorRes = await garantirFornecedorDoEmitente(
+    c.env.DB_SHARED,
+    tenant.tenantId,
+    empresaId,
+    filialId ?? null,
+    parsed,
+    uid,
+  )
+  const fornecedorId = fornecedorRes.id
+
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const xmlPath = `tenants/${tenant.tenantId}/nfe_entrada/${parsed.chaveAcesso}.xml`
@@ -466,47 +681,97 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
     httpMetadata: { contentType: 'application/xml' },
   })
 
-  await c.env.DB_SHARED
-    .prepare(
-      `INSERT INTO nf_entradas
+  const neRow = {
+    id,
+    empresa_id: empresaId,
+    filial_id: filialId ?? null,
+    fornecedor_id: fornecedorId,
+    cobranca_json: JSON.stringify(parsed.duplicatas),
+    data_emissao: parsed.dataEmissao,
+    valor_total: parsed.valorTotal,
+    numero: parsed.numero,
+    serie: parsed.serie,
+    emitente_nome: parsed.emitenteNome || null,
+    emitente_cnpj: parsed.emitenteCnpj,
+    chave_acesso: parsed.chaveAcesso,
+  }
+
+  const stmts: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
+  const contasPagarCriadas: string[] = []
+
+  stmts.push(
+    c.env.DB_SHARED
+      .prepare(
+        `INSERT INTO nf_entradas
         (id, tenant_id, empresa_id, filial_id, chave_acesso, xml_path, emitente_cnpj, emitente_nome,
          destinatario_cnpj, data_emissao, numero, serie, natureza_operacao, valor_total, valor_produtos,
          fornecedor_id, itens_json, cobranca_json, assinatura_valida, status, created_at, updated_at, created_by, updated_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      tenant.tenantId,
-      empresaId,
-      filialId ?? null,
-      parsed.chaveAcesso,
-      xmlPath,
-      parsed.emitenteCnpj,
-      parsed.emitenteNome || null,
-      destCnpjGravacao,
-      parsed.dataEmissao,
-      parsed.numero,
-      parsed.serie,
-      parsed.naturezaOperacao || null,
-      parsed.valorTotal,
-      parsed.valorProdutos,
-      fornecedorId,
-      JSON.stringify(itensOut),
-      JSON.stringify(parsed.duplicatas),
-      assinaturaValida ? 1 : 0,
-      now,
-      now,
-      uid,
-      uid,
-    )
-    .run()
+      )
+      .bind(
+        id,
+        tenant.tenantId,
+        empresaId,
+        filialId ?? null,
+        parsed.chaveAcesso,
+        xmlPath,
+        parsed.emitenteCnpj,
+        parsed.emitenteNome || null,
+        destCnpjGravacao,
+        parsed.dataEmissao,
+        parsed.numero,
+        parsed.serie,
+        parsed.naturezaOperacao || null,
+        parsed.valorTotal,
+        parsed.valorProdutos,
+        fornecedorId,
+        JSON.stringify(itensOut),
+        JSON.stringify(parsed.duplicatas),
+        assinaturaValida ? 1 : 0,
+        now,
+        now,
+        uid,
+        uid,
+      ),
+  )
+
+  appendStmtEntradaEstoquePorItens(
+    c.env.DB_SHARED,
+    stmts,
+    tenant.tenantId,
+    id,
+    itensOut,
+    usuarioMov,
+    uid,
+    now,
+  )
+
+  appendStmtContasPagarNfEntrada(
+    c.env.DB_SHARED,
+    stmts,
+    contasPagarCriadas,
+    tenant.tenantId,
+    uid,
+    now,
+    neRow,
+    'Fornecedores',
+  )
+
+  await c.env.DB_SHARED.batch(stmts)
 
   return c.json(
     {
       id,
       message: 'NF-e importada com vínculo de produtos.',
-      fornecedor_vinculado: !!fornecedorId,
+      fornecedor_vinculado: true,
+      fornecedor_criado: fornecedorRes.criado,
       assinatura_valida: assinaturaValida,
+      contas_pagar_criadas: contasPagarCriadas,
+      estoque_itens_movimentados: itensOut.filter((it) => {
+        const pid = typeof it.produto_id === 'string' ? it.produto_id : ''
+        const q = Number(it.quantidade) || 0
+        return Boolean(pid && q > 0)
+      }).length,
     },
     201,
   )
@@ -633,11 +898,19 @@ app.post('/nf-entradas/importar-xml', async (c) => {
     assinaturaValida = false
   }
 
-  const fornecedorId = await findFornecedorPorCnpj(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.emitenteCnpj)
+  const uid = auditUserId(c)
+  const fornecedorRes = await garantirFornecedorDoEmitente(
+    c.env.DB_SHARED,
+    tenant.tenantId,
+    empresaId,
+    filialId,
+    parsed,
+    uid,
+  )
+  const fornecedorId = fornecedorRes.id
 
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
-  const uid = auditUserId(c)
   const xmlPath = `tenants/${tenant.tenantId}/nfe_entrada/${parsed.chaveAcesso}.xml`
 
   await c.env.R2_STORAGE.put(xmlPath, ab, {
@@ -646,47 +919,81 @@ app.post('/nf-entradas/importar-xml', async (c) => {
 
   const cobrancaJson = JSON.stringify(parsed.duplicatas)
 
-  await c.env.DB_SHARED
-    .prepare(
-      `INSERT INTO nf_entradas
+  const neRow = {
+    id,
+    empresa_id: empresaId,
+    filial_id: filialId,
+    fornecedor_id: fornecedorId,
+    cobranca_json: cobrancaJson,
+    data_emissao: parsed.dataEmissao,
+    valor_total: parsed.valorTotal,
+    numero: parsed.numero,
+    serie: parsed.serie,
+    emitente_nome: parsed.emitenteNome || null,
+    emitente_cnpj: parsed.emitenteCnpj,
+    chave_acesso: parsed.chaveAcesso,
+  }
+
+  const stmtsImp: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
+  const contasPagarCriadasImp: string[] = []
+
+  stmtsImp.push(
+    c.env.DB_SHARED
+      .prepare(
+        `INSERT INTO nf_entradas
         (id, tenant_id, empresa_id, filial_id, chave_acesso, xml_path, emitente_cnpj, emitente_nome,
          destinatario_cnpj, data_emissao, numero, serie, natureza_operacao, valor_total, valor_produtos,
          fornecedor_id, itens_json, cobranca_json, assinatura_valida, status, created_at, updated_at, created_by, updated_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      tenant.tenantId,
-      empresaId,
-      filialId,
-      parsed.chaveAcesso,
-      xmlPath,
-      parsed.emitenteCnpj,
-      parsed.emitenteNome || null,
-      destCnpjGravacao,
-      parsed.dataEmissao,
-      parsed.numero,
-      parsed.serie,
-      parsed.naturezaOperacao || null,
-      parsed.valorTotal,
-      parsed.valorProdutos,
-      fornecedorId,
-      JSON.stringify(parsed.itens),
-      cobrancaJson,
-      assinaturaValida ? 1 : 0,
-      now,
-      now,
-      uid,
-      uid,
-    )
-    .run()
+      )
+      .bind(
+        id,
+        tenant.tenantId,
+        empresaId,
+        filialId,
+        parsed.chaveAcesso,
+        xmlPath,
+        parsed.emitenteCnpj,
+        parsed.emitenteNome || null,
+        destCnpjGravacao,
+        parsed.dataEmissao,
+        parsed.numero,
+        parsed.serie,
+        parsed.naturezaOperacao || null,
+        parsed.valorTotal,
+        parsed.valorProdutos,
+        fornecedorId,
+        JSON.stringify(parsed.itens),
+        cobrancaJson,
+        assinaturaValida ? 1 : 0,
+        now,
+        now,
+        uid,
+        uid,
+      ),
+  )
+
+  appendStmtContasPagarNfEntrada(
+    c.env.DB_SHARED,
+    stmtsImp,
+    contasPagarCriadasImp,
+    tenant.tenantId,
+    uid,
+    now,
+    neRow,
+    'Fornecedores',
+  )
+
+  await c.env.DB_SHARED.batch(stmtsImp)
 
   return c.json(
     {
       id,
       message: 'NF-e importada com sucesso.',
-      fornecedor_vinculado: !!fornecedorId,
+      fornecedor_vinculado: true,
+      fornecedor_criado: fornecedorRes.criado,
       assinatura_valida: assinaturaValida,
+      contas_pagar_criadas: contasPagarCriadasImp,
     },
     201,
   )
@@ -727,60 +1034,42 @@ app.post('/nf-entradas/:id/gerar-contas-pagar', zValidator('json', gerarCpSchema
     return c.json({ error: 'Já existem contas a pagar vinculadas a esta NF-e.' }, 409)
   }
 
-  let duplicatas: { numero?: string; vencimento: string; valor: number }[] = []
-  try {
-    duplicatas = JSON.parse((ne.cobranca_json as string) || '[]') as typeof duplicatas
-  } catch {
-    duplicatas = []
-  }
-
-  if (!duplicatas.length) {
-    const venc = (ne.data_emissao as string)?.slice(0, 10) || new Date().toISOString().slice(0, 10)
-    duplicatas = [{ vencimento: venc, valor: Number(ne.valor_total) || 0 }]
-  }
-
-  const empresaId = ne.empresa_id as string
-  const filialId = (ne.filial_id as string) || null
-  const pessoaId = ne.fornecedor_id as string
   const now = new Date().toISOString()
   const uid = auditUserId(c)
-  const nrDoc = `NFe ${ne.numero}/${ne.serie || '1'}`
-  const descBase = `NF-e entrada ${ne.emitente_nome || ne.emitente_cnpj} — chave ${ne.chave_acesso}`
+
+  const neRow = {
+    id,
+    empresa_id: ne.empresa_id as string,
+    filial_id: (ne.filial_id as string) || null,
+    fornecedor_id: ne.fornecedor_id as string,
+    cobranca_json: (ne.cobranca_json as string) || null,
+    data_emissao: (ne.data_emissao as string) || null,
+    valor_total: Number(ne.valor_total) || 0,
+    numero: ne.numero as number | null,
+    serie: (ne.serie as string) || null,
+    emitente_nome: (ne.emitente_nome as string) || null,
+    emitente_cnpj: String(ne.emitente_cnpj ?? ''),
+    chave_acesso: String(ne.chave_acesso ?? ''),
+  }
 
   const criadas: string[] = []
   const stmts: ReturnType<typeof c.env.DB_SHARED.prepare>[] = []
 
-  for (let i = 0; i < duplicatas.length; i++) {
-    const dup = duplicatas[i]!
-    const cid = crypto.randomUUID()
-    criadas.push(cid)
-    stmts.push(
-      c.env.DB_SHARED.prepare(
-        `INSERT INTO contas_pagar
-          (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
-           categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda, nf_entrada_id,
-           created_at, updated_at, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, 'DM', ?, ?, 'BRL', ?, ?, ?, ?, ?)`,
-      ).bind(
-        cid,
-        tenant.tenantId,
-        empresaId,
-        filialId,
-        pessoaId,
-        duplicatas.length > 1 ? `${descBase} — parcela ${i + 1}` : descBase,
-        dup.valor,
-        dup.vencimento,
-        categoria ?? 'Fornecedores',
-        `Gerado automaticamente a partir da NF-e de entrada.`,
-        nrDoc,
-        (ne.data_emissao as string)?.slice(0, 10) || null,
-        now.slice(0, 10),
-        id,
-        now,
-        now,
-        uid,
-        uid,
-      ),
+  appendStmtContasPagarNfEntrada(
+    c.env.DB_SHARED,
+    stmts,
+    criadas,
+    tenant.tenantId,
+    uid,
+    now,
+    neRow,
+    categoria ?? 'Fornecedores',
+  )
+
+  if (criadas.length === 0) {
+    return c.json(
+      { error: 'Valor da nota é zero ou não há dados para gerar parcelas. Verifique o XML ou use outra NF-e.' },
+      400,
     )
   }
 
