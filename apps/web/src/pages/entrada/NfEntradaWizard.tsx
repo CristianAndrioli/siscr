@@ -85,11 +85,16 @@ export default function NfEntradaWizardPage() {
       valorTotal: number;
       valorProdutos: number;
       itens: ItemXml[];
+      modelo?: number;
+      destinatarioAusente?: boolean;
     };
     sugestoes: SugestaoRow[];
     assinatura_valida: boolean;
     fornecedor_id: string | null;
+    nfce_sem_dest?: boolean;
   } | null>(null);
+  /** Confirmação explícita para NFC-e sem CNPJ do destinatário no XML (issue #13 / cupom). */
+  const [confirmarDestinoNfce, setConfirmarDestinoNfce] = useState(false);
   /** Por item: valor do select = id do produto ou CRIAR */
   const [vinculoSelect, setVinculoSelect] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
@@ -141,6 +146,7 @@ export default function NfEntradaWizardPage() {
     try {
       const data = await entradaService.previewNfEntradaXml(file, empresaId);
       setPreview(data as typeof preview);
+      setConfirmarDestinoNfce(false);
       const sel: Record<number, string> = {};
       for (const s of data.sugestoes as SugestaoRow[]) {
         sel[s.indice] = s.produtoId ?? CRIAR;
@@ -174,6 +180,12 @@ export default function NfEntradaWizardPage() {
 
   const handleConfirm = async () => {
     if (!preview || !file || !empresaId) return;
+    if (preview.nfce_sem_dest && !confirmarDestinoNfce) {
+      setError(
+        'Marque a confirmação de que esta compra é da empresa selecionada. NFC-e em cupom costuma não trazer o CNPJ do destinatário no XML.',
+      );
+      return;
+    }
     setConfirmLoading(true);
     setError('');
     try {
@@ -183,6 +195,7 @@ export default function NfEntradaWizardPage() {
         empresaId,
         filialId: filialId || null,
         vinculos: montarVinculosConfirm(),
+        confirmarDestinoEmpresa: preview.nfce_sem_dest ? confirmarDestinoNfce : undefined,
       });
       navigate(`/entrada/notas/${res.id}`);
     } catch (e: unknown) {
@@ -258,7 +271,9 @@ export default function NfEntradaWizardPage() {
           <>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">XML e destinatário</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              O destinatário da NF-e deve ser o <strong>CNPJ da empresa</strong> selecionada (validação automática).
+              Em NF-e de compra (modelo 55), o destinatário no XML deve ser o <strong>CNPJ da empresa</strong> selecionada.
+              Cupons NFC-e (modelo 65) muitas vezes não trazem o destinatário — nesse caso o sistema pedirá confirmação nas
+              etapas seguintes.
             </p>
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="block">
@@ -341,6 +356,18 @@ export default function NfEntradaWizardPage() {
                 <dd className="font-mono text-xs break-all text-slate-600 dark:text-slate-400">{preview.parsed.chaveAcesso}</dd>
               </div>
             </dl>
+            {preview.parsed.modelo !== undefined && (
+              <p className="text-xs text-slate-500">
+                Modelo fiscal: <span className="font-mono">{preview.parsed.modelo}</span>
+                {preview.parsed.modelo === 65 ? ' (NFC-e)' : ''}
+              </p>
+            )}
+            {preview.nfce_sem_dest && (
+              <p className="text-sm text-amber-900 dark:text-amber-100 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                Este XML é <strong>NFC-e</strong> e não identifica o destinatário (CNPJ). Para importar, você precisará
+                confirmar na etapa final que a compra é da empresa selecionada. O CNPJ gravado na nota será o da empresa.
+              </p>
+            )}
             {!preview.assinatura_valida && (
               <p className="text-sm text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
                 Assinatura digital não validada ou ausente — confira o arquivo antes de usar em produção.
@@ -432,7 +459,21 @@ export default function NfEntradaWizardPage() {
               </li>
               <li>• Total da nota: {fmtBRL(preview.parsed.valorTotal)}</li>
             </ul>
-            <p className="text-xs text-slate-500">
+            {preview.nfce_sem_dest && (
+              <label className="flex items-start gap-3 mt-4 p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={confirmarDestinoNfce}
+                  onChange={(e) => setConfirmarDestinoNfce(e.target.checked)}
+                />
+                <span className="text-sm text-slate-700 dark:text-slate-200">
+                  Confirmo que esta NFC-e refere-se a compra da empresa selecionada e autorizo gravar o CNPJ da empresa
+                  como destinatário (o arquivo não traz esse dado).
+                </span>
+              </label>
+            )}
+            <p className="text-xs text-slate-500 mt-3">
               Após confirmar, a NF-e fica registrada e os itens guardam o vínculo com o produto para estoque e relatórios.
             </p>
           </>
@@ -468,7 +509,11 @@ export default function NfEntradaWizardPage() {
           ) : (
             <button
               type="button"
-              disabled={confirmLoading || !preview}
+              disabled={
+                confirmLoading ||
+                !preview ||
+                (Boolean(preview.nfce_sem_dest) && !confirmarDestinoNfce)
+              }
               onClick={handleConfirm}
               className="px-5 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl disabled:opacity-50"
             >

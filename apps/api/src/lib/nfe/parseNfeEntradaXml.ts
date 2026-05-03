@@ -28,6 +28,13 @@ export type NfeEntradaParsed = {
   emitenteNome: string
   destinatarioDoc: string
   destinatarioTipo: 'CNPJ' | 'CPF'
+  /** Modelo fiscal (`ide/mod`): 55 NF-e, 65 NFC-e, etc. */
+  modelo: number
+  /**
+   * True quando não há grupo `dest` no XML (comum em NFC-e de consumidor).
+   * Nesse caso o CNPJ do destinatário deve ser inferido da empresa escolhida na importação.
+   */
+  destinatarioAusente: boolean
   dataEmissao: string
   numero: number
   serie: string
@@ -136,22 +143,6 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
     throw new Error('Emitente sem CNPJ válido (esperado para NF-e de mercadoria).')
   }
 
-  const dest = firstByLocalFrom(infNFe, 'dest')
-  if (!dest) throw new Error('Grupo dest ausente.')
-  const cnpjDest = onlyDigits(text(firstByLocalFrom(dest, 'CNPJ')))
-  const cpfDest = onlyDigits(text(firstByLocalFrom(dest, 'CPF')))
-  let destinatarioDoc = ''
-  let destinatarioTipo: 'CNPJ' | 'CPF' = 'CNPJ'
-  if (cnpjDest.length === 14) {
-    destinatarioDoc = cnpjDest
-    destinatarioTipo = 'CNPJ'
-  } else if (cpfDest.length === 11) {
-    destinatarioDoc = cpfDest
-    destinatarioTipo = 'CPF'
-  } else {
-    throw new Error('Destinatário sem CNPJ/CPF reconhecível.')
-  }
-
   const ide = firstByLocalFrom(infNFe, 'ide')
   const dhEmi = ide ? text(firstByLocalFrom(ide, 'dhEmi')) : ''
   const dEmi = ide ? text(firstByLocalFrom(ide, 'dEmi')) : ''
@@ -159,6 +150,36 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
   const nNF = ide ? parseInt(text(firstByLocalFrom(ide, 'nNF')) || '0', 10) : 0
   const serie = ide ? text(firstByLocalFrom(ide, 'serie')) : '1'
   const natOp = ide ? text(firstByLocalFrom(ide, 'natOp')) : ''
+  const modRaw = ide ? text(firstByLocalFrom(ide, 'mod')) : ''
+  const modParsed = parseInt(modRaw, 10)
+  const modelo = Number.isFinite(modParsed) && modParsed > 0 ? modParsed : 55
+
+  const dest = firstByLocalFrom(infNFe, 'dest')
+  let destinatarioDoc = ''
+  let destinatarioTipo: 'CNPJ' | 'CPF' = 'CNPJ'
+  let destinatarioAusente = false
+
+  if (dest) {
+    const cnpjDest = onlyDigits(text(firstByLocalFrom(dest, 'CNPJ')))
+    const cpfDest = onlyDigits(text(firstByLocalFrom(dest, 'CPF')))
+    if (cnpjDest.length === 14) {
+      destinatarioDoc = cnpjDest
+      destinatarioTipo = 'CNPJ'
+    } else if (cpfDest.length === 11) {
+      destinatarioDoc = cpfDest
+      destinatarioTipo = 'CPF'
+    } else {
+      throw new Error('Destinatário sem CNPJ/CPF reconhecível.')
+    }
+  } else if (modelo === 65) {
+    destinatarioAusente = true
+    destinatarioDoc = ''
+    destinatarioTipo = 'CNPJ'
+  } else {
+    throw new Error(
+      'Grupo dest ausente no XML. Notas de compra em NF-e (modelo 55) devem trazer o destinatário. NFC-e (modelo 65) sem destinatário exige confirmação do comprador na importação.',
+    )
+  }
 
   const totalEl = firstByLocalFrom(infNFe, 'total')
   const icmsTot = totalEl ? firstByLocalFrom(totalEl, 'ICMSTot') : null
@@ -223,6 +244,8 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
     emitenteNome: emitNome,
     destinatarioDoc,
     destinatarioTipo,
+    modelo,
+    destinatarioAusente,
     dataEmissao,
     numero: nNF,
     serie: serie || '1',

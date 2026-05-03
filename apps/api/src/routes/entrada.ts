@@ -4,7 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { auditUserId } from '../lib/audit'
 import { parseListPagination } from '../lib/listPagination'
-import type { NfeEntradaItem } from '../lib/nfe/parseNfeEntradaXml'
+import type { NfeEntradaItem, NfeEntradaParsed } from '../lib/nfe/parseNfeEntradaXml'
 import { normalizarCnpj, parseNfeEntradaXml } from '../lib/nfe/parseNfeEntradaXml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import { nextCodigo } from '../lib/nextCodigo'
@@ -157,6 +157,68 @@ async function assertDestinatarioEhEmpresa(
   }
 }
 
+/** CNPJ a gravar em `nf_entradas.destinatario_cnpj` (XML ou empresa quando NFC-e sem dest). */
+async function cnpjDestinatarioParaGravacao(
+  db: D1Database,
+  tenantId: string,
+  empresaId: string,
+  parsed: NfeEntradaParsed,
+): Promise<string> {
+  if (!parsed.destinatarioAusente) {
+    return parsed.destinatarioDoc
+  }
+  const emp = await db
+    .prepare(`SELECT cnpj FROM empresas WHERE id = ? AND tenant_id = ?`)
+    .bind(empresaId, tenantId)
+    .first<{ cnpj: string }>()
+  if (!emp) throw new Error('Empresa não encontrada.')
+  return normalizarCnpj(emp.cnpj)
+}
+
+/**
+ * Pré-visualização: permite NFC-e (65) sem dest; demais exigem casamento de CNPJ com a empresa.
+ */
+async function assertPreviewDestinatarioPermitido(
+  db: D1Database,
+  tenantId: string,
+  empresaId: string,
+  parsed: NfeEntradaParsed,
+): Promise<void> {
+  if (parsed.destinatarioAusente && parsed.modelo === 65) {
+    const emp = await db
+      .prepare(`SELECT id FROM empresas WHERE id = ? AND tenant_id = ?`)
+      .bind(empresaId, tenantId)
+      .first<{ id: string }>()
+    if (!emp) throw new Error('Empresa não encontrada.')
+    return
+  }
+  await assertDestinatarioEhEmpresa(db, tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
+}
+
+/** Na gravação, NFC-e sem dest exige confirmação explícita do usuário. */
+async function assertImportacaoEntradaPermitida(
+  db: D1Database,
+  tenantId: string,
+  empresaId: string,
+  parsed: NfeEntradaParsed,
+  confirmarDestinoEmpresa: boolean,
+): Promise<void> {
+  if (parsed.destinatarioAusente && parsed.modelo === 65) {
+    if (!confirmarDestinoEmpresa) {
+      throw new Error(
+        'Esta NFC-e não identifica o destinatário no XML. Confirme que a compra é da empresa selecionada para continuar.',
+      )
+    }
+    const emp = await db
+      .prepare(`SELECT id FROM empresas WHERE id = ? AND tenant_id = ?`)
+      .bind(empresaId, tenantId)
+      .first<{ id: string }>()
+    if (!emp) throw new Error('Empresa não encontrada.')
+    return
+  }
+  await assertDestinatarioEhEmpresa(db, tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
+}
+
 // GET /nf-entradas
 app.get('/nf-entradas', async (c) => {
   const tenant = c.get('tenant')
@@ -222,7 +284,7 @@ app.post('/nf-entradas/preview-xml', async (c) => {
     return c.json({ error: msg }, 400)
   }
   try {
-    await assertDestinatarioEhEmpresa(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
+    await assertPreviewDestinatarioPermitido(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return c.json({ error: msg }, 400)
@@ -253,6 +315,7 @@ app.post('/nf-entradas/preview-xml', async (c) => {
   }
 
   const fornecedorId = await findFornecedorPorCnpj(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.emitenteCnpj)
+  const nfceSemDest = parsed.destinatarioAusente && parsed.modelo === 65
 
   return c.json({
     parsed,
@@ -260,6 +323,7 @@ app.post('/nf-entradas/preview-xml', async (c) => {
     assinatura_valida: assinaturaValida,
     fornecedor_id: fornecedorId,
     xml_tamanho_bytes: ab.byteLength,
+    nfce_sem_dest: nfceSemDest,
   })
 })
 
@@ -274,6 +338,8 @@ const confirmImportSchema = z.object({
   empresaId: z.string().uuid(),
   filialId: z.string().uuid().nullable().optional(),
   vinculos: z.array(vinculoConfirmSchema).min(1),
+  /** Obrigatório quando o XML é NFC-e (65) sem grupo `dest`. */
+  confirmarDestinoEmpresa: z.boolean().optional(),
 })
 
 // POST /nf-entradas/confirmar — grava NF-e com itens vinculados a produtos (e cria produtos quando solicitado)
@@ -282,7 +348,7 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
   if (!c.env.R2_STORAGE) {
     return c.json({ error: 'Armazenamento R2 não configurado.' }, 503)
   }
-  const { xmlBase64, empresaId, filialId } = c.req.valid('json')
+  const { xmlBase64, empresaId, filialId, confirmarDestinoEmpresa } = c.req.valid('json')
   const vinculosIn = c.req.valid('json').vinculos
   const uid = auditUserId(c)
 
@@ -303,7 +369,21 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
   }
 
   try {
-    await assertDestinatarioEhEmpresa(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
+    await assertImportacaoEntradaPermitida(
+      c.env.DB_SHARED,
+      tenant.tenantId,
+      empresaId,
+      parsed,
+      confirmarDestinoEmpresa === true,
+    )
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return c.json({ error: msg }, 400)
+  }
+
+  let destCnpjGravacao: string
+  try {
+    destCnpjGravacao = await cnpjDestinatarioParaGravacao(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return c.json({ error: msg }, 400)
@@ -403,7 +483,7 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
       xmlPath,
       parsed.emitenteCnpj,
       parsed.emitenteNome || null,
-      parsed.destinatarioDoc,
+      destCnpjGravacao,
       parsed.dataEmissao,
       parsed.numero,
       parsed.serie,
@@ -494,6 +574,12 @@ app.post('/nf-entradas/importar-xml', async (c) => {
   const file = body.file
   const empresaId = typeof body.empresaId === 'string' ? body.empresaId : ''
   const filialId = typeof body.filialId === 'string' && body.filialId ? body.filialId : null
+  const rawConfirm = body.confirmarDestinoEmpresa
+  const confirmarDestinoEmpresa =
+    rawConfirm === true ||
+    rawConfirm === 'true' ||
+    rawConfirm === '1' ||
+    rawConfirm === 'on'
 
   if (!empresaId) return c.json({ error: 'Informe empresaId.' }, 400)
   if (!file || typeof file !== 'object' || !('arrayBuffer' in file)) {
@@ -511,7 +597,21 @@ app.post('/nf-entradas/importar-xml', async (c) => {
   }
 
   try {
-    await assertDestinatarioEhEmpresa(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
+    await assertImportacaoEntradaPermitida(
+      c.env.DB_SHARED,
+      tenant.tenantId,
+      empresaId,
+      parsed,
+      confirmarDestinoEmpresa,
+    )
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return c.json({ error: msg }, 400)
+  }
+
+  let destCnpjGravacao: string
+  try {
+    destCnpjGravacao = await cnpjDestinatarioParaGravacao(c.env.DB_SHARED, tenant.tenantId, empresaId, parsed)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return c.json({ error: msg }, 400)
@@ -563,7 +663,7 @@ app.post('/nf-entradas/importar-xml', async (c) => {
       xmlPath,
       parsed.emitenteCnpj,
       parsed.emitenteNome || null,
-      parsed.destinatarioDoc,
+      destCnpjGravacao,
       parsed.dataEmissao,
       parsed.numero,
       parsed.serie,

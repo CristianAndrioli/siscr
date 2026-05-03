@@ -38,6 +38,7 @@ export async function previewNfEntradaXml(file: File, empresaId: string) {
     sugestoes: { indice: number; produtoId: string | null; motivo: string; rotulo?: string }[];
     assinatura_valida: boolean;
     fornecedor_id: string | null;
+    nfce_sem_dest?: boolean;
   }>('/tenant/entrada/nf-entradas/preview-xml', form);
   return data;
 }
@@ -47,6 +48,8 @@ export async function confirmarNfEntradaImport(payload: {
   empresaId: string;
   filialId?: string | null;
   vinculos: { indice: number; produtoId?: string; criar?: boolean }[];
+  /** Obrigatório quando o preview indica NFC-e sem grupo dest no XML. */
+  confirmarDestinoEmpresa?: boolean;
 }) {
   const { data } = await api.post<{ id: string; message: string; fornecedor_vinculado: boolean; assinatura_valida: boolean }>(
     '/tenant/entrada/nf-entradas/confirmar',
