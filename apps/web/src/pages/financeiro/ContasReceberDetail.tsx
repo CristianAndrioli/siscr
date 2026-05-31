@@ -240,6 +240,7 @@ export function ContasReceberDetail() {
 
       {/* Visualização */}
       {!isNew && !isEditing && record && (
+        <>
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
           {record.codigo && (
             <div className="mb-4">
@@ -369,6 +370,7 @@ export function ContasReceberDetail() {
             </div>
           </div>
         )}
+        </>
       )}
 
       {/* Formulário */}
