@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { authService } from '../../services/auth';
 import MaskedInput from '../../components/common/MaskedInput';
 import { formatApiError } from '../../utils/helpers';
+import { fetchCepComIbge } from '../../services/brasilCepIbge';
 import type { ComponentProps } from 'react';
 
 const UF_LIST = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
@@ -215,6 +216,9 @@ export function FiliaisPage() {
   const [filialSaving, setFilialSaving] = useState(false);
   const [filialModalError, setFilialModalError] = useState('');
 
+  const [loadingCepFilial, setLoadingCepFilial] = useState(false);
+  const [loadingCepEmpresa, setLoadingCepEmpresa] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState<{ tipo: 'empresa' | 'filial'; id: string } | null>(null);
 
   const [certStorageReady, setCertStorageReady] = useState(false);
@@ -414,6 +418,40 @@ export function FiliaisPage() {
     }
   };
 
+  const handleFilialCepBlur = async () => {
+    if (!filialForm.cep) return;
+    setLoadingCepFilial(true);
+    const data = await fetchCepComIbge(filialForm.cep);
+    if (data) {
+      setFilialForm(f => ({
+        ...f,
+        logradouro: data.logradouro || f.logradouro,
+        bairro: data.bairro || f.bairro,
+        cidade: data.cidade || f.cidade,
+        uf: data.uf || f.uf,
+        codigoMunicipio: data.codigoMunicipioIbge || f.codigoMunicipio,
+      }));
+    }
+    setLoadingCepFilial(false);
+  };
+
+  const handleEmpresaCepBlur = async () => {
+    if (!empresaForm.cep) return;
+    setLoadingCepEmpresa(true);
+    const data = await fetchCepComIbge(empresaForm.cep);
+    if (data) {
+      setEmpresaForm(f => ({
+        ...f,
+        logradouro: data.logradouro || f.logradouro,
+        bairro: data.bairro || f.bairro,
+        cidade: data.cidade || f.cidade,
+        uf: data.uf || f.uf,
+        codigoMunicipio: data.codigoMunicipioIbge || f.codigoMunicipio,
+      }));
+    }
+    setLoadingCepEmpresa(false);
+  };
+
   const setFF = (k: keyof FilialForm, v: string | boolean) => setFilialForm(f => ({ ...f, [k]: v }));
 
   const saveFilial = async () => {
@@ -600,7 +638,18 @@ export function FiliaisPage() {
                 <Field label="Bairro" value={empresaForm.bairro} onChange={v => setEF('bairro', v)} />
                 <Field label="Cidade" value={empresaForm.cidade} onChange={v => setEF('cidade', v)} />
                 <SelectField label="UF" value={empresaForm.uf} onChange={v => setEF('uf', v)} options={UF_LIST} />
-                <MaskedField label="CEP" mask="cep" value={empresaForm.cep} onChange={v => setEF('cep', v)} placeholder="00000-000" />
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CEP</label>
+                  <div className="relative">
+                    <MaskedInput mask="cep" value={empresaForm.cep} onChange={v => setEF('cep', v)} onBlur={handleEmpresaCepBlur} placeholder="00000-000" className={FIELD_CLS} />
+                    {loadingCepEmpresa && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                        <svg className="animate-spin w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">Preenchimento automático ao sair do campo</p>
+                </div>
                 <Field label="Complemento" value={empresaForm.complemento} onChange={v => setEF('complemento', v)} />
                 <Field label="Inscrição Estadual" value={empresaForm.inscricaoEstadual} onChange={v => setEF('inscricaoEstadual', v)} />
                 <Field label="Cód. município (IBGE)" value={empresaForm.codigoMunicipio} onChange={v => setEF('codigoMunicipio', v.replace(/\D/g, '').slice(0, 7))} maxLen={7} />
@@ -720,7 +769,18 @@ export function FiliaisPage() {
                 <MaskedField label="CNPJ" mask="cnpj" value={filialForm.cnpj} onChange={v => setFF('cnpj', v)} placeholder="00.000.000/0000-00" />
                 <Field label="Cidade" value={filialForm.cidade} onChange={v => setFF('cidade', v)} />
                 <SelectField label="UF" value={filialForm.uf} onChange={v => setFF('uf', v)} options={UF_LIST} />
-                <MaskedField label="CEP" mask="cep" value={filialForm.cep} onChange={v => setFF('cep', v)} placeholder="00000-000" />
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CEP</label>
+                  <div className="relative">
+                    <MaskedInput mask="cep" value={filialForm.cep} onChange={v => setFF('cep', v)} onBlur={handleFilialCepBlur} placeholder="00000-000" className={FIELD_CLS} />
+                    {loadingCepFilial && (
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                        <svg className="animate-spin w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      </div>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">Preenchimento automático ao sair do campo</p>
+                </div>
                 <div className="col-span-2"><Field label="Logradouro" value={filialForm.logradouro} onChange={v => setFF('logradouro', v)} /></div>
                 <Field label="Número" value={filialForm.numero} onChange={v => setFF('numero', v)} />
                 <Field label="Complemento" value={filialForm.complemento} onChange={v => setFF('complemento', v)} />
