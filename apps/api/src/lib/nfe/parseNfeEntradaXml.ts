@@ -198,14 +198,12 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
     } else {
       throw new Error('Destinatário sem CNPJ/CPF reconhecível.')
     }
-  } else if (modelo === 65) {
+  } else {
+    // Sem grupo <dest>: NFC-e (65) e NF-e ao consumidor (55 sem destinatário explícito).
+    // Ambos permitem importação com confirmação manual do comprador.
     destinatarioAusente = true
     destinatarioDoc = ''
     destinatarioTipo = 'CNPJ'
-  } else {
-    throw new Error(
-      'Grupo dest ausente no XML. Notas de compra em NF-e (modelo 55) devem trazer o destinatário. NFC-e (modelo 65) sem destinatário exige confirmação do comprador na importação.',
-    )
   }
 
   const totalEl = firstByLocalFrom(infNFe, 'total')

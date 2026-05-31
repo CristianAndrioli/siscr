@@ -43,7 +43,8 @@ export async function cnpjDestinatarioParaGravacao(
 }
 
 /**
- * Pré-visualização NF-e/NFC-e: NFC-e (65) sem `dest` permite seguir; demais exigem CNPJ = empresa.
+ * Pré-visualização NF-e/NFC-e: XML sem grupo <dest> (NFC-e modelo 65 ou NF-e ao consumidor)
+ * permite pré-visualizar — a empresa é confirmada na gravação.
  */
 export async function assertPreviewDestinatarioPermitido(
   db: D1Database,
@@ -51,7 +52,7 @@ export async function assertPreviewDestinatarioPermitido(
   empresaId: string,
   parsed: NfeEntradaParsed,
 ): Promise<void> {
-  if (parsed.destinatarioAusente && parsed.modelo === 65) {
+  if (parsed.destinatarioAusente) {
     const emp = await db
       .prepare(`SELECT id FROM empresas WHERE id = ? AND tenant_id = ?`)
       .bind(empresaId, tenantId)
@@ -62,7 +63,7 @@ export async function assertPreviewDestinatarioPermitido(
   await assertDestinatarioEhEmpresa(db, tenantId, empresaId, parsed.destinatarioDoc, parsed.destinatarioTipo)
 }
 
-/** Gravação: NFC-e sem dest exige confirmação explícita (`confirmarDestinoEmpresa`). */
+/** Gravação: XML sem dest exige confirmação explícita (`confirmarDestinoEmpresa`). */
 export async function assertImportacaoEntradaPermitida(
   db: D1Database,
   tenantId: string,
@@ -70,10 +71,11 @@ export async function assertImportacaoEntradaPermitida(
   parsed: NfeEntradaParsed,
   confirmarDestinoEmpresa: boolean,
 ): Promise<void> {
-  if (parsed.destinatarioAusente && parsed.modelo === 65) {
+  if (parsed.destinatarioAusente) {
     if (!confirmarDestinoEmpresa) {
+      const tipo = parsed.modelo === 65 ? 'NFC-e' : 'NF-e'
       throw new Error(
-        'Esta NFC-e não identifica o destinatário no XML. Confirme que a compra é da empresa selecionada para continuar.',
+        `Este ${tipo} não identifica o destinatário no XML. Confirme que a compra é da empresa selecionada para continuar.`,
       )
     }
     const emp = await db
