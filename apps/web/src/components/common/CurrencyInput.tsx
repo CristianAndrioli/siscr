@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import React from 'react';
 
 interface CurrencyInputProps {
   value: number | null | undefined;
@@ -28,8 +28,6 @@ export default function CurrencyInput({
   id,
   name,
 }: CurrencyInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-
   const format = (cents: number): string => {
     return (cents / 100).toLocaleString('pt-BR', {
       minimumFractionDigits: 2,
@@ -62,19 +60,11 @@ export default function CurrencyInput({
     onChange(newCents / 100);
   };
 
-  const handleFocus = () => {
-    setTimeout(() => {
-      const el = inputRef.current;
-      if (el) el.setSelectionRange(el.value.length, el.value.length);
-    }, 0);
-  };
-
   const baseClass =
-    'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left tabular-nums';
+    'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left tabular-nums caret-transparent';
 
   return (
     <input
-      ref={inputRef}
       id={id}
       name={name}
       type="text"
@@ -84,7 +74,6 @@ export default function CurrencyInput({
       disabled={disabled}
       required={required}
       onKeyDown={handleKeyDown}
-      onFocus={handleFocus}
       onChange={() => {}}
       className={className || baseClass}
     />
