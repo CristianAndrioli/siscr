@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import { authService } from '../../services/auth';
 import MaskedInput from '../../components/common/MaskedInput';
@@ -418,39 +418,51 @@ export function FiliaisPage() {
     }
   };
 
-  const handleFilialCepBlur = async () => {
-    if (!filialForm.cep) return;
-    setLoadingCepFilial(true);
-    const data = await fetchCepComIbge(filialForm.cep);
-    if (data) {
-      setFilialForm(f => ({
-        ...f,
-        logradouro: data.logradouro || f.logradouro,
-        bairro: data.bairro || f.bairro,
-        cidade: data.cidade || f.cidade,
-        uf: data.uf || f.uf,
-        codigoMunicipio: data.codigoMunicipioIbge || f.codigoMunicipio,
-      }));
+  // Auto-busca CEP da filial quando atingir 8 dígitos
+  const filialCepRef = useRef('');
+  useEffect(() => {
+    const digits = filialForm.cep.replace(/\D/g, '');
+    if (digits.length === 8 && digits !== filialCepRef.current) {
+      filialCepRef.current = digits;
+      setLoadingCepFilial(true);
+      fetchCepComIbge(digits).then(data => {
+        if (data) {
+          setFilialForm(f => ({
+            ...f,
+            logradouro: data.logradouro || f.logradouro,
+            bairro: data.bairro || f.bairro,
+            cidade: data.cidade || f.cidade,
+            uf: data.uf || f.uf,
+            codigoMunicipio: data.codigoMunicipioIbge || f.codigoMunicipio,
+          }));
+        }
+      }).finally(() => setLoadingCepFilial(false));
     }
-    setLoadingCepFilial(false);
-  };
+    if (digits.length < 8) filialCepRef.current = '';
+  }, [filialForm.cep]);
 
-  const handleEmpresaCepBlur = async () => {
-    if (!empresaForm.cep) return;
-    setLoadingCepEmpresa(true);
-    const data = await fetchCepComIbge(empresaForm.cep);
-    if (data) {
-      setEmpresaForm(f => ({
-        ...f,
-        logradouro: data.logradouro || f.logradouro,
-        bairro: data.bairro || f.bairro,
-        cidade: data.cidade || f.cidade,
-        uf: data.uf || f.uf,
-        codigoMunicipio: data.codigoMunicipioIbge || f.codigoMunicipio,
-      }));
+  // Auto-busca CEP da empresa quando atingir 8 dígitos
+  const empresaCepRef = useRef('');
+  useEffect(() => {
+    const digits = empresaForm.cep.replace(/\D/g, '');
+    if (digits.length === 8 && digits !== empresaCepRef.current) {
+      empresaCepRef.current = digits;
+      setLoadingCepEmpresa(true);
+      fetchCepComIbge(digits).then(data => {
+        if (data) {
+          setEmpresaForm(f => ({
+            ...f,
+            logradouro: data.logradouro || f.logradouro,
+            bairro: data.bairro || f.bairro,
+            cidade: data.cidade || f.cidade,
+            uf: data.uf || f.uf,
+            codigoMunicipio: data.codigoMunicipioIbge || f.codigoMunicipio,
+          }));
+        }
+      }).finally(() => setLoadingCepEmpresa(false));
     }
-    setLoadingCepEmpresa(false);
-  };
+    if (digits.length < 8) empresaCepRef.current = '';
+  }, [empresaForm.cep]);
 
   const setFF = (k: keyof FilialForm, v: string | boolean) => setFilialForm(f => ({ ...f, [k]: v }));
 
@@ -641,14 +653,13 @@ export function FiliaisPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CEP</label>
                   <div className="relative">
-                    <MaskedInput mask="cep" value={empresaForm.cep} onChange={v => setEF('cep', v)} onBlur={handleEmpresaCepBlur} placeholder="00000-000" className={FIELD_CLS} />
+                    <MaskedInput mask="cep" value={empresaForm.cep} onChange={v => setEF('cep', v)} placeholder="00000-000" className={FIELD_CLS} />
                     {loadingCepEmpresa && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2">
                         <svg className="animate-spin w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       </div>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">Preenchimento automático ao sair do campo</p>
                 </div>
                 <Field label="Complemento" value={empresaForm.complemento} onChange={v => setEF('complemento', v)} />
                 <Field label="Inscrição Estadual" value={empresaForm.inscricaoEstadual} onChange={v => setEF('inscricaoEstadual', v)} />
@@ -767,20 +778,19 @@ export function FiliaisPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2"><Field label="Nome da Filial" value={filialForm.nome} onChange={v => setFF('nome', v)} required /></div>
                 <MaskedField label="CNPJ" mask="cnpj" value={filialForm.cnpj} onChange={v => setFF('cnpj', v)} placeholder="00.000.000/0000-00" />
-                <Field label="Cidade" value={filialForm.cidade} onChange={v => setFF('cidade', v)} />
-                <SelectField label="UF" value={filialForm.uf} onChange={v => setFF('uf', v)} options={UF_LIST} />
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">CEP</label>
                   <div className="relative">
-                    <MaskedInput mask="cep" value={filialForm.cep} onChange={v => setFF('cep', v)} onBlur={handleFilialCepBlur} placeholder="00000-000" className={FIELD_CLS} />
+                    <MaskedInput mask="cep" value={filialForm.cep} onChange={v => setFF('cep', v)} placeholder="00000-000" className={FIELD_CLS} />
                     {loadingCepFilial && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2">
                         <svg className="animate-spin w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                       </div>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">Preenchimento automático ao sair do campo</p>
                 </div>
+                <Field label="Cidade" value={filialForm.cidade} onChange={v => setFF('cidade', v)} />
+                <SelectField label="UF" value={filialForm.uf} onChange={v => setFF('uf', v)} options={UF_LIST} />
                 <div className="col-span-2"><Field label="Logradouro" value={filialForm.logradouro} onChange={v => setFF('logradouro', v)} /></div>
                 <Field label="Número" value={filialForm.numero} onChange={v => setFF('numero', v)} />
                 <Field label="Complemento" value={filialForm.complemento} onChange={v => setFF('complemento', v)} />
