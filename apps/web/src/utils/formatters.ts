@@ -48,9 +48,14 @@ export function formatCurrency(value: number | string | null | undefined): strin
 /**
  * Alias curto histórico de `formatCurrency`, mantido para não quebrar
  * as páginas existentes. Preferir `formatCurrency` em código novo.
+ *
+ * Aceita também `string` para lidar com valores retornados pelo D1/SQLite
+ * como texto (ex.: resultado de funções de agregação como SUM).
  */
-export function fmtBRL(v: number | null | undefined): string {
-  return BRL.format(v ?? 0);
+export function fmtBRL(v: number | string | null | undefined): string {
+  if (v == null || v === '') return 'R$ 0,00';
+  const num = typeof v === 'string' ? parseFloat(v) : v;
+  return BRL.format(isNaN(num) ? 0 : num);
 }
 
 // ─── Data / Hora ───────────────────────────────────────────────────

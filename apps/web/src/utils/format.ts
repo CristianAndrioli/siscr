@@ -15,4 +15,4 @@
  * existentes de `'../utils/format'` continuem compilando. Em uma
  * próxima iteração, migrar os callers e remover este arquivo.
  */
-export { fmtBRL, fmtDate, fmtDateISO } from './formatters';
+export { fmtBRL, fmtDate, fmtDateISO, formatCurrency } from './formatters';
