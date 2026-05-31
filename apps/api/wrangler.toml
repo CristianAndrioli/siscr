@@ -74,7 +74,7 @@ name = "siscr-api-staging"
 ENVIRONMENT = "staging"
 APP_URL = "https://api-staging.siscr.com.br"
 FRONTEND_URL = "https://staging.siscr.com.br"
-ALLOWED_ORIGINS = "https://staging.siscr.com.br,https://staging.siscr-web.pages.dev"
+ALLOWED_ORIGINS = "https://staging.siscr.com.br,https://staging.siscr-web.pages.dev,https://siscr-web.pages.dev"
 NFE_DEV_MODE = "0"
 EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
 # Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
