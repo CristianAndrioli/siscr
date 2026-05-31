@@ -6,6 +6,7 @@ import { formatApiError } from '../../utils/helpers';
 import { fetchCepComIbge } from '../../services/brasilCepIbge';
 import type { ComponentProps } from 'react';
 
+// v2 – CEP auto-fill + reorder (CNPJ|CEP, Cidade|UF)
 const UF_LIST = ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'];
 const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
 const fmtDateTime = (s?: string) => s ? new Date(s).toLocaleString('pt-BR') : '—';
