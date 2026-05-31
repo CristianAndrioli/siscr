@@ -4,6 +4,7 @@ import { pessoasService, type Pessoa, type PessoaForm } from '../../services/cad
 import { fetchCepComIbge } from '../../services/brasilCepIbge';
 import MaskedInput from '../../components/common/MaskedInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatCPFCNPJ, formatPhone, formatCEP } from '../../utils/formatters';
 
 const TIPO_CADASTRO_OPTS = [
   { value: 'cliente', label: 'Cliente' },
@@ -70,10 +71,10 @@ export function PessoasDetail() {
           tipo: data.tipo,
           tipoCadastro: data.tipo_cadastro,
           nome: data.nome,
-          cpfCnpj: data.cpf_cnpj ?? '',
+          cpfCnpj: formatCPFCNPJ(data.cpf_cnpj ?? ''),
           email: data.email ?? '',
-          telefone: data.telefone ?? '',
-          cep: data.cep ?? '',
+          telefone: formatPhone(data.telefone ?? ''),
+          cep: formatCEP(data.cep ?? ''),
           logradouro: data.logradouro ?? '',
           numero: data.numero ?? '',
           complemento: data.complemento ?? '',
@@ -223,9 +224,9 @@ export function PessoasDetail() {
                 { label: 'Tipo', value: record.tipo === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica' },
                 { label: 'Categoria', value: TIPO_CADASTRO_OPTS.find(o => o.value === record.tipo_cadastro)?.label ?? record.tipo_cadastro },
                 { label: 'Nome', value: record.nome },
-                { label: 'CPF/CNPJ', value: record.cpf_cnpj ?? '—' },
+                { label: 'CPF/CNPJ', value: formatCPFCNPJ(record.cpf_cnpj) || '—' },
                 { label: 'E-mail', value: record.email ?? '—' },
-                { label: 'Telefone', value: record.telefone ?? '—' },
+                { label: 'Telefone', value: formatPhone(record.telefone) || '—' },
               ].map(({ label, value }) => (
                 <div key={label}>
                   <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
@@ -241,7 +242,7 @@ export function PessoasDetail() {
               <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">CEP</dt>
-                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.cep ?? '—'}</dd>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{formatCEP(record.cep) || '—'}</dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Logradouro</dt>

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
+import { formatCPFCNPJ } from '../../utils/formatters';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
 import {
   loadGridListPage,
@@ -30,7 +31,7 @@ const COLUMNS: SmartColumn<Pessoa>[] = [
       </span>
     ) },
   { key: 'cpf_cnpj', label: 'CPF/CNPJ', width: 150,
-    render: v => <span className="text-slate-600 dark:text-slate-300 font-mono text-xs">{v != null && v !== '' ? String(v) : '—'}</span> },
+    render: v => <span className="text-slate-600 dark:text-slate-300 font-mono text-xs">{v != null && v !== '' ? formatCPFCNPJ(String(v)) : '—'}</span> },
   { key: 'email', label: 'E-mail', width: 200 },
   { key: 'telefone', label: 'Telefone', width: 130 },
 ];
