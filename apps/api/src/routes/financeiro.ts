@@ -162,6 +162,47 @@ app.post('/receber', zValidator('json', contaSchema), async (c) => {
   return c.json({ id, message: 'Conta a receber criada.' }, 201)
 })
 
+// POST /receber/lote — cria múltiplas parcelas de uma só vez (parcelamento manual)
+const loteReceberSchema = z.object({
+  parcelas: z.array(contaSchema.extend({
+    parcela: z.number().int().positive(),
+    total_parcelas: z.number().int().positive(),
+  })).min(2).max(48),
+})
+
+app.post('/receber/lote', zValidator('json', loteReceberSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const { parcelas } = c.req.valid('json')
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+  const ids: string[] = []
+
+  const stmts = parcelas.map((p) => {
+    const id = crypto.randomUUID()
+    ids.push(id)
+    return c.env.DB_SHARED.prepare(`
+      INSERT INTO contas_receber
+        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
+         categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda,
+         regua_id, parcela, total_parcelas, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, tenant.tenantId,
+      p.empresaId ?? null, p.filialId ?? null,
+      p.pessoaId, p.descricao, p.valor, p.vencimento,
+      p.categoria ?? null, p.observacoes ?? null,
+      p.nr_documento ?? null, p.especie ?? 'DM',
+      p.data_emissao ?? null, p.data_lancamento ?? now.slice(0, 10),
+      p.moeda ?? 'BRL', p.reguaId ?? null,
+      p.parcela, p.total_parcelas,
+      now, now, uid, uid,
+    )
+  })
+
+  await c.env.DB_SHARED.batch(stmts)
+  return c.json({ ids, total: ids.length, message: `${ids.length} parcelas criadas com sucesso.` }, 201)
+})
+
 app.put('/receber/:id', zValidator('json', contaSchema.partial()), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
@@ -381,6 +422,48 @@ app.post('/pagar', zValidator('json', contaSchema), async (c) => {
     .run()
 
   return c.json({ id, message: 'Conta a pagar criada.' }, 201)
+})
+
+// POST /pagar/lote — cria múltiplas parcelas de uma só vez
+const lotePagarSchema = z.object({
+  parcelas: z.array(contaSchema.extend({
+    parcela: z.number().int().positive(),
+    total_parcelas: z.number().int().positive(),
+  })).min(2).max(48),
+})
+
+app.post('/pagar/lote', zValidator('json', lotePagarSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const { parcelas } = c.req.valid('json')
+  const now = new Date().toISOString()
+  const uid = auditUserId(c)
+  const ids: string[] = []
+
+  const stmts = parcelas.map((p) => {
+    const id = crypto.randomUUID()
+    ids.push(id)
+    return c.env.DB_SHARED.prepare(`
+      INSERT INTO contas_pagar
+        (id, tenant_id, empresa_id, filial_id, pessoa_id, descricao, valor, vencimento, status,
+         categoria, observacoes, nr_documento, especie, data_emissao, data_lancamento, moeda,
+         parcela, total_parcelas, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendente', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, tenant.tenantId,
+      p.empresaId ?? null, p.filialId ?? null,
+      p.pessoaId, p.descricao, p.valor, p.vencimento,
+      p.categoria ?? null, p.observacoes ?? null,
+      p.nr_documento ?? null, p.especie ?? 'DM',
+      p.data_emissao ?? null, p.data_lancamento ?? now.slice(0, 10),
+      p.moeda ?? 'BRL',
+      p.parcela, p.total_parcelas,
+      now, now, uid, uid,
+    )
+  })
+
+  await c.env.DB_SHARED.batch(stmts)
+  return c.json({ ids, total: ids.length, message: `${ids.length} parcelas criadas com sucesso.` }, 201)
+}
 })
 
 app.put('/pagar/:id', zValidator('json', contaSchema.partial()), async (c) => {

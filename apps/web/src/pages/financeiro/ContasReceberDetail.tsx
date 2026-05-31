@@ -64,6 +64,26 @@ export function ContasReceberDetail() {
   const [showPagarModal, setShowPagarModal] = useState(false);
   const [pagarData, setPagarData] = useState({ dataPagamento: new Date().toISOString().slice(0, 10), valorPago: 0, contaBancariaId: '' });
   const [pagamentos, setPagamentos] = useState<PagamentoHistorico[]>([]);
+
+  // Parcelamento inline
+  const [parcelar, setParcelar] = useState(false);
+  type Parcela = { vencimento: string; valor: number };
+  const [parcelas, setParcelas] = useState<Parcela[]>([]);
+
+  const gerarParcelas = (n: number, intervalo = 30) => {
+    if (!form.valor || form.valor <= 0) return;
+    const base = Math.floor((form.valor / n) * 100) / 100;
+    const resto = Math.round((form.valor - base * n) * 100) / 100;
+    const hoje = form.data_lancamento || new Date().toISOString().slice(0, 10);
+    const novas: Parcela[] = Array.from({ length: n }, (_, i) => {
+      const d = new Date(hoje);
+      d.setDate(d.getDate() + intervalo * (i + 1));
+      return { vencimento: d.toISOString().slice(0, 10), valor: i === n - 1 ? base + resto : base };
+    });
+    setParcelas(novas);
+  };
+
+  const somaOk = parcelas.length > 0 && Math.abs(parcelas.reduce((s, p) => s + p.valor, 0) - (form.valor || 0)) < 0.02;
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
   const [reguas, setReguas] = useState<ReguaCobrancaListItem[]>([]);
 
@@ -109,6 +129,34 @@ export function ContasReceberDetail() {
     if (!form.pessoaId) { setError('Selecione o cliente.'); return; }
     if (!form.descricao) { setError('Informe a descrição.'); return; }
     if (!form.valor || form.valor <= 0) { setError('Informe um valor positivo.'); return; }
+
+    // Modo parcelado: valida parcelas
+    if (isNew && parcelar) {
+      if (parcelas.length < 2) { setError('Adicione ao menos 2 parcelas.'); return; }
+      if (!somaOk) { setError('A soma das parcelas deve ser igual ao valor total.'); return; }
+      if (parcelas.some(p => !p.vencimento)) { setError('Informe o vencimento de todas as parcelas.'); return; }
+      setSaving(true); setError('');
+      try {
+        const base: ContaForm = { ...form, reguaId: form.reguaId || null };
+        await contasReceberService.criarLote(
+          parcelas.map((p, i) => ({
+            ...base,
+            valor: p.valor,
+            vencimento: p.vencimento,
+            descricao: `${form.descricao} (${i + 1}/${parcelas.length})`,
+            parcela: i + 1,
+            total_parcelas: parcelas.length,
+          }))
+        );
+        navigate('/financeiro/contas-receber');
+      } catch (err) {
+        const msg = formatApiError(err, 'Erro ao criar parcelas.');
+        reportError(msg, err, 'Contas a Receber');
+        setError(msg);
+      } finally { setSaving(false); }
+      return;
+    }
+
     if (!form.vencimento) { setError('Informe o vencimento.'); return; }
 
     setSaving(true);
@@ -464,19 +512,29 @@ export function ContasReceberDetail() {
 
             {/* ── Seção: Datas e Valores ── */}
             <div>
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">Datas e Valores</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Datas e Valores</p>
+                {isNew && (
+                  <button type="button" onClick={() => { setParcelar(v => !v); setParcelas([]); }}
+                    className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${parcelar ? 'bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 hover:bg-slate-200'}`}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    {parcelar ? 'Parcelado ✓' : 'Parcelar'}
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Valor <span className="text-red-500">*</span>
+                    Valor Total <span className="text-red-500">*</span>
                   </label>
                   <CurrencyInput
                     value={form.valor}
-                    onChange={v => set('valor', v)}
+                    onChange={v => { set('valor', v); setParcelas([]); }}
                     required
                   />
                 </div>
 
+                {!parcelar && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Vencimento <span className="text-red-500">*</span>
@@ -488,6 +546,7 @@ export function ContasReceberDetail() {
                     className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data Emissão</label>
@@ -510,6 +569,57 @@ export function ContasReceberDetail() {
                 </div>
               </div>
             </div>
+
+            {/* ── Parcelas inline ── */}
+            {isNew && parcelar && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Parcelas</p>
+                  <div className="flex gap-1.5">
+                    {[{n:2,d:30},{n:3,d:30},{n:4,d:30},{n:6,d:30}].map(({n,d})=>(
+                      <button key={n} type="button" onClick={() => gerarParcelas(n,d)}
+                        className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-brand-100 hover:text-brand-700 dark:hover:bg-brand-950 dark:hover:text-brand-300 transition-colors">
+                        {n}x/{d}d
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => setParcelas(p => [...p, { vencimento: '', valor: 0 }])}
+                      className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-brand-100 dark:hover:bg-brand-950 transition-colors">
+                      + Parcela
+                    </button>
+                  </div>
+                </div>
+
+                {parcelas.length === 0 && (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4 border border-dashed border-slate-200 dark:border-slate-700 rounded-lg">
+                    Use os atalhos acima ou clique em "+ Parcela" para definir as parcelas
+                  </p>
+                )}
+
+                {parcelas.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-slate-400 w-6 text-right flex-none">{i+1}.</span>
+                    <input type="date" value={p.vencimento}
+                      onChange={e => setParcelas(prev => prev.map((x, j) => j === i ? { ...x, vencimento: e.target.value } : x))}
+                      className="border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                    <CurrencyInput value={p.valor}
+                      onChange={v => setParcelas(prev => prev.map((x, j) => j === i ? { ...x, valor: v } : x))}
+                      className="border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-left tabular-nums w-32" />
+                    <button type="button" onClick={() => setParcelas(prev => prev.filter((_, j) => j !== i))}
+                      className="text-red-400 hover:text-red-600 transition-colors flex-none">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+
+                {parcelas.length > 0 && (
+                  <div className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg ${somaOk ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300'}`}>
+                    <span>Soma das parcelas: <strong>{fmt(parcelas.reduce((s,p)=>s+p.valor,0))}</strong></span>
+                    <span>Total: <strong>{fmt(form.valor)}</strong></span>
+                    {somaOk ? <span>✓ OK</span> : <span>⚠ Divergência</span>}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Observações ── */}
             <div>
