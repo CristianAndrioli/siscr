@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { contasReceberService, financeiroService, type ContaReceber } from '../../services/financeiro';
 import { fmtBRL as fmt, fmtDate } from '../../utils/format';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatApiError } from '../../utils/helpers';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
 import {
   loadGridListPage,
@@ -48,6 +50,7 @@ const COLUMNS: SmartColumn<ContaReceber>[] = [
 
 export function ContasReceberList() {
   const navigate = useNavigate();
+  const { reportError } = useErrorNotification();
   const [contas, setContas] = useState<ContaReceber[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
@@ -107,8 +110,10 @@ export function ContasReceberList() {
       await contasReceberService.delete(id);
       await load();
       await loadResumo();
-    } catch {
-      alert('Erro ao excluir.');
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao excluir conta a receber.');
+      reportError(msg, err, 'Contas a Receber');
+      setError(msg);
     }
   };
 

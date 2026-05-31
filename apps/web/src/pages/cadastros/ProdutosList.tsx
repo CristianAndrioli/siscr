@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { produtosService, type Produto } from '../../services/cadastros/produtos';
 import { fmtBRL } from '../../utils/format';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatApiError } from '../../utils/helpers';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
 import {
   loadGridListPage,
@@ -31,6 +33,7 @@ const COLUMNS: SmartColumn<Produto>[] = [
 
 export function ProdutosList() {
   const navigate = useNavigate();
+  const { reportError } = useErrorNotification();
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
@@ -71,8 +74,10 @@ export function ProdutosList() {
     try {
       await produtosService.delete(id);
       await load();
-    } catch {
-      alert('Erro ao excluir. Tente novamente.');
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao excluir produto.');
+      reportError(msg, err, 'Cadastro de Produto');
+      setError(msg);
     }
   };
 

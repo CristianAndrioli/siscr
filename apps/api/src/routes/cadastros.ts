@@ -80,8 +80,16 @@ app.post('/pessoas', zValidator('json', pessoaSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json') as PessoaCreateInput
   const svc = createPessoaService(c.env.DB_SHARED, tenant.tenantId)
-  const id = await svc.create(data, auditUserId(c))
-  return c.json({ id, message: 'Pessoa cadastrada com sucesso.' }, 201)
+  try {
+    const id = await svc.create(data, auditUserId(c))
+    return c.json({ id, message: 'Pessoa cadastrada com sucesso.' }, 201)
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? '')
+    if (msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('cpf_cnpj')) {
+      return c.json({ error: 'CPF/CNPJ já cadastrado para outro registro.' }, 409)
+    }
+    return c.json({ error: 'Erro ao cadastrar pessoa. Verifique os dados e tente novamente.' }, 500)
+  }
 })
 
 app.get('/pessoas/:id', async (c) => {
@@ -96,9 +104,17 @@ app.put('/pessoas/:id', zValidator('json', pessoaSchema.partial()), async (c) =>
   const tenant = c.get('tenant')
   const patch = c.req.valid('json') as PessoaUpdateFields
   const svc = createPessoaService(c.env.DB_SHARED, tenant.tenantId)
-  const ok = await svc.update(c.req.param('id'), patch, auditUserId(c))
-  if (!ok) return c.json({ error: 'Nenhum campo válido foi informado para atualização.' }, 400)
-  return c.json({ message: 'Atualizado com sucesso.' })
+  try {
+    const ok = await svc.update(c.req.param('id'), patch, auditUserId(c))
+    if (!ok) return c.json({ error: 'Nenhum campo válido foi informado para atualização.' }, 400)
+    return c.json({ message: 'Atualizado com sucesso.' })
+  } catch (err) {
+    const msg = String((err as Error)?.message ?? '')
+    if (msg.toLowerCase().includes('unique') || msg.toLowerCase().includes('cpf_cnpj')) {
+      return c.json({ error: 'CPF/CNPJ já cadastrado para outro registro.' }, 409)
+    }
+    return c.json({ error: 'Erro ao atualizar pessoa. Verifique os dados e tente novamente.' }, 500)
+  }
 })
 
 app.delete('/pessoas/:id', async (c) => {

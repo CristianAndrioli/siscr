@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { bancarioService, type ContaBancaria, type ContaBancariaForm } from '../../services/bancario';
-
 import { fmtBRL as fmt } from '../../utils/format';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatApiError } from '../../utils/helpers';
 import CurrencyInput from '../../components/common/CurrencyInput';
 
 const TIPO_LABEL: Record<string, string> = {
@@ -47,6 +48,7 @@ const EMPTY: ContaBancariaForm = {
 };
 
 export function ContasBancariasPage() {
+  const { reportError } = useErrorNotification();
   const [contas, setContas] = useState<ContaBancaria[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -114,9 +116,9 @@ export function ContasBancariasPage() {
       }
       setShowModal(false);
       load();
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } }; message?: string };
-      const msg = e?.response?.data?.error ?? e?.message ?? 'Erro ao salvar.';
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao salvar conta bancária.');
+      reportError(msg, err, 'Contas Bancárias');
       setFormError(msg);
     } finally {
       setSaving(false);
@@ -128,8 +130,10 @@ export function ContasBancariasPage() {
     try {
       await bancarioService.deleteConta(id);
       load();
-    } catch {
-      setFormError('Erro ao desativar conta.');
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao desativar conta bancária.');
+      reportError(msg, err, 'Contas Bancárias');
+      setFormError(msg);
     }
   };
 

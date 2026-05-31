@@ -4,6 +4,7 @@ import { servicosService, type Servico, type ServicoForm } from '../../services/
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatApiError } from '../../utils/helpers';
 
 const UNIDADES = ['UN', 'HR', 'DIA', 'MES', 'KM', 'SV'];
 
@@ -64,8 +65,9 @@ export function ServicosDetail() {
         setRecord(updated);
       }
     } catch (err) {
-      reportError('Erro ao salvar serviço. Verifique os dados e tente novamente.', err, 'Cadastro de Serviço');
-      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao salvar serviço. Verifique os dados e tente novamente.');
+      reportError(msg, err, 'Cadastro de Serviço');
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -77,8 +79,9 @@ export function ServicosDetail() {
       await servicosService.delete(id!);
       navigate('/cadastros/servicos');
     } catch (err) {
-      reportError('Erro ao excluir serviço.', err, 'Cadastro de Serviço');
-      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao excluir serviço.');
+      reportError(msg, err, 'Cadastro de Serviço');
+      setError(msg);
     }
   };
 

@@ -4,6 +4,7 @@ import { produtosService, type Produto, type ProdutoForm } from '../../services/
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatApiError } from '../../utils/helpers';
 import { FieldHelp } from '../../components/cadastros/FieldHelp';
 import { NcmSearchInput } from '../../components/cadastros/NcmSearchInput';
 import {
@@ -129,8 +130,9 @@ export function ProdutosDetail() {
         setRecord(updated);
       }
     } catch (err) {
-      reportError('Erro ao salvar produto. Verifique os dados e tente novamente.', err, 'Cadastro de Produto');
-      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao salvar produto. Verifique os dados e tente novamente.');
+      reportError(msg, err, 'Cadastro de Produto');
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -142,8 +144,9 @@ export function ProdutosDetail() {
       await produtosService.delete(id!);
       navigate('/cadastros/produtos');
     } catch (err) {
-      reportError('Erro ao excluir produto.', err, 'Cadastro de Produto');
-      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao excluir produto.');
+      reportError(msg, err, 'Cadastro de Produto');
+      setError(msg);
     }
   };
 

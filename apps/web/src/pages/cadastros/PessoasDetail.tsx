@@ -5,6 +5,7 @@ import { fetchCepComIbge } from '../../services/brasilCepIbge';
 import MaskedInput from '../../components/common/MaskedInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatCPFCNPJ, formatPhone, formatCEP } from '../../utils/formatters';
+import { formatApiError } from '../../utils/helpers';
 
 const TIPO_CADASTRO_OPTS = [
   { value: 'cliente', label: 'Cliente' },
@@ -128,8 +129,9 @@ export function PessoasDetail() {
         setRecord(updated);
       }
     } catch (err) {
-      reportError('Erro ao salvar pessoa. Verifique os dados e tente novamente.', err, 'Cadastro de Pessoa');
-      setError('Erro ao salvar. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao salvar pessoa. Verifique os dados e tente novamente.');
+      reportError(msg, err, 'Cadastro de Pessoa');
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -141,8 +143,9 @@ export function PessoasDetail() {
       await pessoasService.delete(id!);
       navigate('/cadastros/pessoas');
     } catch (err) {
-      reportError('Erro ao excluir pessoa.', err, 'Cadastro de Pessoa');
-      setError('Erro ao excluir. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao excluir pessoa.');
+      reportError(msg, err, 'Cadastro de Pessoa');
+      setError(msg);
     }
   };
 

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { formatCPFCNPJ } from '../../utils/formatters';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import { formatApiError } from '../../utils/helpers';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
 import {
   loadGridListPage,
@@ -38,6 +40,7 @@ const COLUMNS: SmartColumn<Pessoa>[] = [
 
 export function PessoasList() {
   const navigate = useNavigate();
+  const { reportError } = useErrorNotification();
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
@@ -78,8 +81,10 @@ export function PessoasList() {
     try {
       await pessoasService.delete(id);
       await load();
-    } catch {
-      alert('Erro ao excluir. Tente novamente.');
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao excluir pessoa.');
+      reportError(msg, err, 'Cadastro de Pessoa');
+      setError(msg);
     }
   };
 
