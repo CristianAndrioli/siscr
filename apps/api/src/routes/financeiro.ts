@@ -212,22 +212,53 @@ app.patch('/receber/:id/pagar', async (c) => {
     contaBancariaId?: string
   }>()
 
+  if (!valorPago || valorPago <= 0) {
+    return c.json({ error: 'Informe um valor de recebimento maior que zero.' }, 400)
+  }
+
   const now = new Date().toISOString()
   const uid = auditUserId(c)
   const id = c.req.param('id')
 
-  // Busca o título para montar a descrição do movimento
+  // Busca o título atual para calcular saldo
   const titulo = await c.env.DB_SHARED
-    .prepare('SELECT descricao, pessoa_id FROM contas_receber WHERE id = ? AND tenant_id = ?')
-    .bind(id, tenant.tenantId).first<{ descricao: string }>()
+    .prepare('SELECT descricao, valor, valor_pago, status FROM contas_receber WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first<{ descricao: string; valor: number; valor_pago: number | null; status: string }>()
+
+  if (!titulo) return c.json({ error: 'Título não encontrado.' }, 404)
+  if (titulo.status === 'pago') return c.json({ error: 'Este título já está totalmente pago.' }, 400)
+
+  const valorJaPago = Number(titulo.valor_pago ?? 0)
+  const novoTotalPago = valorJaPago + valorPago
+  const saldo = Number(titulo.valor) - novoTotalPago
+
+  // Status: pago se saldo <= 0, parcialmente_pago se ainda há saldo
+  const novoStatus = saldo <= 0.001 ? 'pago' : 'parcialmente_pago'
+  const valorPagoFinal = Math.min(novoTotalPago, Number(titulo.valor))
+
+  const pagamentoId = crypto.randomUUID()
 
   const stmts = [
+    // Registra no histórico de pagamentos
+    c.env.DB_SHARED.prepare(`
+      INSERT INTO contas_receber_pagamentos (id, tenant_id, conta_receber_id, data_pagamento, valor, conta_bancaria_id, created_at, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(pagamentoId, tenant.tenantId, id, dataPagamento, valorPago, contaBancariaId ?? null, now, uid),
+
+    // Atualiza o título com status e saldo acumulado
     c.env.DB_SHARED.prepare(`
       UPDATE contas_receber
-      SET status = 'pago', data_pagamento = ?, valor_pago = ?,
+      SET status = ?, data_pagamento = ?, valor_pago = ?,
           conta_bancaria_id = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
-    `).bind(dataPagamento, valorPago, contaBancariaId ?? null, now, uid, id, tenant.tenantId),
+    `).bind(
+      novoStatus,
+      novoStatus === 'pago' ? dataPagamento : titulo.status === 'pendente' ? dataPagamento : null,
+      valorPagoFinal,
+      contaBancariaId ?? null,
+      now, uid, id, tenant.tenantId
+    ),
   ]
 
   // Gera movimento bancário se informou conta
@@ -239,12 +270,35 @@ app.patch('/receber/:id/pagar', async (c) => {
           (id, tenant_id, conta_bancaria_id, tipo, valor, data, descricao, origem_tipo, origem_id, created_at, created_by)
         VALUES (?, ?, ?, 'credito', ?, ?, ?, 'contas_receber', ?, ?, ?)
       `).bind(mbId, tenant.tenantId, contaBancariaId, valorPago, dataPagamento,
-        titulo?.descricao ?? 'Recebimento', id, now, uid)
+        titulo.descricao ?? 'Recebimento', id, now, uid)
     )
   }
 
   await c.env.DB_SHARED.batch(stmts)
-  return c.json({ message: 'Recebimento registrado.', movimento_gerado: !!contaBancariaId })
+  return c.json({
+    message: novoStatus === 'pago' ? 'Título quitado com sucesso.' : 'Recebimento parcial registrado.',
+    status: novoStatus,
+    valor_pago: valorPagoFinal,
+    saldo_restante: Math.max(0, Number(titulo.valor) - valorPagoFinal),
+    movimento_gerado: !!contaBancariaId,
+  })
+})
+
+// GET histórico de pagamentos de um título a receber
+app.get('/receber/:id/pagamentos', async (c) => {
+  const tenant = c.get('tenant')
+  const { results } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT p.id, p.data_pagamento, p.valor, p.observacao, p.created_at,
+             cb.nome as conta_bancaria_nome
+      FROM contas_receber_pagamentos p
+      LEFT JOIN contas_bancarias cb ON cb.id = p.conta_bancaria_id AND cb.tenant_id = p.tenant_id
+      WHERE p.conta_receber_id = ? AND p.tenant_id = ?
+      ORDER BY p.data_pagamento ASC, p.created_at ASC
+    `)
+    .bind(c.req.param('id'), tenant.tenantId)
+    .all()
+  return c.json({ pagamentos: results ?? [] })
 })
 
 // ─── Contas a Pagar ───────────────────────────────────────────────
@@ -572,10 +626,10 @@ app.get('/dashboard', async (c) => {
     c.env.DB_SHARED.prepare(`
       SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END) as pendente,
-        SUM(CASE WHEN status = 'pago' THEN valor ELSE 0 END) as recebido,
-        SUM(CASE WHEN status = 'pendente' AND vencimento < date('now') THEN valor ELSE 0 END) as vencido,
-        COUNT(CASE WHEN status = 'pendente' AND vencimento < date('now') THEN 1 END) as qtd_vencido
+        SUM(CASE WHEN status IN ('pendente','parcialmente_pago') THEN (valor - COALESCE(valor_pago,0)) ELSE 0 END) as pendente,
+        SUM(CASE WHEN status = 'pago' THEN valor ELSE 0 END) + SUM(CASE WHEN status = 'parcialmente_pago' THEN COALESCE(valor_pago,0) ELSE 0 END) as recebido,
+        SUM(CASE WHEN status IN ('pendente','parcialmente_pago') AND vencimento < date('now') THEN (valor - COALESCE(valor_pago,0)) ELSE 0 END) as vencido,
+        COUNT(CASE WHEN status IN ('pendente','parcialmente_pago') AND vencimento < date('now') THEN 1 END) as qtd_vencido
       FROM contas_receber WHERE tenant_id = ?
     `).bind(tenant.tenantId).first(),
 
@@ -594,7 +648,7 @@ app.get('/dashboard', async (c) => {
       SELECT cr.id, cr.descricao, cr.valor, cr.vencimento, p.nome as cliente
       FROM contas_receber cr
       LEFT JOIN pessoas p ON p.id = cr.pessoa_id
-      WHERE cr.tenant_id = ? AND cr.status = 'pendente'
+      WHERE cr.tenant_id = ? AND cr.status IN ('pendente','parcialmente_pago')
         AND cr.vencimento BETWEEN date('now') AND date('now', '+7 days')
       ORDER BY cr.vencimento LIMIT 5
     `).bind(tenant.tenantId).all(),

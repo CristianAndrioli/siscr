@@ -6,18 +6,28 @@ import {
   type ContaReceber,
   type ContaForm,
   type ReguaCobrancaListItem,
+  type PagamentoHistorico,
 } from '../../services/financeiro';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { bancarioService, type ContaBancaria } from '../../services/bancario';
 
 import { fmtBRL as fmt, fmtDate } from '../../utils/format';
+import { formatApiError } from '../../utils/helpers';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  parcialmente_pago: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
   pago: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   cancelado: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pendente: 'Pendente',
+  parcialmente_pago: 'Parcialmente pago',
+  pago: 'Pago',
+  cancelado: 'Cancelado',
 };
 
 const CATEGORIAS = ['Venda', 'Serviço', 'Aluguel', 'Comissão', 'Financiamento', 'Faturamento', 'Outros'];
@@ -53,6 +63,7 @@ export function ContasReceberDetail() {
   // Modal "marcar como pago"
   const [showPagarModal, setShowPagarModal] = useState(false);
   const [pagarData, setPagarData] = useState({ dataPagamento: new Date().toISOString().slice(0, 10), valorPago: 0, contaBancariaId: '' });
+  const [pagamentos, setPagamentos] = useState<PagamentoHistorico[]>([]);
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
   const [reguas, setReguas] = useState<ReguaCobrancaListItem[]>([]);
 
@@ -64,6 +75,7 @@ export function ContasReceberDetail() {
       .catch(() => {});
     bancarioService.listContas().then(setContasBancarias).catch(() => {});
     if (!isNew) {
+      contasReceberService.listarPagamentos(id!).then(setPagamentos).catch(() => {});
       contasReceberService.get(id!)
         .then(data => {
           setRecord(data);
@@ -81,7 +93,8 @@ export function ContasReceberDetail() {
             moeda: data.moeda ?? 'BRL',
             reguaId: data.regua_id ?? '',
           });
-          setPagarData(prev => ({ ...prev, valorPago: data.valor }));
+          const saldo = Math.max(0, (data.valor ?? 0) - (data.valor_pago ?? 0));
+          setPagarData(prev => ({ ...prev, valorPago: saldo }));
         })
         .catch(() => setError('Erro ao carregar registro.'))
         .finally(() => setLoading(false));
@@ -134,15 +147,25 @@ export function ContasReceberDetail() {
   };
 
   const handlePagar = async () => {
+    if (!pagarData.valorPago || pagarData.valorPago <= 0) {
+      setError('Informe um valor de recebimento maior que zero.');
+      return;
+    }
     setSaving(true);
     try {
       await contasReceberService.marcarPago(id!, pagarData.dataPagamento, pagarData.valorPago, pagarData.contaBancariaId || undefined);
-      const updated = await contasReceberService.get(id!);
+      const [updated, historico] = await Promise.all([
+        contasReceberService.get(id!),
+        contasReceberService.listarPagamentos(id!),
+      ]);
       setRecord(updated);
+      setPagamentos(historico);
+      setPagarData(prev => ({ ...prev, valorPago: Math.max(0, (updated.valor ?? 0) - (updated.valor_pago ?? 0)) }));
       setShowPagarModal(false);
     } catch (err) {
-      reportError('Erro ao registrar recebimento.', err, 'Contas a Receber');
-      setError('Erro ao registrar pagamento. Consulte o log de erros para mais detalhes.');
+      const msg = formatApiError(err, 'Erro ao registrar recebimento.');
+      reportError(msg, err, 'Contas a Receber');
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -178,13 +201,13 @@ export function ContasReceberDetail() {
           </h1>
           {record && (
             <span className={`mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[record.status] ?? ''}`}>
-              {record.status}
+              {STATUS_LABEL[record.status] ?? record.status}
             </span>
           )}
         </div>
         {!isNew && !isEditing && record && (
           <div className="flex gap-2 flex-none">
-            {record.status === 'pendente' && (
+            {(record.status === 'pendente' || record.status === 'parcialmente_pago') && (
               <button
                 onClick={() => setShowPagarModal(true)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
@@ -282,8 +305,14 @@ export function ContasReceberDetail() {
               <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
                 {[
                   { label: 'Cliente', value: record.cliente || '—' },
-                  { label: 'Valor', value: fmt(record.valor) },
-                  { label: 'Valor Recebido', value: record.valor_pago ? fmt(record.valor_pago) : '—' },
+                  { label: 'Valor Total', value: fmt(record.valor) },
+                  { label: 'Total Recebido', value: record.valor_pago ? fmt(record.valor_pago) : '—' },
+                  {
+                    label: 'Saldo a Receber',
+                    value: record.status !== 'pago'
+                      ? fmt(Math.max(0, (record.valor ?? 0) - (record.valor_pago ?? 0)))
+                      : '—',
+                  },
                   {
                     label: 'Régua de cobrança',
                     value:
@@ -293,7 +322,7 @@ export function ContasReceberDetail() {
                 ].map(({ label, value }) => (
                   <div key={label}>
                     <dt className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</dt>
-                    <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{value}</dd>
+                    <dd className={`mt-1 text-sm font-semibold ${label === 'Saldo a Receber' && record.status !== 'pago' ? 'text-orange-600 dark:text-orange-400' : 'text-slate-800 dark:text-slate-100'}`}>{value}</dd>
                   </div>
                 ))}
               </dl>
@@ -307,6 +336,39 @@ export function ContasReceberDetail() {
             )}
           </div>
         </div>
+
+        {/* Histórico de Recebimentos */}
+        {pagamentos.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+            <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Histórico de Recebimentos</p>
+            <div className="space-y-2">
+              {pagamentos.map((p, i) => (
+                <div key={p.id} className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center text-xs font-bold flex-none">{i + 1}</span>
+                    <div>
+                      <p className="text-sm text-slate-800 dark:text-slate-100">{fmtDate(p.data_pagamento)}</p>
+                      {p.conta_bancaria_nome && (
+                        <p className="text-xs text-slate-400 dark:text-slate-500">{p.conta_bancaria_nome}</p>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(p.valor)}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Total recebido</span>
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{fmt(record.valor_pago ?? 0)}</span>
+              </div>
+              {record.status !== 'pago' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Saldo restante</span>
+                  <span className="text-sm font-bold text-orange-600 dark:text-orange-400 tabular-nums">{fmt(Math.max(0, (record.valor ?? 0) - (record.valor_pago ?? 0)))}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       )}
 
       {/* Formulário */}
@@ -508,6 +570,22 @@ export function ContasReceberDetail() {
             <div>
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Registrar Recebimento</h2>
               {record && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{record.descricao}</p>}
+              {record && (
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide">Valor total</p>
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{fmt(record.valor)}</p>
+                  </div>
+                  <div className="bg-emerald-50 dark:bg-emerald-950 rounded-lg p-2">
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Recebido</p>
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{fmt(record.valor_pago ?? 0)}</p>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-950 rounded-lg p-2">
+                    <p className="text-[10px] text-orange-600 dark:text-orange-400 uppercase tracking-wide">Saldo</p>
+                    <p className="text-xs font-bold text-orange-700 dark:text-orange-300">{fmt(Math.max(0, (record.valor ?? 0) - (record.valor_pago ?? 0)))}</p>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-3">
               <div>

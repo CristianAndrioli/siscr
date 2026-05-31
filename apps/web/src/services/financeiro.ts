@@ -6,7 +6,7 @@ export interface ContaReceber {
   descricao: string;
   valor: number;
   vencimento: string;
-  status: 'pendente' | 'pago' | 'cancelado';
+  status: 'pendente' | 'parcialmente_pago' | 'pago' | 'cancelado';
   categoria?: string;
   observacoes?: string;
   data_pagamento?: string;
@@ -25,6 +25,15 @@ export interface ContaReceber {
   nota_fiscal_id?: string;
   regua_id?: string | null;
   regua_nome?: string | null;
+}
+
+export interface PagamentoHistorico {
+  id: string;
+  data_pagamento: string;
+  valor: number;
+  observacao?: string;
+  created_at: string;
+  conta_bancaria_nome?: string;
 }
 
 export interface ContaPagar {
@@ -129,6 +138,10 @@ export const contasReceberService = {
   },
   marcarPago: async (id: string, dataPagamento: string, valorPago: number, contaBancariaId?: string): Promise<void> => {
     await api.patch(`${BASE}/receber/${id}/pagar`, { dataPagamento, valorPago, contaBancariaId });
+  },
+  listarPagamentos: async (id: string): Promise<PagamentoHistorico[]> => {
+    const res = await api.get(`${BASE}/receber/${id}/pagamentos`);
+    return res.data.pagamentos ?? [];
   },
 };
 
