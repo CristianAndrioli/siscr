@@ -119,7 +119,7 @@ export function PessoasList() {
         gridId={GRID_ID}
         data={pessoas}
         columns={COLUMNS}
-        defaultSort={{ key: 'codigo', dir: 'desc' }}
+        defaultSort={{ key: 'codigo', dir: 'asc' }}
         loading={loading}
         emptyMessage="Nenhuma pessoa cadastrada."
         onRowClick={p => navigate(`/cadastros/pessoas/${p.id}`)}

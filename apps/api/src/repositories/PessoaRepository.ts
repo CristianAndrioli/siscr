@@ -131,7 +131,7 @@ export class PessoaRepository extends BaseTenantRepository {
       .prepare(
         `SELECT id, codigo, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at
          FROM pessoas${where}
-         ORDER BY codigo
+         ORDER BY CAST(codigo AS INTEGER) ASC
          LIMIT ? OFFSET ?`,
       )
       .bind(...params, limit, offset)
