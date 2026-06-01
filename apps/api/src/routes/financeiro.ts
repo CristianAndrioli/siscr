@@ -463,7 +463,6 @@ app.post('/pagar/lote', zValidator('json', lotePagarSchema), async (c) => {
 
   await c.env.DB_SHARED.batch(stmts)
   return c.json({ ids, total: ids.length, message: `${ids.length} parcelas criadas com sucesso.` }, 201)
-}
 })
 
 app.put('/pagar/:id', zValidator('json', contaSchema.partial()), async (c) => {
