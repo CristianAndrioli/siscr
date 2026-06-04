@@ -16,10 +16,11 @@ const GRID_ID = 'contas-pagar-list';
 
 const STATUS_STYLE: Record<string, string> = {
   pendente: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  parcialmente_pago: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
   pago: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   cancelado: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
 };
-const STATUS_LABEL: Record<string, string> = { pendente: 'Pendente', pago: 'Pago', cancelado: 'Cancelado' };
+const STATUS_LABEL: Record<string, string> = { pendente: 'Pendente', parcialmente_pago: 'Parc. pago', pago: 'Pago', cancelado: 'Cancelado' };
 const today = () => new Date().toISOString().slice(0, 10);
 
 const COLUMNS: SmartColumn<ContaPagar>[] = [
@@ -159,6 +160,7 @@ export function ContasPagarList() {
         >
           <option value="">Todos os status</option>
           <option value="pendente">Pendente</option>
+          <option value="parcialmente_pago">Parcialmente pago</option>
           <option value="pago">Pago</option>
           <option value="cancelado">Cancelado</option>
         </select>

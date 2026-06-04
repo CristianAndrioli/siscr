@@ -507,21 +507,48 @@ app.patch('/pagar/:id/pagar', async (c) => {
     contaBancariaId?: string
   }>()
 
+  if (!valorPago || valorPago <= 0) {
+    return c.json({ error: 'Informe um valor de pagamento maior que zero.' }, 400)
+  }
+
   const now = new Date().toISOString()
   const uid = auditUserId(c)
   const id = c.req.param('id')
 
   const titulo = await c.env.DB_SHARED
-    .prepare('SELECT descricao FROM contas_pagar WHERE id = ? AND tenant_id = ?')
-    .bind(id, tenant.tenantId).first<{ descricao: string }>()
+    .prepare('SELECT descricao, valor, valor_pago, status FROM contas_pagar WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first<{ descricao: string; valor: number; valor_pago: number | null; status: string }>()
+
+  if (!titulo) return c.json({ error: 'Título não encontrado.' }, 404)
+  if (titulo.status === 'pago') return c.json({ error: 'Este título já está totalmente pago.' }, 400)
+
+  const valorJaPago = Number(titulo.valor_pago ?? 0)
+  const novoTotalPago = valorJaPago + valorPago
+  const saldo = Number(titulo.valor) - novoTotalPago
+  const novoStatus = saldo <= 0.001 ? 'pago' : 'parcialmente_pago'
+  const valorPagoFinal = Math.min(novoTotalPago, Number(titulo.valor))
+
+  const pagamentoId = crypto.randomUUID()
 
   const stmts = [
     c.env.DB_SHARED.prepare(`
+      INSERT INTO contas_pagar_pagamentos (id, tenant_id, conta_pagar_id, data_pagamento, valor, conta_bancaria_id, created_at, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(pagamentoId, tenant.tenantId, id, dataPagamento, valorPago, contaBancariaId ?? null, now, uid),
+
+    c.env.DB_SHARED.prepare(`
       UPDATE contas_pagar
-      SET status = 'pago', data_pagamento = ?, valor_pago = ?,
+      SET status = ?, data_pagamento = ?, valor_pago = ?,
           conta_bancaria_id = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
-    `).bind(dataPagamento, valorPago, contaBancariaId ?? null, now, uid, id, tenant.tenantId),
+    `).bind(
+      novoStatus,
+      novoStatus === 'pago' ? dataPagamento : titulo.status === 'pendente' ? dataPagamento : null,
+      valorPagoFinal,
+      contaBancariaId ?? null,
+      now, uid, id, tenant.tenantId
+    ),
   ]
 
   if (contaBancariaId) {
@@ -532,12 +559,35 @@ app.patch('/pagar/:id/pagar', async (c) => {
           (id, tenant_id, conta_bancaria_id, tipo, valor, data, descricao, origem_tipo, origem_id, created_at, created_by)
         VALUES (?, ?, ?, 'debito', ?, ?, ?, 'contas_pagar', ?, ?, ?)
       `).bind(mbId, tenant.tenantId, contaBancariaId, valorPago, dataPagamento,
-        titulo?.descricao ?? 'Pagamento', id, now, uid)
+        titulo.descricao ?? 'Pagamento', id, now, uid)
     )
   }
 
   await c.env.DB_SHARED.batch(stmts)
-  return c.json({ message: 'Pagamento registrado.', movimento_gerado: !!contaBancariaId })
+  return c.json({
+    message: novoStatus === 'pago' ? 'Título quitado com sucesso.' : 'Pagamento parcial registrado.',
+    status: novoStatus,
+    valor_pago: valorPagoFinal,
+    saldo_restante: Math.max(0, Number(titulo.valor) - valorPagoFinal),
+    movimento_gerado: !!contaBancariaId,
+  })
+})
+
+// GET histórico de pagamentos de um título a pagar
+app.get('/pagar/:id/pagamentos', async (c) => {
+  const tenant = c.get('tenant')
+  const { results } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT p.id, p.data_pagamento, p.valor, p.observacao, p.created_at,
+             cb.nome as conta_bancaria_nome
+      FROM contas_pagar_pagamentos p
+      LEFT JOIN contas_bancarias cb ON cb.id = p.conta_bancaria_id AND cb.tenant_id = p.tenant_id
+      WHERE p.conta_pagar_id = ? AND p.tenant_id = ?
+      ORDER BY p.data_pagamento ASC, p.created_at ASC
+    `)
+    .bind(c.req.param('id'), tenant.tenantId)
+    .all()
+  return c.json({ pagamentos: results ?? [] })
 })
 
 // ─── Régua de cobrança (issue #21) ────────────────────────────────

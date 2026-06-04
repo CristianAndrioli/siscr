@@ -42,7 +42,7 @@ export interface ContaPagar {
   descricao: string;
   valor: number;
   vencimento: string;
-  status: 'pendente' | 'pago' | 'cancelado';
+  status: 'pendente' | 'parcialmente_pago' | 'pago' | 'cancelado';
   categoria?: string;
   observacoes?: string;
   data_pagamento?: string;
@@ -176,6 +176,10 @@ export const contasPagarService = {
   },
   marcarPago: async (id: string, dataPagamento: string, valorPago: number, contaBancariaId?: string): Promise<void> => {
     await api.patch(`${BASE}/pagar/${id}/pagar`, { dataPagamento, valorPago, contaBancariaId });
+  },
+  listarPagamentos: async (id: string): Promise<PagamentoHistorico[]> => {
+    const res = await api.get(`${BASE}/pagar/${id}/pagamentos`);
+    return res.data.pagamentos ?? [];
   },
   criarLote: async (parcelas: (ContaForm & { parcela: number; total_parcelas: number })[]): Promise<{ ids: string[] }> => {
     const res = await api.post(`${BASE}/pagar/lote`, { parcelas });
