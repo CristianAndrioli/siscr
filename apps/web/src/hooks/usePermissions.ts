@@ -8,7 +8,7 @@ export interface UserPermissions {
   modules: Record<string, { name: string; actions: string[] }>;
 }
 
-const MODULE_KEYS = ['cadastros', 'financeiro', 'faturamento', 'estoque', 'configuracoes'] as const;
+const MODULE_KEYS = ['cadastros', 'financeiro', 'faturamento', 'estoque', 'frota', 'configuracoes'] as const;
 
 const ALL_ACTIONS = ['view', 'add', 'change', 'delete', 'export', 'import', 'approve', 'reject', 'manage'];
 

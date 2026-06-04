@@ -51,6 +51,12 @@ import MovimentacoesList from './pages/estoque/MovimentacoesList';
 import Transferencias from './pages/estoque/Transferencias';
 import LocaisPage from './pages/estoque/LocaisPage';
 import EstoqueInstrucoes from './pages/estoque/EstoqueInstrucoes';
+import MaquinasList from './pages/frota/MaquinasList';
+import MaquinasDetail from './pages/frota/MaquinasDetail';
+import ObrasList from './pages/frota/ObrasList';
+import ObrasDetail from './pages/frota/ObrasDetail';
+import OrdensServicoList from './pages/frota/OrdensServicoList';
+import OrdensServicoDetail from './pages/frota/OrdensServicoDetail';
 import NfEntradaList from './pages/entrada/NfEntradaList';
 import NfEntradaDetail from './pages/entrada/NfEntradaDetail';
 import NfEntradaWizardPage from './pages/entrada/NfEntradaWizard';
@@ -183,6 +189,14 @@ function App() {
         <Route path="/estoque/transferencias" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><Transferencias /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/locais" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><LocaisPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/instrucoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><EstoqueInstrucoes /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+
+        {/* ─── Frota ──────────────────────────────────────────────────── */}
+        <Route path="/frota/maquinas" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><MaquinasList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/maquinas/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><MaquinasDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/obras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ObrasList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/obras/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ObrasDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/ordens-servico" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/ordens-servico/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* Configurações */}
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />

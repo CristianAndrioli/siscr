@@ -24,6 +24,7 @@ import publicLookupRoutes from './routes/publicLookup'
 import cronRoutes from './routes/cron'
 import queueRoutes from './routes/queue'
 import logsRoutes from './routes/logs'
+import frotaRoutes from './routes/frota'
 
 export type Env = {
   // D1 — banco compartilhado (tenants, planos, billing)
@@ -122,6 +123,7 @@ app.use('/api/tenant/*', authMiddleware)
 app.use('/api/tenant/*', requireEmpresaMatrizMiddleware)
 
 // Permissões por módulo (API) — após autenticação
+app.use('/api/tenant/frota', requireTenantModule('frota'))
 app.use('/api/tenant/cadastros', requireTenantModule('cadastros'))
 app.use('/api/tenant/estoque', requireTenantModule('estoque'))
 app.use('/api/tenant/financeiro', requireTenantModule('financeiro'))
@@ -141,6 +143,7 @@ app.route('/api/tenant/faturamento', faturamentoRoutes)
 app.route('/api/tenant/entrada', entradaRoutes)
 app.route('/api/tenant/vendas', vendasRoutes)
 app.route('/api/tenant/logs', logsRoutes)
+app.route('/api/tenant/frota', frotaRoutes)
 
 // ─── Rotas internas (Cron + Queue handlers) ───────────────────
 app.route('/__cron', cronRoutes)

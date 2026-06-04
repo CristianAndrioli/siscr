@@ -3,6 +3,7 @@ export const MODULE_KEYS = [
   'financeiro',
   'faturamento',
   'estoque',
+  'frota',
   'configuracoes',
 ] as const
 

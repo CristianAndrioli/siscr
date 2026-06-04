@@ -169,6 +169,28 @@ export const COMMAND_PALETTE_ITEMS: CommandPaletteItem[] = [
     keywords: ['ajuda estoque'],
     module: 'estoque',
   },
+  // ─── Frota ──────────────────────────────────────────────────────────────
+  {
+    id: 'frota-os',
+    title: 'Frota — Ordens de Serviço',
+    path: '/frota/ordens-servico',
+    keywords: ['frota', 'os', 'ordem serviço', 'horimetro', 'horas maquina', 'turno'],
+    module: 'frota',
+  },
+  {
+    id: 'frota-maquinas',
+    title: 'Frota — Máquinas',
+    path: '/frota/maquinas',
+    keywords: ['maquina', 'equipamento', 'frota', 'trator', 'veiculo'],
+    module: 'frota',
+  },
+  {
+    id: 'frota-obras',
+    title: 'Frota — Obras e Projetos',
+    path: '/frota/obras',
+    keywords: ['obra', 'projeto', 'canteiro', 'frota'],
+    module: 'frota',
+  },
   {
     id: 'cfg-visao',
     title: 'Configurações — visão geral',
