@@ -39,13 +39,72 @@ export interface Obra {
   cliente_nome?: string;
   data_inicio?: string;
   data_fim?: string;
+  data_conclusao?: string;
   localizacao?: string;
   municipio?: string;
   area_estimada?: string;
   status: 'em_andamento' | 'concluida' | 'cancelada';
+  valor_faturado?: number;
   observacoes?: string;
   ativo: number;
   created_at: string;
+}
+
+export interface ObraMaquina {
+  id: string;
+  obra_id: string;
+  maquina_id: string;
+  maquina_nome?: string;
+  maquina_placa?: string;
+  maquina_status?: string;
+  horimetro_atual?: number;
+  valor_hora?: number;
+  data_alocacao?: string;
+  data_liberacao?: string;
+  observacoes?: string;
+}
+
+export interface ObraResumo {
+  total_os: number;
+  total_horas: number;
+  total_valor: number;
+  a_faturar: number;
+  faturado: number;
+  horas_a_faturar: number;
+  maquinas_alocadas: number;
+  total_medicoes: number;
+}
+
+export interface Medicao {
+  id: string;
+  obra_id: string;
+  numero: number;
+  descricao?: string;
+  periodo_inicio?: string;
+  periodo_fim?: string;
+  total_horas?: number;
+  valor_total?: number;
+  status: 'rascunho' | 'faturada' | 'cancelada';
+  nota_fiscal_id?: string;
+  created_at: string;
+}
+
+export interface ApontamentoLinha {
+  maquinaId?: string;
+  operadorId: string;
+  servicoId?: string;
+  descricao?: string;
+  horimetroInicial?: number;
+  horimetroFinal?: number;
+  horas?: number;
+  valorHora?: number;
+}
+
+export interface ApontamentoPayload {
+  turnoData: string;
+  turnoInicio?: string;
+  turnoFim?: string;
+  linhas: ApontamentoLinha[];
 }
 
 export interface ObraForm {
@@ -150,6 +209,37 @@ export const obrasService = {
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/obras/${id}`);
+  },
+  finalizar: async (id: string): Promise<{ message: string; aviso: string | null; apontamentos_pendentes: number }> => {
+    const res = await api.post(`${BASE}/obras/${id}/finalizar`);
+    return res.data;
+  },
+  resumo: async (id: string): Promise<ObraResumo> => {
+    const res = await api.get(`${BASE}/obras/${id}/resumo`);
+    return res.data;
+  },
+  maquinas: async (id: string): Promise<ObraMaquina[]> => {
+    const res = await api.get(`${BASE}/obras/${id}/maquinas`);
+    return (res.data.maquinas ?? []) as ObraMaquina[];
+  },
+  alocarMaquina: async (id: string, body: { maquinaId: string; valorHora?: number; dataAlocacao?: string; observacoes?: string }): Promise<{ id: string }> => {
+    const res = await api.post(`${BASE}/obras/${id}/maquinas`, body);
+    return res.data;
+  },
+  removerMaquina: async (obraId: string, maquinaId: string): Promise<void> => {
+    await api.delete(`${BASE}/obras/${obraId}/maquinas/${maquinaId}`);
+  },
+  apontarHoras: async (id: string, body: ApontamentoPayload): Promise<{ message: string; count: number }> => {
+    const res = await api.post(`${BASE}/obras/${id}/apontamentos`, body);
+    return res.data;
+  },
+  medicoes: async (id: string): Promise<Medicao[]> => {
+    const res = await api.get(`${BASE}/obras/${id}/medicoes`);
+    return (res.data.medicoes ?? []) as Medicao[];
+  },
+  gerarMedicao: async (id: string, params?: { periodoInicio?: string; periodoFim?: string; descricao?: string }): Promise<{ medicao_id: string; numero: number; nota_fiscal_id: string; total: number; ordens: number; message: string; redirect: string }> => {
+    const res = await api.post(`${BASE}/obras/${id}/medicoes`, params ?? {});
+    return res.data;
   },
 };
 
