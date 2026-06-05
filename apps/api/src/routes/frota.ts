@@ -356,10 +356,10 @@ app.post('/obras/:id/medicoes', async (c) => {
       INSERT INTO notas_fiscais
         (id, tenant_id, empresa_id, tipo, numero, serie, status, destinatario_id,
          natureza_operacao, descricao_servico, aliquota_iss, valor_total,
-         forma_pagamento, mod_frete, desconto, observacoes, created_at, updated_at, created_by, updated_by)
+         forma_pagamento, mod_frete, observacoes, created_at, updated_at, created_by, updated_by)
       VALUES (?, ?, ?, 'nfse', ?, '1', 'rascunho', ?,
               'Prestação de Serviços de Frota', ?, 0, ?,
-              '17', 9, 0, ?, ?, ?, ?, ?)
+              '17', 9, ?, ?, ?, ?, ?)
     `).bind(
       notaId, tenant.tenantId, empresa.id, String(proximoNumero).padStart(9, '0'),
       obra.cliente_id, descricaoMedicao, valorTotal,
@@ -627,10 +627,10 @@ app.post('/ordens/:id/faturar', async (c) => {
       INSERT INTO notas_fiscais
         (id, tenant_id, empresa_id, tipo, numero, serie, status, destinatario_id,
          natureza_operacao, descricao_servico, aliquota_iss, valor_total,
-         forma_pagamento, mod_frete, desconto, observacoes, created_at, updated_at, created_by, updated_by)
+         forma_pagamento, mod_frete, observacoes, created_at, updated_at, created_by, updated_by)
       VALUES (?, ?, ?, 'nfse', ?, '1', 'rascunho', ?,
               'Prestação de Serviços de Frota', ?, 0, ?,
-              '17', 9, 0, ?, ?, ?, ?, ?)
+              '17', 9, ?, ?, ?, ?, ?)
     `).bind(
       notaId, tenant.tenantId, empresa.id, String(proximoNumero).padStart(9, '0'),
       os.cliente_id, descricaoServico, valorTotal,
