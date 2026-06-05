@@ -406,7 +406,7 @@ app.post('/obras/:id/medicoes', async (c) => {
     total: valorTotal,
     ordens: oss.length,
     message: `Medição ${numMedicao} gerada com ${oss.length} apontamento(s). NFS-e rascunho criada — acesse Faturamento → NFS-e para emitir.`,
-    redirect: '/faturamento/nfsservice',
+    redirect: '/faturamento/nfse',
   }, 201)
 })
 

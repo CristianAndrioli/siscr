@@ -259,7 +259,7 @@ export function ObrasDetail() {
           <svg className="w-4 h-4 mt-0.5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
           <span>
             {info}
-            {' '}<button onClick={() => navigate('/faturamento/nfsservice')} className="underline font-medium ml-1">Ver NFS-e em Faturamento →</button>
+            {' '}<button onClick={() => navigate('/faturamento/nfse')} className="underline font-medium ml-1">Ver NFS-e em Faturamento →</button>
             {' '}<button onClick={() => setInfo('')} className="underline text-xs ml-2 opacity-60">Fechar</button>
           </span>
         </div>
@@ -515,7 +515,7 @@ export function ObrasDetail() {
                       <td className="px-4 py-2 text-right tabular-nums font-semibold">{m.valor_total != null ? fmtBRL(m.valor_total) : '—'}</td>
                       <td className="px-4 py-2"><span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{m.status}</span></td>
                       <td className="px-4 py-2 text-right">
-                        {m.nota_fiscal_id && <button onClick={() => navigate('/faturamento/nfsservice')} className="text-brand-600 dark:text-brand-400 hover:underline text-xs font-medium">Ver NFS-e</button>}
+                        {m.nota_fiscal_id && <button onClick={() => navigate('/faturamento/nfse')} className="text-brand-600 dark:text-brand-400 hover:underline text-xs font-medium">Ver NFS-e</button>}
                       </td>
                     </tr>
                   ))}
