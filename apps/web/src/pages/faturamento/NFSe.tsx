@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { notasService, type NotaFiscal, type NFStatus } from '../../services/faturamentoService';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
@@ -31,6 +32,7 @@ interface CondicaoPagamento { parcelas: number; vencimento: string; intervalo_di
 
 export function NFSePage() {
   const { reportError } = useErrorNotification();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [notas, setNotas] = useState<NotaFiscal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -69,6 +71,16 @@ export function NFSePage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Abre automaticamente a nota indicada via ?id=<notaId>
+  useEffect(() => {
+    const notaId = searchParams.get('id');
+    if (notaId) {
+      openView(notaId);
+      setSearchParams({}, { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (modalMode === 'new' && servicos.length === 0) {

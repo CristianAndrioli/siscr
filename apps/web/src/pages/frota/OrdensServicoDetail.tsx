@@ -44,6 +44,7 @@ export function OrdensServicoDetail() {
   const [faturando, setFaturando] = useState(false);
   const [error, setError] = useState('');
   const [faturadoMsg, setFaturadoMsg] = useState('');
+  const [faturadoNotaId, setFaturadoNotaId] = useState('');
 
   const set = (f: keyof OrdemServicoForm, v: unknown) => setForm(p => ({ ...p, [f]: v }));
 
@@ -96,6 +97,7 @@ export function OrdensServicoDetail() {
     try {
       const res = await ordensServicoService.faturar(id!);
       setFaturadoMsg(res.message);
+      setFaturadoNotaId(res.nota_fiscal_id ?? '');
       const u = await ordensServicoService.get(id!);
       setRecord(u);
     } catch (err) { const msg = formatApiError(err, 'Erro ao faturar OS.'); reportError(msg, err, 'Frota'); setError(msg); }
@@ -126,7 +128,7 @@ export function OrdensServicoDetail() {
               </button>
             )}
             {record.nota_fiscal_id && (
-              <button onClick={() => navigate('/faturamento/nfse')}
+              <button onClick={() => navigate(`/faturamento/nfse?id=${record.nota_fiscal_id}`)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                 Ver NFS-e
@@ -141,7 +143,7 @@ export function OrdensServicoDetail() {
       {faturadoMsg && (
         <div className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
           <svg className="w-4 h-4 mt-0.5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-          <span>{faturadoMsg} <button onClick={() => navigate('/faturamento/nfse')} className="underline font-medium ml-1">Ir para NFS-e →</button></span>
+          <span>{faturadoMsg} <button onClick={() => navigate(faturadoNotaId ? `/faturamento/nfse?id=${faturadoNotaId}` : '/faturamento/nfse')} className="underline font-medium ml-1">Ir para NFS-e →</button></span>
         </div>
       )}
 

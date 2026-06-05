@@ -57,6 +57,7 @@ export function ObrasDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [infoNotaId, setInfoNotaId] = useState('');
   const [finalizarAviso, setFinalizarAviso] = useState<{ pendentes: number; valor: string } | null>(null);
   const set = (f: keyof ObraForm, v: string) => setForm(p => ({ ...p, [f]: v }));
 
@@ -201,10 +202,11 @@ export function ObrasDetail() {
     const isConcluida = record?.status === 'concluida';
     const label = isConcluida ? 'nota fiscal final' : 'nota parcial';
     if (!window.confirm(`Gerar ${label} com todos os apontamentos concluídos ainda não faturados?`)) return;
-    setGerando(true); setError(''); setInfo('');
+    setGerando(true); setError(''); setInfo(''); setInfoNotaId('');
     try {
       const res = await obrasService.gerarMedicao(id!);
       setInfo(res.message);
+      setInfoNotaId(res.nota_fiscal_id ?? '');
       await reloadObraData();
     } catch (err) { const msg = formatApiError(err, 'Erro ao gerar medição.'); reportError(msg, err, 'Frota'); setError(msg); }
     finally { setGerando(false); }
@@ -259,8 +261,8 @@ export function ObrasDetail() {
           <svg className="w-4 h-4 mt-0.5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
           <span>
             {info}
-            {' '}<button onClick={() => navigate('/faturamento/nfse')} className="underline font-medium ml-1">Ver NFS-e em Faturamento →</button>
-            {' '}<button onClick={() => setInfo('')} className="underline text-xs ml-2 opacity-60">Fechar</button>
+            {' '}<button onClick={() => navigate(infoNotaId ? `/faturamento/nfse?id=${infoNotaId}` : '/faturamento/nfse')} className="underline font-medium ml-1">Ver NFS-e em Faturamento →</button>
+            {' '}<button onClick={() => { setInfo(''); setInfoNotaId(''); }} className="underline text-xs ml-2 opacity-60">Fechar</button>
           </span>
         </div>
       )}
@@ -515,7 +517,7 @@ export function ObrasDetail() {
                       <td className="px-4 py-2 text-right tabular-nums font-semibold">{m.valor_total != null ? fmtBRL(m.valor_total) : '—'}</td>
                       <td className="px-4 py-2"><span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{m.status}</span></td>
                       <td className="px-4 py-2 text-right">
-                        {m.nota_fiscal_id && <button onClick={() => navigate('/faturamento/nfse')} className="text-brand-600 dark:text-brand-400 hover:underline text-xs font-medium">Ver NFS-e</button>}
+                        {m.nota_fiscal_id && <button onClick={() => navigate(`/faturamento/nfse?id=${m.nota_fiscal_id}`)} className="text-brand-600 dark:text-brand-400 hover:underline text-xs font-medium">Ver NFS-e</button>}
                       </td>
                     </tr>
                   ))}
