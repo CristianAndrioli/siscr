@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   obrasService, maquinasService, ordensServicoService,
-  type Obra, type ObraForm, type ObraMaquina, type ObraResumo, type Medicao, type Maquina, type OrdemServico, type ApontamentoLinha,
+  type Obra, type ObraForm, type ObraMaquina, type ObraResumo, type Medicao, type Maquina, type OrdemServico,
 } from '../../services/frota';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { fmtBRL, fmtDateISO } from '../../utils/format';
@@ -20,9 +20,26 @@ const CLS = 'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-
 
 type Tab = 'dados' | 'maquinas' | 'apontamentos' | 'medicoes';
 
-interface ApontRow extends ApontamentoLinha {
+interface ApontRow {
+  maquinaId?: string;
   maquina_nome?: string;
+  operadorId: string;
+  servicoId?: string;
+  turnoInicio: string;   // HH:MM
+  turnoFim: string;      // HH:MM
+  horasDirectas: string; // fallback: horas diretas (string para input controlado)
+  valorHora: number;
   incluir: boolean;
+}
+
+// Calcula horas a partir de HH:MM início e fim
+function calcHorasFromTime(inicio: string, fim: string): number {
+  if (!inicio || !fim) return 0;
+  const [hi, mi] = inicio.split(':').map(Number);
+  const [hf, mf] = fim.split(':').map(Number);
+  if (isNaN(hi) || isNaN(mi) || isNaN(hf) || isNaN(mf)) return 0;
+  const mins = hf * 60 + mf - (hi * 60 + mi);
+  return Math.max(0, mins / 60);
 }
 
 export function ObrasDetail() {
@@ -90,8 +107,9 @@ export function ObrasDetail() {
       maquinaId: om.maquina_id,
       maquina_nome: om.maquina_nome,
       operadorId: '',
-      horimetroInicial: om.horimetro_atual ?? 0,
-      horimetroFinal: undefined,
+      turnoInicio: '',
+      turnoFim: '',
+      horasDirectas: '',
       valorHora: om.valor_hora ?? 0,
       incluir: false,
     })));
@@ -144,15 +162,31 @@ export function ObrasDetail() {
   const setRow = (idx: number, patch: Partial<ApontRow>) => setApontRows(rows => rows.map((r, i) => i === idx ? { ...r, ...patch } : r));
 
   const handleApontar = async () => {
-    const linhas: ApontamentoLinha[] = apontRows.filter(r => r.incluir).map(r => ({
-      maquinaId: r.maquinaId, operadorId: r.operadorId, servicoId: r.servicoId,
-      horimetroInicial: r.horimetroInicial, horimetroFinal: r.horimetroFinal, horas: r.horas, valorHora: r.valorHora,
-    }));
-    if (linhas.length === 0) { setError('Marque ao menos uma máquina para apontar.'); return; }
-    if (linhas.some(l => !l.operadorId)) { setError('Selecione o operador de cada linha marcada.'); return; }
+    const selecionadas = apontRows.filter(r => r.incluir);
+    if (selecionadas.length === 0) { setError('Marque ao menos uma máquina para apontar.'); return; }
+    if (selecionadas.some(r => !r.operadorId)) { setError('Selecione o operador de cada linha marcada.'); return; }
+
+    const linhas: ApontamentoLinha[] = selecionadas.map(r => {
+      const horasPorHorario = calcHorasFromTime(r.turnoInicio, r.turnoFim);
+      const horasDiretas = r.horasDirectas !== '' ? Number(r.horasDirectas) : undefined;
+      const horas = horasPorHorario > 0 ? horasPorHorario : horasDiretas;
+      return {
+        maquinaId: r.maquinaId,
+        operadorId: r.operadorId,
+        servicoId: r.servicoId,
+        horas,
+        valorHora: r.valorHora,
+      };
+    });
+
+    if (linhas.some(l => !l.horas || l.horas <= 0)) {
+      setError('Informe o horário (início e fim) ou as horas trabalhadas em cada linha marcada.');
+      return;
+    }
+
     setError(''); setInfo('');
     try {
-      const res = await obrasService.apontarHoras(id!, { turnoData, linhas });
+      const res = await obrasService.apontarHoras(id!, { turnoData, turnoInicio: selecionadas[0]?.turnoInicio || undefined, turnoFim: selecionadas[0]?.turnoFim || undefined, linhas });
       setInfo(res.message);
       await reloadObraData();
     } catch (err) { const msg = formatApiError(err, 'Erro ao apontar horas.'); reportError(msg, err, 'Frota'); setError(msg); }
@@ -309,45 +343,78 @@ export function ObrasDetail() {
             {apontRows.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400">Aloque máquinas na aba "Máquinas" para apontar horas rapidamente.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    <tr>
-                      <th className="px-2 py-2"></th>
-                      <th className="text-left px-2 py-2 font-semibold">Máquina</th>
-                      <th className="text-left px-2 py-2 font-semibold">Operador</th>
-                      <th className="text-right px-2 py-2 font-semibold">Horím. ini.</th>
-                      <th className="text-right px-2 py-2 font-semibold">Horím. fim</th>
-                      <th className="text-right px-2 py-2 font-semibold">Horas</th>
-                      <th className="text-right px-2 py-2 font-semibold">Valor/h</th>
-                      <th className="text-right px-2 py-2 font-semibold">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {apontRows.map((r, idx) => {
-                      const horas = (r.horimetroFinal != null && r.horimetroInicial != null) ? Math.max(0, r.horimetroFinal - r.horimetroInicial) : (r.horas ?? 0);
-                      const total = horas * (r.valorHora ?? 0);
-                      return (
-                        <tr key={r.maquinaId ?? idx} className={r.incluir ? '' : 'opacity-60'}>
-                          <td className="px-2 py-2"><input type="checkbox" checked={r.incluir} onChange={e => setRow(idx, { incluir: e.target.checked })} className="rounded border-slate-300" /></td>
-                          <td className="px-2 py-2 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">{r.maquina_nome ?? '—'}</td>
-                          <td className="px-2 py-2">
-                            <select value={r.operadorId} onChange={e => setRow(idx, { operadorId: e.target.value })} className={`${CLS} min-w-36`}>
-                              <option value="">Operador...</option>
-                              {pessoas.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                            </select>
-                          </td>
-                          <td className="px-2 py-2 w-24"><input type="number" step="0.1" value={r.horimetroInicial ?? ''} onChange={e => setRow(idx, { horimetroInicial: e.target.value === '' ? undefined : Number(e.target.value) })} className={`${CLS} text-right`} /></td>
-                          <td className="px-2 py-2 w-24"><input type="number" step="0.1" value={r.horimetroFinal ?? ''} onChange={e => setRow(idx, { horimetroFinal: e.target.value === '' ? undefined : Number(e.target.value) })} className={`${CLS} text-right`} /></td>
-                          <td className="px-2 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{horas.toFixed(1)}</td>
-                          <td className="px-2 py-2 w-28"><CurrencyInput value={r.valorHora ?? 0} onChange={v => setRow(idx, { valorHora: v })} /></td>
-                          <td className="px-2 py-2 text-right tabular-nums font-semibold text-brand-600 dark:text-brand-400">{fmtBRL(total)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <p className="text-xs text-slate-400 dark:text-slate-500">Informe o horário de início e fim <strong className="text-slate-500 dark:text-slate-400">ou</strong> as horas diretamente. O total é calculado automaticamente.</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      <tr>
+                        <th className="px-2 py-2 w-8"></th>
+                        <th className="text-left px-2 py-2 font-semibold">Máquina</th>
+                        <th className="text-left px-2 py-2 font-semibold">Operador</th>
+                        <th className="text-center px-2 py-2 font-semibold">Início</th>
+                        <th className="text-center px-2 py-2 font-semibold">Fim</th>
+                        <th className="text-center px-2 py-2 font-semibold">Horas</th>
+                        <th className="text-right px-2 py-2 font-semibold">Valor/h</th>
+                        <th className="text-right px-2 py-2 font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {apontRows.map((r, idx) => {
+                        const horasPorHorario = calcHorasFromTime(r.turnoInicio, r.turnoFim);
+                        const horasDiretas = r.horasDirectas !== '' ? Number(r.horasDirectas) : 0;
+                        const horas = horasPorHorario > 0 ? horasPorHorario : horasDiretas;
+                        const total = horas * (r.valorHora ?? 0);
+                        const usandoHorario = r.turnoInicio !== '' || r.turnoFim !== '';
+                        return (
+                          <tr key={r.maquinaId ?? idx} className={r.incluir ? '' : 'opacity-50'}>
+                            <td className="px-2 py-2">
+                              <input type="checkbox" checked={r.incluir} onChange={e => setRow(idx, { incluir: e.target.checked })} className="rounded border-slate-300" />
+                            </td>
+                            <td className="px-2 py-2 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">{r.maquina_nome ?? '—'}</td>
+                            <td className="px-2 py-2">
+                              <select value={r.operadorId} onChange={e => setRow(idx, { operadorId: e.target.value })} className={`${CLS} min-w-36`}>
+                                <option value="">Operador...</option>
+                                {pessoas.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-2 py-2 w-28">
+                              <input type="time" value={r.turnoInicio} onChange={e => setRow(idx, { turnoInicio: e.target.value, horasDirectas: '' })} className={CLS} />
+                            </td>
+                            <td className="px-2 py-2 w-28">
+                              <input type="time" value={r.turnoFim} onChange={e => setRow(idx, { turnoFim: e.target.value, horasDirectas: '' })} className={CLS} />
+                            </td>
+                            <td className="px-2 py-2 w-24">
+                              {usandoHorario ? (
+                                <div className="border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 text-center tabular-nums font-semibold text-slate-700 dark:text-slate-200">
+                                  {horas.toFixed(1)} h
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number" min="0" step="0.5"
+                                    value={r.horasDirectas}
+                                    onChange={e => setRow(idx, { horasDirectas: e.target.value, turnoInicio: '', turnoFim: '' })}
+                                    placeholder="0"
+                                    className={`${CLS} text-center`}
+                                  />
+                                  <span className="text-xs text-slate-400 whitespace-nowrap">h</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-2 w-28">
+                              <CurrencyInput value={r.valorHora ?? 0} onChange={v => setRow(idx, { valorHora: v })} />
+                            </td>
+                            <td className="px-2 py-2 text-right tabular-nums font-semibold text-brand-600 dark:text-brand-400 whitespace-nowrap">
+                              {fmtBRL(total)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
 
