@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import type { Context } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import type { Env } from '../index'
@@ -7,65 +6,6 @@ import { auditUserId } from '../lib/audit'
 import { parseListPagination } from '../lib/listPagination'
 
 const app = new Hono<{ Bindings: Env }>()
-
-// ─── Helper: monta uma NFS-e rascunho (sem executar) ─────────────────────────
-// Retorna os statements prontos para serem agrupados em um batch pelo chamador,
-// junto com o id da nota e o valor total. Reutilizado por "faturar OS" e por
-// "gerar medição" (nota parcial por obra).
-type NfseItem = { servicoId?: string | null; descricao: string; quantidade: number; valorUnitario: number; unidade?: string }
-
-async function buildNfseRascunho(
-  c: Context<{ Bindings: Env }>,
-  opts: { clienteId: string; naturezaOperacao: string; descricaoServico: string; observacoes: string; itens: NfseItem[] },
-): Promise<{ ok: true; notaId: string; valorTotal: number; stmts: D1PreparedStatement[] } | { ok: false; error: string }> {
-  const tenant = c.get('tenant')
-  const agora = new Date().toISOString()
-  const uid = auditUserId(c)
-
-  const empresa = await c.env.DB_SHARED
-    .prepare('SELECT id, nfe_proximo_numero, nfe_serie FROM empresas WHERE tenant_id = ? LIMIT 1')
-    .bind(tenant.tenantId)
-    .first<{ id: string; nfe_proximo_numero: number; nfe_serie: string }>()
-  if (!empresa) return { ok: false, error: 'Nenhuma empresa cadastrada.' }
-
-  const lastNota = await c.env.DB_SHARED
-    .prepare('SELECT MAX(CAST(numero AS INTEGER)) as max_num FROM notas_fiscais WHERE tenant_id = ? AND tipo = ?')
-    .bind(tenant.tenantId, 'nfse')
-    .first<{ max_num: number | null }>()
-  const proximoNumero = (lastNota?.max_num ?? 0) + 1
-
-  const valorTotal = opts.itens.reduce((acc, it) => acc + it.quantidade * it.valorUnitario, 0)
-  const notaId = crypto.randomUUID()
-
-  const stmts: D1PreparedStatement[] = [
-    c.env.DB_SHARED.prepare(`
-      INSERT INTO notas_fiscais
-        (id, tenant_id, empresa_id, tipo, numero, serie, status, destinatario_id,
-         natureza_operacao, descricao_servico, aliquota_iss, valor_total,
-         forma_pagamento, mod_frete, desconto, observacoes, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, 'nfse', ?, '1', 'rascunho', ?,
-              ?, ?, 0, ?,
-              '17', 9, 0, ?, ?, ?, ?, ?)
-    `).bind(
-      notaId, tenant.tenantId, empresa.id, String(proximoNumero).padStart(9, '0'),
-      opts.clienteId, opts.naturezaOperacao, opts.descricaoServico, valorTotal,
-      opts.observacoes, agora, agora, uid, uid,
-    ),
-  ]
-
-  for (const it of opts.itens) {
-    stmts.push(c.env.DB_SHARED.prepare(`
-      INSERT INTO nota_fiscal_itens
-        (id, nota_fiscal_id, tenant_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-    `).bind(
-      crypto.randomUUID(), notaId, tenant.tenantId, it.servicoId ?? null, it.descricao,
-      it.quantidade, it.valorUnitario, it.quantidade * it.valorUnitario, it.unidade ?? 'HM', agora,
-    ))
-  }
-
-  return { ok: true, notaId, valorTotal, stmts }
-}
 
 // ─── Máquinas ────────────────────────────────────────────────────────────────
 
@@ -377,56 +317,95 @@ app.post('/obras/:id/medicoes', async (c) => {
 
   if (!oss || oss.length === 0) return c.json({ error: 'Não há apontamentos concluídos pendentes de faturamento neste período.' }, 400)
 
-  const lastMed = await c.env.DB_SHARED.prepare('SELECT MAX(numero) as max_num FROM medicoes_frota WHERE obra_id = ? AND tenant_id = ?').bind(obraId, tenant.tenantId).first<{ max_num: number | null }>()
-  const numero = (lastMed?.max_num ?? 0) + 1
+  // ── Busca empresa e próximo número ───
+  const empresa = await c.env.DB_SHARED
+    .prepare('SELECT id FROM empresas WHERE tenant_id = ? LIMIT 1')
+    .bind(tenant.tenantId)
+    .first<{ id: string }>()
+  if (!empresa) return c.json({ error: 'Nenhuma empresa cadastrada. Cadastre a empresa antes de gerar medições.' }, 400)
 
-  const itens: NfseItem[] = oss.map((os) => {
-    const horas = os.horas_trabalhadas ?? 1
-    const valorUnitario = os.valor_hora ?? os.servico_preco ?? 0
-    const desc = [os.servico_desc ?? 'Serviço de frota', os.maquina_nome ? `— ${os.maquina_nome}` : '', `(${os.turno_data})`].filter(Boolean).join(' ')
-    return { servicoId: os.servico_id, descricao: desc, quantidade: horas, valorUnitario }
-  })
-  const totalHoras = oss.reduce((a, os) => a + (os.horas_trabalhadas ?? 0), 0)
+  const lastNota = await c.env.DB_SHARED
+    .prepare("SELECT MAX(CAST(numero AS INTEGER)) as max_num FROM notas_fiscais WHERE tenant_id = ? AND tipo = 'nfse'")
+    .bind(tenant.tenantId)
+    .first<{ max_num: number | null }>()
+  const proximoNumero = (lastNota?.max_num ?? 0) + 1
 
-  const descricaoServico = `Medição ${numero} — ${obra.nome}`
-  const nota = await buildNfseRascunho(c, {
-    clienteId: obra.cliente_id,
-    naturezaOperacao: 'Prestação de Serviços de Frota',
-    descricaoServico: body.descricao || descricaoServico,
-    observacoes: `Medição ${numero} — Obra ${obra.nome} (${oss.length} apontamento(s))`,
-    itens,
-  })
-  if (!nota.ok) return c.json({ error: nota.error }, 400)
+  const lastMed = await c.env.DB_SHARED
+    .prepare('SELECT MAX(numero) as max_num FROM medicoes_frota WHERE obra_id = ? AND tenant_id = ?')
+    .bind(obraId, tenant.tenantId)
+    .first<{ max_num: number | null }>()
+  const numMedicao = (lastMed?.max_num ?? 0) + 1
 
   const now = new Date().toISOString()
   const uid = auditUserId(c)
+  const notaId = crypto.randomUUID()
   const medicaoId = crypto.randomUUID()
+
   const periodos = oss.map((o) => o.turno_data)
   const periodoInicio = body.periodoInicio ?? periodos[0]
   const periodoFim = body.periodoFim ?? periodos[periodos.length - 1]
+  const descricaoMedicao = body.descricao || `Medição ${numMedicao} — ${obra.nome}`
+  const observacoes = `Medição ${numMedicao} — Obra ${obra.nome} (${oss.length} apontamento(s))`
 
-  const stmts: D1PreparedStatement[] = [
-    ...nota.stmts,
+  const totalHoras = oss.reduce((a, os) => a + (os.horas_trabalhadas ?? 0), 0)
+  const valorTotal = oss.reduce((a, os) => a + (os.valor_total ?? (os.horas_trabalhadas ?? 1) * (os.valor_hora ?? 0)), 0)
+
+  // ── Monta batch ─────────────────────────────────────────────────────────────
+  const batchStmts = [
     c.env.DB_SHARED.prepare(`
-      INSERT INTO medicoes_frota
-        (id, tenant_id, obra_id, numero, descricao, periodo_inicio, periodo_fim, total_horas, valor_total, status, nota_fiscal_id, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'faturada', ?, ?, ?, ?, ?)
-    `).bind(medicaoId, tenant.tenantId, obraId, numero, body.descricao || descricaoServico, periodoInicio, periodoFim, totalHoras, nota.valorTotal, nota.notaId, now, now, uid, uid),
+      INSERT INTO notas_fiscais
+        (id, tenant_id, empresa_id, tipo, numero, serie, status, destinatario_id,
+         natureza_operacao, descricao_servico, aliquota_iss, valor_total,
+         forma_pagamento, mod_frete, desconto, observacoes, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, 'nfse', ?, '1', 'rascunho', ?,
+              'Prestação de Serviços de Frota', ?, 0, ?,
+              '17', 9, 0, ?, ?, ?, ?, ?)
+    `).bind(
+      notaId, tenant.tenantId, empresa.id, String(proximoNumero).padStart(9, '0'),
+      obra.cliente_id, descricaoMedicao, valorTotal,
+      observacoes, now, now, uid, uid,
+    ),
   ]
-  for (const os of oss) {
-    stmts.push(c.env.DB_SHARED.prepare('UPDATE ordens_servico_frota SET medicao_id = ?, nota_fiscal_id = ?, updated_at = ?, updated_by = ? WHERE id = ?').bind(medicaoId, nota.notaId, now, uid, os.id))
-  }
-  stmts.push(c.env.DB_SHARED.prepare('UPDATE obras SET valor_faturado = COALESCE(valor_faturado, 0) + ?, updated_at = ?, updated_by = ? WHERE id = ?').bind(nota.valorTotal, now, uid, obraId))
 
-  await c.env.DB_SHARED.batch(stmts)
+  for (const os of oss) {
+    const horas = os.horas_trabalhadas ?? 1
+    const valorUnit = os.valor_hora ?? os.servico_preco ?? 0
+    const desc = [os.servico_desc ?? 'Serviço de frota', os.maquina_nome ? `— ${os.maquina_nome}` : '', `(${os.turno_data})`].filter(Boolean).join(' ')
+    batchStmts.push(c.env.DB_SHARED.prepare(`
+      INSERT INTO nota_fiscal_itens
+        (id, nota_fiscal_id, tenant_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'HM', ?)
+    `).bind(
+      crypto.randomUUID(), notaId, tenant.tenantId, os.servico_id ?? null,
+      desc, horas, valorUnit, horas * valorUnit, now,
+    ))
+  }
+
+  batchStmts.push(c.env.DB_SHARED.prepare(`
+    INSERT INTO medicoes_frota
+      (id, tenant_id, obra_id, numero, descricao, periodo_inicio, periodo_fim, total_horas, valor_total, status, nota_fiscal_id, created_at, updated_at, created_by, updated_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'faturada', ?, ?, ?, ?, ?)
+  `).bind(medicaoId, tenant.tenantId, obraId, numMedicao, descricaoMedicao, periodoInicio, periodoFim, totalHoras, valorTotal, notaId, now, now, uid, uid))
+
+  for (const os of oss) {
+    batchStmts.push(c.env.DB_SHARED.prepare(
+      'UPDATE ordens_servico_frota SET medicao_id = ?, nota_fiscal_id = ?, updated_at = ?, updated_by = ? WHERE id = ?',
+    ).bind(medicaoId, notaId, now, uid, os.id))
+  }
+
+  batchStmts.push(c.env.DB_SHARED.prepare(
+    'UPDATE obras SET valor_faturado = COALESCE(valor_faturado, 0) + ?, updated_at = ?, updated_by = ? WHERE id = ?',
+  ).bind(valorTotal, now, uid, obraId))
+
+  await c.env.DB_SHARED.batch(batchStmts)
 
   return c.json({
     medicao_id: medicaoId,
-    numero,
-    nota_fiscal_id: nota.notaId,
-    total: nota.valorTotal,
+    numero: numMedicao,
+    nota_fiscal_id: notaId,
+    total: valorTotal,
     ordens: oss.length,
-    message: `Medição ${numero} gerada com ${oss.length} apontamento(s). NFS-e rascunho criada — acesse Faturamento → NFS-e para emitir.`,
+    message: `Medição ${numMedicao} gerada com ${oss.length} apontamento(s). NFS-e rascunho criada — acesse Faturamento → NFS-e para emitir.`,
     redirect: '/faturamento/nfsservice',
   }, 201)
 })
@@ -618,6 +597,8 @@ app.post('/ordens/:id/faturar', async (c) => {
 
   const horas = os.horas_trabalhadas ?? 1
   const valorUnitario = os.valor_hora ?? os.servico_preco ?? 0
+  const valorTotal = horas * valorUnitario
+
   const descricaoServico = [
     os.servico_desc ?? 'Serviço de frota',
     os.maquina_nome ? `— Máquina: ${os.maquina_nome}` : '',
@@ -625,25 +606,50 @@ app.post('/ordens/:id/faturar', async (c) => {
     `— Turno: ${os.turno_data}`,
   ].filter(Boolean).join(' ')
 
-  const nota = await buildNfseRascunho(c, {
-    clienteId: os.cliente_id,
-    naturezaOperacao: 'Prestação de Serviços de Frota',
-    descricaoServico,
-    observacoes: `OS Frota #${id.slice(0, 8)} — ${os.obra_nome}`,
-    itens: [{ servicoId: os.servico_id, descricao: descricaoServico, quantidade: horas, valorUnitario }],
-  })
-  if (!nota.ok) return c.json({ error: nota.error }, 400)
+  const empresa = await c.env.DB_SHARED
+    .prepare('SELECT id FROM empresas WHERE tenant_id = ? LIMIT 1')
+    .bind(tenant.tenantId)
+    .first<{ id: string }>()
+  if (!empresa) return c.json({ error: 'Nenhuma empresa cadastrada.' }, 400)
+
+  const lastNota = await c.env.DB_SHARED
+    .prepare("SELECT MAX(CAST(numero AS INTEGER)) as max_num FROM notas_fiscais WHERE tenant_id = ? AND tipo = 'nfse'")
+    .bind(tenant.tenantId)
+    .first<{ max_num: number | null }>()
+  const proximoNumero = (lastNota?.max_num ?? 0) + 1
 
   const agora = new Date().toISOString()
   const uid = auditUserId(c)
+  const notaId = crypto.randomUUID()
+
   await c.env.DB_SHARED.batch([
-    ...nota.stmts,
+    c.env.DB_SHARED.prepare(`
+      INSERT INTO notas_fiscais
+        (id, tenant_id, empresa_id, tipo, numero, serie, status, destinatario_id,
+         natureza_operacao, descricao_servico, aliquota_iss, valor_total,
+         forma_pagamento, mod_frete, desconto, observacoes, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, 'nfse', ?, '1', 'rascunho', ?,
+              'Prestação de Serviços de Frota', ?, 0, ?,
+              '17', 9, 0, ?, ?, ?, ?, ?)
+    `).bind(
+      notaId, tenant.tenantId, empresa.id, String(proximoNumero).padStart(9, '0'),
+      os.cliente_id, descricaoServico, valorTotal,
+      `OS Frota #${id.slice(0, 8)} — ${os.obra_nome}`, agora, agora, uid, uid,
+    ),
+    c.env.DB_SHARED.prepare(`
+      INSERT INTO nota_fiscal_itens
+        (id, nota_fiscal_id, tenant_id, servico_id, descricao, quantidade, valor_unitario, desconto, valor_total, unidade, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'HM', ?)
+    `).bind(
+      crypto.randomUUID(), notaId, tenant.tenantId, os.servico_id ?? null,
+      descricaoServico, horas, valorUnitario, valorTotal, agora,
+    ),
     c.env.DB_SHARED.prepare('UPDATE ordens_servico_frota SET nota_fiscal_id = ?, updated_at = ?, updated_by = ? WHERE id = ?')
-      .bind(nota.notaId, agora, uid, id),
+      .bind(notaId, agora, uid, id),
   ])
 
   return c.json({
-    nota_fiscal_id: nota.notaId,
+    nota_fiscal_id: notaId,
     message: 'NFS-e rascunho criada. Acesse Faturamento → NFS-e para emitir e gerar o Contas a Receber.',
     redirect: `/faturamento/nfsservice`,
   }, 201)
