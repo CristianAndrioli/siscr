@@ -57,6 +57,7 @@ export function ObrasDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [finalizarAviso, setFinalizarAviso] = useState<{ pendentes: number; valor: string } | null>(null);
   const set = (f: keyof ObraForm, v: string) => setForm(p => ({ ...p, [f]: v }));
 
   // Máquinas alocadas
@@ -135,11 +136,15 @@ export function ObrasDetail() {
 
   const handleFinalizar = async () => {
     if (!window.confirm('Finalizar esta obra? Ela será marcada como concluída.')) return;
-    setError(''); setInfo('');
+    setError(''); setInfo(''); setFinalizarAviso(null);
     try {
       const res = await obrasService.finalizar(id!);
       const u = await obrasService.get(id!); setRecord(u);
-      setInfo(res.aviso ? `${res.message} ${res.aviso}` : res.message);
+      if (res.apontamentos_pendentes > 0) {
+        const valorFormatado = fmtBRL(Number((res.aviso ?? '').match(/R\$\s*([\d.,]+)/)?.[0]?.replace('R$', '').replace(/\./g, '').replace(',', '.') ?? 0));
+        setFinalizarAviso({ pendentes: res.apontamentos_pendentes, valor: valorFormatado });
+        setTab('medicoes');
+      }
     } catch (err) { const msg = formatApiError(err, 'Erro ao finalizar.'); reportError(msg, err, 'Frota'); setError(msg); }
   };
 
@@ -234,10 +239,27 @@ export function ObrasDetail() {
       </div>
 
       {error && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>}
+
+      {/* Aviso pós-finalização: há saldo a faturar, já foi redirecionado para aba Medições */}
+      {finalizarAviso && (
+        <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
+          <svg className="w-4 h-4 mt-0.5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+          <span>
+            Obra finalizada. Há <strong>{finalizarAviso.pendentes} apontamento(s)</strong> concluído(s) ainda não faturados. Gere a medição final para criar a nota fiscal.
+            {' '}<button onClick={() => setFinalizarAviso(null)} className="underline font-medium ml-1 text-amber-700 dark:text-amber-400">Dispensar</button>
+          </span>
+        </div>
+      )}
+
+      {/* Balão de sucesso após gerar medição/apontamento */}
       {info && (
         <div className="bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
           <svg className="w-4 h-4 mt-0.5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-          <span>{info} <button onClick={() => navigate('/faturamento/nfsservice')} className="underline font-medium ml-1">Ir para NFS-e →</button></span>
+          <span>
+            {info}
+            {' '}<button onClick={() => navigate('/faturamento/nfsservice')} className="underline font-medium ml-1">Ver NFS-e em Faturamento →</button>
+            {' '}<button onClick={() => setInfo('')} className="underline text-xs ml-2 opacity-60">Fechar</button>
+          </span>
         </div>
       )}
 
