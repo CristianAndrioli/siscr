@@ -37,6 +37,54 @@ function Icon({ d, className = 'w-4 h-4' }: { d: ReactNode; className?: string }
   );
 }
 
+
+// ─── Mapa de rotas → labels legíveis ──────────────────────────────
+const ROUTE_LABELS: Record<string, string> = {
+  app: 'Início',
+  cadastros: 'Cadastros',
+  pessoas: 'Pessoas',
+  produtos: 'Produtos',
+  servicos: 'Serviços',
+  financeiro: 'Financeiro',
+  'contas-receber': 'Contas a Receber',
+  'contas-pagar': 'Contas a Pagar',
+  'contas-bancarias': 'Contas Bancárias',
+  'regua-cobranca': 'Régua de Cobrança',
+  dashboard: 'Dashboard',
+  faturamento: 'Faturamento',
+  cotacoes: 'Cotações',
+  'nf-venda': 'NF-e Venda',
+  ncm: 'Tabela NCM',
+  nfse: 'NFSe',
+  entrada: 'Entrada',
+  notas: 'Notas Importadas',
+  nova: 'Nova',
+  'nf-e': 'NF-e',
+  estoque: 'Estoque',
+  posicao: 'Posição Atual',
+  movimentacoes: 'Movimentações',
+  transferencias: 'Transferências',
+  locais: 'Locais',
+  instrucoes: 'Instruções',
+  frota: 'Frota',
+  'ordens-servico': 'Ordens de Serviço',
+  maquinas: 'Máquinas',
+  obras: 'Obras / Projetos',
+  configuracoes: 'Configurações',
+  usuarios: 'Usuários',
+  permissoes: 'Permissões',
+  filiais: 'Empresas e Filiais',
+  logs: 'Log de Erros',
+  'subscription-management': 'Assinatura',
+  perfil: 'Perfil',
+};
+
+function buildBreadcrumb(pathname: string): string {
+  const segments = pathname.replace(/^\//, '').split('/').filter(Boolean);
+  if (segments.length === 0) return 'Início';
+  return segments.map(s => ROUTE_LABELS[s] ?? s).join(' › ');
+}
+
 export default function Layout({ children }: LayoutProps) {
   const [menuOpen, setMenuOpen] = useState<Record<MenuKey, boolean>>({
     cadastros: false, financeiro: false, faturamento: false, entrada: false, estoque: false, frota: false, configuracoes: false,
@@ -211,7 +259,6 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="faturamento" label="Faturamento" iconD={icons.invoice}>
             <SubLink to="/faturamento/cotacoes" label="Cotações" />
             <SubLink to="/faturamento/nf-venda" label="NF-e Venda" />
-            <SubLink to="/configuracoes/faturamento" label="Configuração NF-e" />
             <SubLink to="/faturamento/ncm" label="Tabela NCM" />
             <SubLink to="/faturamento/nfse" label="NFSe" />
           </SubMenu>
@@ -277,7 +324,7 @@ export default function Layout({ children }: LayoutProps) {
           <button
             onClick={handleLogout}
             title="Sair"
-            className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-all"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-all"
           >
             <Icon d={icons.logout} className="w-3.5 h-3.5" />
           </button>
@@ -314,7 +361,7 @@ export default function Layout({ children }: LayoutProps) {
           </button>
 
           <div className="flex-1 text-sm text-slate-400 dark:text-slate-500 capitalize truncate min-w-0">
-            {location.pathname.replace(/^\//, '').replace(/\//g, ' › ') || 'Início'}
+            {buildBreadcrumb(location.pathname)}
           </div>
 
           <button

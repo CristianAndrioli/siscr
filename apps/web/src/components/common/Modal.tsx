@@ -25,45 +25,57 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', f
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      aria-labelledby="modal-title"
+      role="dialog"
+      aria-modal="true"
+    >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/70 backdrop-blur-sm transition-opacity"
         onClick={onClose}
-      ></div>
+      />
 
       {/* Modal */}
       <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-        <div className={`
-          relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all
-          w-full ${sizeClasses[size]}
-        `}>
+        <div
+          className={`
+            relative transform overflow-hidden rounded-2xl text-left shadow-xl transition-all
+            bg-white dark:bg-slate-900
+            border border-slate-200 dark:border-slate-800
+            w-full ${sizeClasses[size]}
+          `}
+        >
           {/* Header */}
           {title && (
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900" id="modal-title">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4">
+              <h3
+                className="text-base font-semibold text-slate-900 dark:text-slate-100 font-display"
+                id="modal-title"
+              >
                 {title}
               </h3>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-500"
                 aria-label="Fechar"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition-colors"
               >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
           )}
 
           {/* Body */}
-          <div className="px-6 py-4">
+          <div className="px-6 py-5 text-slate-700 dark:text-slate-300">
             {children}
           </div>
 
           {/* Footer */}
           {footer && (
-            <div className="border-t border-gray-200 px-6 py-4 flex justify-end space-x-3">
+            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-end gap-3">
               {footer}
             </div>
           )}
@@ -72,4 +84,3 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', f
     </div>
   );
 }
-
