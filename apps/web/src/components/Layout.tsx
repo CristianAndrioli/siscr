@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { usePermissions } from '../hooks/usePermissions';
 import { useTheme } from '../hooks/useTheme';
+import { useUserPreferences } from '../hooks/useUserPreferences';
 import OnboardingEmpresaGate from './OnboardingEmpresaGate';
 import WhatsAppSupportButton from './WhatsAppSupportButton';
 import CommandPalette from './commandPalette/CommandPalette';
@@ -77,6 +78,7 @@ const ROUTE_LABELS: Record<string, string> = {
   logs: 'Log de Erros',
   'subscription-management': 'Assinatura',
   perfil: 'Perfil',
+  personalizacao: 'Personalização',
 };
 
 function buildBreadcrumb(pathname: string): string {
@@ -94,6 +96,7 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { hasModuleAccess } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
+  const { prefs } = useUserPreferences();
   const [permAlert, setPermAlert] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
@@ -290,6 +293,7 @@ export default function Layout({ children }: LayoutProps) {
               <SubLink to="/configuracoes/permissoes" label="Permissões" />
               <SubLink to="/configuracoes/filiais" label="Empresas e Filiais" />
               <SubLink to="/configuracoes/faturamento" label="Faturamento (NF-e)" />
+              <SubLink to="/configuracoes/personalizacao" label="Personalização" />
               <SubLink to="/subscription-management" label="Assinatura" />
               <SubLink to="/configuracoes/logs" label="Log de Erros" />
             </SubMenu>
@@ -337,81 +341,56 @@ export default function Layout({ children }: LayoutProps) {
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
       <OnboardingEmpresaGate />
       {/* Sidebar desktop */}
-      <div className="hidden lg:flex lg:flex-col lg:w-60 flex-none">
-        {sidebar}
-      </div>
-
-      {/* Sidebar mobile */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          <div className="w-60 flex flex-col shadow-2xl">{sidebar}</div>
-          <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-        </div>
-      )}
-
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar */}
-        <header className="sticky top-0 z-30 h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 px-4 lg:px-6 transition-colors duration-200">
-          <button
-            className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Icon d={icons.menu} className="w-5 h-5" />
-          </button>
-
-          <div className="flex-1 text-sm text-slate-400 dark:text-slate-500 capitalize truncate min-w-0">
-            {buildBreadcrumb(location.pathname)}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-sm text-slate-500 dark:text-slate-400 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors flex-none"
-            title="Busca universal"
-          >
-            <svg className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <span className="hidden md:inline">Buscar</span>
-            <kbd className="hidden md:inline font-mono text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600">
-              {modKey}K
-            </kbd>
-          </button>
-
-          {/* Toggle de tema (topbar mobile) */}
-          <button
-            onClick={toggleTheme}
-            className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <Icon d={isDark ? icons.sun : icons.moon} className="w-4 h-4" />
-          </button>
-
-          {tenantSlug && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-950 border border-brand-100 dark:border-brand-900 text-brand-700 dark:text-brand-300 text-xs font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-none" />
-              @{tenantSlug}
-            </div>
-          )}
-        </header>
-
-        {permAlert && (
-          <div
-            role="alert"
-            className="mx-4 mt-3 lg:mx-6 lg:mt-4 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 text-sm font-medium shadow-sm"
-          >
-            {permAlert}
-          </div>
-        )}
-
-        <main className="flex-1 p-4 lg:p-6">
-          {children}
-        </main>
-      </div>
-
-      <WhatsAppSupportButton />
-
-      <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
-    </div>
-  );
-}
+      {prefs.sidebarMode !== 'hidden' && (
+        <div className={`hidden lg:flex lg:flex-col flex-none transition-all duration-200 ${prefs.sidebarMode === 'icons' ? 'lg:w-14' : 'lg:w-60'}`}>
+          {prefs.sidebarMode === 'icons' ? (
+            <aside className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
+              {/* Logo mark only */}
+              <div className="flex items-center justify-center h-14 border-b border-slate-100 dark:border-slate-800 flex-none">
+                <div className="w-7 h-7 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-xs">S</div>
+              </div>
+              {/* Icon nav */}
+              <nav className="flex-1 overflow-y-auto py-3 flex flex-col items-center gap-1">
+                {[
+                  { to: '/app', icon: icons.home, label: 'Início' },
+                  hasModuleAccess('cadastros') ? { to: '/cadastros/pessoas', icon: icons.users, label: 'Cadastros' } : null,
+                  hasModuleAccess('financeiro') ? { to: '/financeiro/contas-receber', icon: icons.money, label: 'Financeiro' } : null,
+                  hasModuleAccess('faturamento') ? { to: '/faturamento/cotacoes', icon: icons.invoice, label: 'Faturamento' } : null,
+                  hasModuleAccess('estoque') ? { to: '/estoque/posicao', icon: icons.box, label: 'Estoque' } : null,
+                  hasModuleAccess('frota') ? { to: '/frota/ordens-servico', icon: icons.wrench, label: 'Frota' } : null,
+                ].filter(Boolean).map(item => item && (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    title={item.label}
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
+                      isActive(item.to)
+                        ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
+                        : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <Icon d={item.icon} />
+                  </Link>
+                ))}
+                <div className="flex-1" />
+                {hasModuleAccess('configuracoes') && (
+                  <Link
+                    to="/configuracoes"
+                    title="Configurações"
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
+                      isActive('/configuracoes')
+                        ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
+                        : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Icon d={icons.gear} />
+                  </Link>
+                )}
+                <Link
+                  to="/perfil"
+                  title="Perfil"
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
+                    isActive('/perfil')
+                      ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
+                      : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                

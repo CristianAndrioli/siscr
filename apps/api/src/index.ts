@@ -25,6 +25,7 @@ import cronRoutes from './routes/cron'
 import queueRoutes from './routes/queue'
 import logsRoutes from './routes/logs'
 import frotaRoutes from './routes/frota'
+import preferencesRoutes from './routes/preferences'
 
 export type Env = {
   // D1 — banco compartilhado (tenants, planos, billing)
@@ -144,6 +145,7 @@ app.route('/api/tenant/entrada', entradaRoutes)
 app.route('/api/tenant/vendas', vendasRoutes)
 app.route('/api/tenant/logs', logsRoutes)
 app.route('/api/tenant/frota', frotaRoutes)
+app.route('/api/tenant/preferences', preferencesRoutes)
 
 // ─── Rotas internas (Cron + Queue handlers) ───────────────────
 app.route('/__cron', cronRoutes)
@@ -176,10 +178,4 @@ export default {
       try {
         console.log(`Processando task: ${message.id}`, message.body)
         message.ack()
-      } catch (err) {
-        console.error(`Falha na task ${message.id}:`, err)
-        message.retry()
-      }
-    }
-  },
-}
+      } catch (er
