@@ -541,7 +541,7 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Sidebar desktop */}
       {prefs.sidebarMode !== 'hidden' && (
-        <div className={`hidden lg:flex lg:flex-col flex-none transition-all duration-200 ${prefs.sidebarMode === 'icons' ? 'lg:w-14' : 'lg:w-60'}`}>
+        <div className={`hidden lg:flex lg:flex-col flex-none h-screen sticky top-0 overflow-hidden transition-all duration-200 ${prefs.sidebarMode === 'icons' ? 'lg:w-14' : 'lg:w-60'}`}>
           {prefs.sidebarMode === 'icons' ? iconsSidebar : sidebar}
         </div>
       )}
