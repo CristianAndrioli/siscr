@@ -178,4 +178,10 @@ export default {
       try {
         console.log(`Processando task: ${message.id}`, message.body)
         message.ack()
-      } catch (er
+      } catch (err) {
+        console.error(`Falha na task ${message.id}:`, err)
+        message.retry()
+      }
+    }
+  },
+}

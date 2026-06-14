@@ -347,6 +347,21 @@ export const contasPagar = sqliteTable('contas_pagar', {
   index('idx_cp_vencimento').on(t.vencimento),
 ])
 
+// ─── User Preferences (per-user UI settings) ──────────────────────
+export const userPreferences = sqliteTable('user_preferences', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId: text('tenant_id').notNull(),
+  accentColor: text('accent_color').notNull().default('#4f46e5'),
+  sidebarMode: text('sidebar_mode').notNull().default('icons'), // full | icons | hidden
+  homeLayout: text('home_layout').notNull().default('grid'),    // grid | list
+  theme: text('theme').notNull().default('system'),             // light | dark | system
+  density: text('density').notNull().default('normal'),         // compact | normal | comfortable
+  recentItemsCount: integer('recent_items_count').notNull().default(5),
+  recentItems: text('recent_items').notNull().default('[]'),    // JSON array of {label,to,icon}
+  visibleModules: text('visible_modules').notNull().default('[]'), // JSON array of module keys
+  updatedAt: text('updated_at').notNull(),
+})
+
 // ─── Faturamento (NF-e / NFSe) ────────────────────────────────────
 export const notasFiscais = sqliteTable('notas_fiscais', {
   id: text('id').primaryKey(),
