@@ -1,4 +1,5 @@
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect, useRef, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../services/auth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -96,6 +97,22 @@ function IconFlyout({
   isActive: boolean; onLinkClick?: () => void
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleEnter = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (wrapRef.current) {
+      const r = wrapRef.current.getBoundingClientRect();
+      setPos({ top: r.top, left: r.right + 4 });
+    }
+    setOpen(true);
+  };
+
+  const handleLeave = () => {
+    closeTimer.current = setTimeout(() => setOpen(false), 80);
+  };
 
   const btnCls = `w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
     isActive
@@ -104,19 +121,20 @@ function IconFlyout({
   }`;
 
   return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div ref={wrapRef} onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
       {items ? (
-        <button className={btnCls}>
-          <Icon d={iconD} />
-        </button>
+        <button className={btnCls}><Icon d={iconD} /></button>
       ) : (
-        <Link to={to!} onClick={onLinkClick} className={btnCls}>
-          <Icon d={iconD} />
-        </Link>
+        <Link to={to!} onClick={onLinkClick} className={btnCls}><Icon d={iconD} /></Link>
       )}
 
-      {open && (
-        <div className="absolute left-full top-0 ml-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-1.5 min-w-[180px]">
+      {open && createPortal(
+        <div
+          className="fixed z-[9999] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-1.5 min-w-[180px]"
+          style={{ top: pos.top, left: pos.left }}
+          onMouseEnter={handleEnter}
+          onMouseLeave={handleLeave}
+        >
           <p className="px-3 pt-0.5 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 mb-1">
             {label}
           </p>
@@ -140,7 +158,8 @@ function IconFlyout({
                   {label}
                 </Link>
               )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -155,7 +174,13 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { hasModuleAccess } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
-  const { prefs } = useUserPreferences();
+  const { prefs, updatePrefs } = useUserPreferences();
+
+  const handleToggleTheme = () => {
+    const next = isDark ? 'light' : 'dark';
+    toggleTheme();
+    updatePrefs({ theme: next });
+  };
   const [permAlert, setPermAlert] = useState<string | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
@@ -364,7 +389,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Footer da sidebar — usuário + tema */}
       <div className="border-t border-slate-100 dark:border-slate-800 p-3 flex-none space-y-1">
         <button
-          onClick={toggleTheme}
+          onClick={handleToggleTheme}
           className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           title={isDark ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
         >
@@ -518,7 +543,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Tema + logout */}
       <div className="border-t border-slate-100 dark:border-slate-800 py-2 flex flex-col items-center gap-1 px-1.5">
         <button
-          onClick={toggleTheme}
+          onClick={handleToggleTheme}
           title={isDark ? 'Modo claro' : 'Modo escuro'}
           className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
@@ -585,7 +610,7 @@ export default function Layout({ children }: LayoutProps) {
           </button>
 
           <button
-            onClick={toggleTheme}
+            onClick={handleToggleTheme}
             className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <Icon d={isDark ? icons.sun : icons.moon} className="w-4 h-4" />
