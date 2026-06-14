@@ -347,32 +347,23 @@ export const contasPagar = sqliteTable('contas_pagar', {
   index('idx_cp_vencimento').on(t.vencimento),
 ])
 
+// ─── User Preferences (per-user UI settings) ──────────────────────
+export const userPreferences = sqliteTable('user_preferences', {
+  userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId: text('tenant_id').notNull(),
+  accentColor: text('accent_color').notNull().default('#4f46e5'),
+  sidebarMode: text('sidebar_mode').notNull().default('icons'), // full | icons | hidden
+  homeLayout: text('home_layout').notNull().default('grid'),    // grid | list
+  theme: text('theme').notNull().default('system'),             // light | dark | system
+  density: text('density').notNull().default('normal'),         // compact | normal | comfortable
+  recentItemsCount: integer('recent_items_count').notNull().default(5),
+  recentItems: text('recent_items').notNull().default('[]'),    // JSON array of {label,to,icon}
+  visibleModules: text('visible_modules').notNull().default('[]'), // JSON array of module keys
+  updatedAt: text('updated_at').notNull(),
+})
+
 // ─── Faturamento (NF-e / NFSe) ────────────────────────────────────
 export const notasFiscais = sqliteTable('notas_fiscais', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull(),
-  empresaId: text('empresa_id').notNull(),
-  filialId: text('filial_id').notNull(),
-  pedidoId: text('pedido_id').references(() => pedidosVenda.id),
-  destinatarioId: text('destinatario_id'),
-  tipo: text('tipo').notNull(), // NFe | NFSe | NFCe
-  numero: integer('numero'),
-  serie: text('serie').default('1'),
-  chaveAcesso: text('chave_acesso').unique(),
-  status: text('status').notNull().default('rascunho'), // rascunho | pendente_emissao | emitida | cancelada | denegada
-  xmlPath: text('xml_path'), // caminho no R2
-  valorTotal: real('valor_total'),
-  motivoCancelamento: text('motivo_cancelamento'),
-  ambiente: integer('ambiente'),
-  modelo: integer('modelo'),
-  protocoloAutorizacao: text('protocolo_autorizacao'),
-  dataAutorizacao: text('data_autorizacao'),
-  formaPagamento: text('forma_pagamento'),
-  modFrete: integer('mod_frete'),
-  valorTroco: real('valor_troco'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at'),
-}, (t) => [
-  index('idx_nf_tenant').on(t.tenantId),
-  index('idx_nf_status').on(t.status),
-])
+  empresaId: 
