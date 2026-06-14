@@ -57,8 +57,20 @@ function saveLocal(prefs: UserPreferences) {
 /** Aplica a cor de destaque como CSS custom property no :root */
 function applyAccentColor(color: string) {
   document.documentElement.style.setProperty('--color-brand', color)
-  // Also write as brand-600 equivalent used by Tailwind's arbitrary values
   document.documentElement.style.setProperty('--ac', color)
+}
+
+/** Aplica o tema (dark/light/system) no documento e sincroniza com useTheme */
+function applyThemePref(theme: string) {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  const isDark = theme === 'dark' || (theme === 'system' && prefersDark)
+  document.documentElement.classList.toggle('dark', isDark)
+  // Sincroniza com a chave que useTheme usa no localStorage
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    const key = `theme_${user.id || 'anon'}`
+    localStorage.setItem(key, isDark ? 'dark' : 'light')
+  } catch { /* noop */ }
 }
 
 export function useUserPreferences() {
@@ -66,7 +78,7 @@ export function useUserPreferences() {
   const [loading, setLoading] = useState(true)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load from API on mount
+  // Load from API on mount — aplica tema e cor de destaque
   useEffect(() => {
     api.get('/tenant/preferences')
       .then(res => {
@@ -74,19 +86,26 @@ export function useUserPreferences() {
         setPrefs(merged)
         saveLocal(merged)
         applyAccentColor(merged.accentColor)
+        applyThemePref(merged.theme)
       })
       .catch(() => {
-        // Fallback to local
-        applyAccentColor(prefs.accentColor)
+        // Fallback to local — ainda aplica preferências salvas
+        const local = readLocal()
+        applyAccentColor(local.accentColor)
+        applyThemePref(local.theme)
       })
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Sync accent color whenever it changes
+  // Re-aplica cor e tema sempre que mudarem
   useEffect(() => {
     applyAccentColor(prefs.accentColor)
   }, [prefs.accentColor])
+
+  useEffect(() => {
+    applyThemePref(prefs.theme)
+  }, [prefs.theme])
 
   /** Update preferences with debounced API save */
   const updatePrefs = useCallback((patch: Partial<UserPreferences>) => {
@@ -94,7 +113,6 @@ export function useUserPreferences() {
       const next = { ...prev, ...patch }
       saveLocal(next)
 
-      // Debounce API save by 600ms
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
         api.put('/tenant/preferences', next).catch(() => { /* silent */ })
@@ -112,7 +130,6 @@ export function useUserPreferences() {
       const next = { ...prev, recentItems: updated }
       saveLocal(next)
 
-      // Fire-and-forget patch to API
       api.patch('/tenant/preferences/recent', { item, maxCount: prev.recentItemsCount })
         .catch(() => { /* silent */ })
 

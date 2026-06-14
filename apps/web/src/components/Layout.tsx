@@ -38,7 +38,6 @@ function Icon({ d, className = 'w-4 h-4' }: { d: ReactNode; className?: string }
   );
 }
 
-
 // ─── Mapa de rotas → labels legíveis ──────────────────────────────
 const ROUTE_LABELS: Record<string, string> = {
   app: 'Início',
@@ -85,6 +84,66 @@ function buildBreadcrumb(pathname: string): string {
   const segments = pathname.replace(/^\//, '').split('/').filter(Boolean);
   if (segments.length === 0) return 'Início';
   return segments.map(s => ROUTE_LABELS[s] ?? s).join(' › ');
+}
+
+// ─── Flyout para sidebar icons-only ──────────────────────────────
+interface FlyoutItem { label: string; to: string }
+
+function IconFlyout({
+  iconD, label, to, items, isActive, onLinkClick,
+}: {
+  iconD: ReactNode; label: string; to?: string; items?: FlyoutItem[]
+  isActive: boolean; onLinkClick?: () => void
+}) {
+  const [open, setOpen] = useState(false);
+
+  const btnCls = `w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
+    isActive
+      ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
+      : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300'
+  }`;
+
+  return (
+    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {items ? (
+        <button className={btnCls}>
+          <Icon d={iconD} />
+        </button>
+      ) : (
+        <Link to={to!} onClick={onLinkClick} className={btnCls}>
+          <Icon d={iconD} />
+        </Link>
+      )}
+
+      {open && (
+        <div className="absolute left-full top-0 ml-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-1.5 min-w-[180px]">
+          <p className="px-3 pt-0.5 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 mb-1">
+            {label}
+          </p>
+          {items
+            ? items.map(item => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => { setOpen(false); onLinkClick?.() }}
+                  className="block px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-950 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
+                >
+                  {item.label}
+                </Link>
+              ))
+            : (
+                <Link
+                  to={to!}
+                  onClick={() => { setOpen(false); onLinkClick?.() }}
+                  className="block px-3 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-brand-50 dark:hover:bg-brand-950 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
+                >
+                  {label}
+                </Link>
+              )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Layout({ children }: LayoutProps) {
@@ -304,7 +363,6 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Footer da sidebar — usuário + tema */}
       <div className="border-t border-slate-100 dark:border-slate-800 p-3 flex-none space-y-1">
-        {/* Toggle de tema */}
         <button
           onClick={toggleTheme}
           className="flex items-center justify-between w-full px-3 py-2 rounded-lg text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -316,7 +374,6 @@ export default function Layout({ children }: LayoutProps) {
           </span>
         </button>
 
-        {/* Usuário */}
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
           <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-none">
             {userInitials}
@@ -337,82 +394,155 @@ export default function Layout({ children }: LayoutProps) {
     </aside>
   );
 
+  // ─── Sidebar icons-only com flyouts ──────────────────────────────
+  const iconsSidebar = (
+    <aside className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
+      {/* Logo mark */}
+      <div className="flex items-center justify-center h-14 border-b border-slate-100 dark:border-slate-800 flex-none">
+        <div className="w-7 h-7 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-xs">S</div>
+      </div>
+
+      {/* Icon nav */}
+      <nav className="flex-1 overflow-y-auto py-3 flex flex-col items-center gap-1 px-1.5">
+        <IconFlyout
+          iconD={icons.home} label="Início" to="/app"
+          isActive={isActive('/app')}
+          onLinkClick={() => setSidebarOpen(false)}
+        />
+
+        {hasModuleAccess('faturamento') && (
+          <IconFlyout
+            iconD={icons.truck} label="Entrada"
+            isActive={isActive('/entrada')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'NF-e de entrada', to: '/entrada/nf-e/nova' },
+              { label: 'Notas importadas', to: '/entrada/notas' },
+            ]}
+          />
+        )}
+
+        {hasModuleAccess('cadastros') && (
+          <IconFlyout
+            iconD={icons.users} label="Cadastros"
+            isActive={isActive('/cadastros')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Pessoas', to: '/cadastros/pessoas' },
+              { label: 'Produtos', to: '/cadastros/produtos' },
+              { label: 'Serviços', to: '/cadastros/servicos' },
+            ]}
+          />
+        )}
+
+        {hasModuleAccess('financeiro') && (
+          <IconFlyout
+            iconD={icons.money} label="Financeiro"
+            isActive={isActive('/financeiro')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Contas a Receber', to: '/financeiro/contas-receber' },
+              { label: 'Contas a Pagar', to: '/financeiro/contas-pagar' },
+              { label: 'Contas Bancárias', to: '/financeiro/contas-bancarias' },
+              { label: 'Régua de Cobrança', to: '/financeiro/regua-cobranca' },
+              { label: 'Dashboard', to: '/financeiro/dashboard' },
+            ]}
+          />
+        )}
+
+        {hasModuleAccess('faturamento') && (
+          <IconFlyout
+            iconD={icons.invoice} label="Faturamento"
+            isActive={isActive('/faturamento')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Cotações', to: '/faturamento/cotacoes' },
+              { label: 'NF-e Venda', to: '/faturamento/nf-venda' },
+              { label: 'NFSe', to: '/faturamento/nfse' },
+              { label: 'Tabela NCM', to: '/faturamento/ncm' },
+            ]}
+          />
+        )}
+
+        {hasModuleAccess('estoque') && (
+          <IconFlyout
+            iconD={icons.box} label="Estoque"
+            isActive={isActive('/estoque')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Posição Atual', to: '/estoque/posicao' },
+              { label: 'Movimentações', to: '/estoque/movimentacoes' },
+              { label: 'Transferências', to: '/estoque/transferencias' },
+              { label: 'Locais', to: '/estoque/locais' },
+            ]}
+          />
+        )}
+
+        {hasModuleAccess('frota') && (
+          <IconFlyout
+            iconD={icons.wrench} label="Frota"
+            isActive={isActive('/frota')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Ordens de Serviço', to: '/frota/ordens-servico' },
+              { label: 'Máquinas', to: '/frota/maquinas' },
+              { label: 'Obras', to: '/frota/obras' },
+            ]}
+          />
+        )}
+
+        <div className="flex-1" />
+
+        {hasModuleAccess('configuracoes') && (
+          <IconFlyout
+            iconD={icons.gear} label="Configurações"
+            isActive={isActive('/configuracoes')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Visão Geral', to: '/configuracoes' },
+              { label: 'Usuários', to: '/configuracoes/usuarios' },
+              { label: 'Permissões', to: '/configuracoes/permissoes' },
+              { label: 'Personalização', to: '/configuracoes/personalizacao' },
+              { label: 'Log de Erros', to: '/configuracoes/logs' },
+            ]}
+          />
+        )}
+
+        <IconFlyout
+          iconD={icons.person} label="Perfil" to="/perfil"
+          isActive={isActive('/perfil')}
+          onLinkClick={() => setSidebarOpen(false)}
+        />
+      </nav>
+
+      {/* Tema + logout */}
+      <div className="border-t border-slate-100 dark:border-slate-800 py-2 flex flex-col items-center gap-1 px-1.5">
+        <button
+          onClick={toggleTheme}
+          title={isDark ? 'Modo claro' : 'Modo escuro'}
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          <Icon d={isDark ? icons.sun : icons.moon} />
+        </button>
+        <button
+          onClick={handleLogout}
+          title="Sair"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-all"
+        >
+          <Icon d={icons.logout} />
+        </button>
+      </div>
+    </aside>
+  );
+
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
       <OnboardingEmpresaGate />
+
       {/* Sidebar desktop */}
       {prefs.sidebarMode !== 'hidden' && (
         <div className={`hidden lg:flex lg:flex-col flex-none transition-all duration-200 ${prefs.sidebarMode === 'icons' ? 'lg:w-14' : 'lg:w-60'}`}>
-          {prefs.sidebarMode === 'icons' ? (
-            <aside className="flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
-              {/* Logo mark only */}
-              <div className="flex items-center justify-center h-14 border-b border-slate-100 dark:border-slate-800 flex-none">
-                <div className="w-7 h-7 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-xs">S</div>
-              </div>
-              {/* Icon nav */}
-              <nav className="flex-1 overflow-y-auto py-3 flex flex-col items-center gap-1">
-                {[
-                  { to: '/app', icon: icons.home, label: 'Início' },
-                  hasModuleAccess('cadastros') ? { to: '/cadastros/pessoas', icon: icons.users, label: 'Cadastros' } : null,
-                  hasModuleAccess('financeiro') ? { to: '/financeiro/contas-receber', icon: icons.money, label: 'Financeiro' } : null,
-                  hasModuleAccess('faturamento') ? { to: '/faturamento/cotacoes', icon: icons.invoice, label: 'Faturamento' } : null,
-                  hasModuleAccess('estoque') ? { to: '/estoque/posicao', icon: icons.box, label: 'Estoque' } : null,
-                  hasModuleAccess('frota') ? { to: '/frota/ordens-servico', icon: icons.wrench, label: 'Frota' } : null,
-                ].filter(Boolean).map(item => item && (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    title={item.label}
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
-                      isActive(item.to)
-                        ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
-                        : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
-                  >
-                    <Icon d={item.icon} />
-                  </Link>
-                ))}
-                <div className="flex-1" />
-                {hasModuleAccess('configuracoes') && (
-                  <Link
-                    to="/configuracoes"
-                    title="Configurações"
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
-                      isActive('/configuracoes')
-                        ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
-                        : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <Icon d={icons.gear} />
-                  </Link>
-                )}
-                <Link
-                  to="/perfil"
-                  title="Perfil"
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
-                    isActive('/perfil')
-                      ? 'bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400'
-                      : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <Icon d={icons.person} />
-                </Link>
-              </nav>
-              {/* Avatar / logout */}
-              <div className="border-t border-slate-100 dark:border-slate-800 py-2 flex flex-col items-center gap-1">
-                <button onClick={toggleTheme} title={isDark ? 'Modo claro' : 'Modo escuro'}
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                  <Icon d={isDark ? icons.sun : icons.moon} />
-                </button>
-                <button onClick={handleLogout} title="Sair"
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-all">
-                  <Icon d={icons.logout} />
-                </button>
-              </div>
-            </aside>
-          ) : (
-            sidebar
-          )}
+          {prefs.sidebarMode === 'icons' ? iconsSidebar : sidebar}
         </div>
       )}
 
@@ -454,7 +584,6 @@ export default function Layout({ children }: LayoutProps) {
             </kbd>
           </button>
 
-          {/* Toggle de tema (topbar mobile) */}
           <button
             onClick={toggleTheme}
             className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -485,7 +614,6 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       <WhatsAppSupportButton />
-
       <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
     </div>
   );
