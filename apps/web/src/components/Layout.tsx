@@ -382,7 +382,6 @@ export default function Layout({ children }: LayoutProps) {
               <SubLink to="/configuracoes/logs" label="Log de Erros" />
             </SubMenu>
           )}
-          <SidebarLink to="/perfil" label="Perfil" iconD={icons.person} />
         </div>
       </nav>
 
@@ -399,18 +398,24 @@ export default function Layout({ children }: LayoutProps) {
           </span>
         </button>
 
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
-          <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-none">
-            {userInitials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{userName}</div>
-            <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{tenantSlug && `@${tenantSlug}`}</div>
-          </div>
+        <div className="flex items-center gap-2.5 px-1 py-1 rounded-lg">
+          <Link
+            to="/perfil"
+            onClick={() => setSidebarOpen(false)}
+            className="flex items-center gap-2.5 flex-1 min-w-0 px-1 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold flex-none">
+              {userInitials}
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{userName}</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500 truncate">{tenantSlug && `@${tenantSlug}`}</div>
+            </div>
+          </Link>
           <button
             onClick={handleLogout}
             title="Sair"
-            className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-all"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-all flex-none"
           >
             <Icon d={icons.logout} className="w-3.5 h-3.5" />
           </button>
@@ -533,14 +538,9 @@ export default function Layout({ children }: LayoutProps) {
           />
         )}
 
-        <IconFlyout
-          iconD={icons.person} label="Perfil" to="/perfil"
-          isActive={isActive('/perfil')}
-          onLinkClick={() => setSidebarOpen(false)}
-        />
       </nav>
 
-      {/* Tema + logout */}
+      {/* Tema + avatar + logout */}
       <div className="border-t border-slate-100 dark:border-slate-800 py-2 flex flex-col items-center gap-1 px-1.5">
         <button
           onClick={handleToggleTheme}
@@ -549,6 +549,15 @@ export default function Layout({ children }: LayoutProps) {
         >
           <Icon d={isDark ? icons.sun : icons.moon} />
         </button>
+        <Link
+          to="/perfil"
+          title={userName}
+          className="w-9 h-9 rounded-lg flex items-center justify-center hover:ring-2 hover:ring-brand-400 transition-all"
+        >
+          <div className="w-7 h-7 rounded-full bg-brand-600 flex items-center justify-center text-white text-xs font-bold">
+            {userInitials}
+          </div>
+        </Link>
         <button
           onClick={handleLogout}
           title="Sair"
