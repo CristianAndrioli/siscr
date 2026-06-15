@@ -56,6 +56,7 @@ const ALL_MODULES: ModuleDef[] = [
       { label: 'Contas a Receber', to: '/financeiro/contas-receber' },
       { label: 'Contas a Pagar', to: '/financeiro/contas-pagar' },
       { label: 'Contas Bancárias', to: '/financeiro/contas-bancarias' },
+      { label: 'Conciliação Bancária', to: '/financeiro/conciliacao/nova' },
       { label: 'Régua de Cobrança', to: '/financeiro/regua-cobranca' },
     ],
     icon: (
