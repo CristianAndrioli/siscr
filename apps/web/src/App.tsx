@@ -63,6 +63,11 @@ import OrdensServicoDetail from './pages/frota/OrdensServicoDetail';
 import NfEntradaList from './pages/entrada/NfEntradaList';
 import NfEntradaDetail from './pages/entrada/NfEntradaDetail';
 import NfEntradaWizardPage from './pages/entrada/NfEntradaWizard';
+import PlanoContasPage from './pages/contabilidade/PlanoContasPage';
+import LancamentosPage from './pages/contabilidade/LancamentosPage';
+import BalancetePage from './pages/contabilidade/BalancetePage';
+import DrePage from './pages/contabilidade/DrePage';
+import ExportacoesPage from './pages/contabilidade/ExportacoesPage';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -202,6 +207,14 @@ function App() {
         <Route path="/frota/obras/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ObrasDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/ordens-servico" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/ordens-servico/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+
+        {/* Contabilidade */}
+        <Route path="/contabilidade/plano-contas" element={<ProtectedRoute><Layout><PlanoContasPage /></Layout></ProtectedRoute>} />
+        <Route path="/contabilidade/lancamentos" element={<ProtectedRoute><Layout><LancamentosPage /></Layout></ProtectedRoute>} />
+        <Route path="/contabilidade/balancete" element={<ProtectedRoute><Layout><BalancetePage /></Layout></ProtectedRoute>} />
+        <Route path="/contabilidade/dre" element={<ProtectedRoute><Layout><DrePage /></Layout></ProtectedRoute>} />
+        <Route path="/contabilidade/exportacoes" element={<ProtectedRoute><Layout><ExportacoesPage /></Layout></ProtectedRoute>} />
+        <Route path="/contabilidade" element={<Navigate to="/contabilidade/lancamentos" replace />} />
 
         {/* Configurações */}
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />

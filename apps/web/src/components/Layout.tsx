@@ -10,7 +10,7 @@ import WhatsAppSupportButton from './WhatsAppSupportButton';
 import CommandPalette from './commandPalette/CommandPalette';
 
 interface LayoutProps { children: ReactNode }
-type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'entrada' | 'estoque' | 'frota' | 'configuracoes';
+type MenuKey = 'cadastros' | 'financeiro' | 'faturamento' | 'entrada' | 'estoque' | 'frota' | 'contabilidade' | 'configuracoes';
 
 // ─── Ícones SVG inline ────────────────────────────────────────────
 const icons = {
@@ -29,6 +29,7 @@ const icons = {
   sun: <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />,
   moon: <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />,
   wrench: <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />,
+  book: <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />,
 };
 
 function Icon({ d, className = 'w-4 h-4' }: { d: ReactNode; className?: string }) {
@@ -72,6 +73,12 @@ const ROUTE_LABELS: Record<string, string> = {
   'ordens-servico': 'Ordens de Serviço',
   maquinas: 'Máquinas',
   obras: 'Obras / Projetos',
+  contabilidade: 'Contabilidade',
+  'plano-contas': 'Plano de Contas',
+  lancamentos: 'Lançamentos',
+  balancete: 'Balancete',
+  dre: 'DRE',
+  exportacoes: 'Exportações',
   configuracoes: 'Configurações',
   usuarios: 'Usuários',
   permissoes: 'Permissões',
@@ -168,7 +175,7 @@ function IconFlyout({
 
 export default function Layout({ children }: LayoutProps) {
   const [menuOpen, setMenuOpen] = useState<Record<MenuKey, boolean>>({
-    cadastros: false, financeiro: false, faturamento: false, entrada: false, estoque: false, frota: false, configuracoes: false,
+    cadastros: false, financeiro: false, faturamento: false, entrada: false, estoque: false, frota: false, contabilidade: false, configuracoes: false,
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -371,6 +378,16 @@ export default function Layout({ children }: LayoutProps) {
           </SubMenu>
         )}
 
+        {hasModuleAccess('financeiro') && (
+          <SubMenu menuKey="contabilidade" label="Contabilidade" iconD={icons.book}>
+            <SubLink to="/contabilidade/plano-contas" label="Plano de Contas" />
+            <SubLink to="/contabilidade/lancamentos" label="Lançamentos" />
+            <SubLink to="/contabilidade/balancete" label="Balancete" />
+            <SubLink to="/contabilidade/dre" label="DRE" />
+            <SubLink to="/contabilidade/exportacoes" label="Exportações" />
+          </SubMenu>
+        )}
+
         <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800 space-y-0.5">
           {hasModuleAccess('configuracoes') && (
             <SubMenu menuKey="configuracoes" label="Configurações" iconD={icons.gear}>
@@ -520,6 +537,21 @@ export default function Layout({ children }: LayoutProps) {
               { label: 'Ordens de Serviço', to: '/frota/ordens-servico' },
               { label: 'Máquinas', to: '/frota/maquinas' },
               { label: 'Obras', to: '/frota/obras' },
+            ]}
+          />
+        )}
+
+        {hasModuleAccess('financeiro') && (
+          <IconFlyout
+            iconD={icons.book} label="Contabilidade"
+            isActive={isActive('/contabilidade')}
+            onLinkClick={() => setSidebarOpen(false)}
+            items={[
+              { label: 'Plano de Contas', to: '/contabilidade/plano-contas' },
+              { label: 'Lançamentos', to: '/contabilidade/lancamentos' },
+              { label: 'Balancete', to: '/contabilidade/balancete' },
+              { label: 'DRE', to: '/contabilidade/dre' },
+              { label: 'Exportações', to: '/contabilidade/exportacoes' },
             ]}
           />
         )}

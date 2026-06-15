@@ -609,6 +609,21 @@ app.post('/notas/:id/faturar', async (c) => {
 
   await c.env.DB_SHARED.batch(stmts)
 
+  // ── Lançamento contábil automático ──────────────────────────────────────
+  try {
+    const { lcNFeSaida } = await import('../lib/contabilidade/lancamentosAutomaticos')
+    await lcNFeSaida(c.env.DB_SHARED, {
+      tenantId: tenant.tenantId,
+      empresaId: nota.empresa_id ?? null,
+      nfeId: id,
+      dataEmissao: now.slice(0, 10),
+      valorTotal: nota.valor_total ?? 0,
+      tipo: nota.tipo as 'nfe' | 'nfse',
+    })
+  } catch (e) {
+    console.warn('[contabilidade] Falha ao gerar lançamento automático (NF-e saída):', e)
+  }
+
   return c.json({
     message: 'Nota faturada com sucesso.',
     itens_baixados: nota.tipo === 'nfe' ? itens.length : 0,

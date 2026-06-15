@@ -323,6 +323,25 @@ app.patch('/receber/:id/pagar', async (c) => {
   }
 
   await c.env.DB_SHARED.batch(stmts)
+
+  // ── Lançamento contábil automático ──────────────────────────────────────
+  try {
+    const { lcCRPagamento } = await import('../lib/contabilidade/lancamentosAutomaticos')
+    const empresa = await c.env.DB_SHARED
+      .prepare('SELECT empresa_id FROM contas_receber WHERE id = ? LIMIT 1')
+      .bind(id)
+      .first<{ empresa_id: string | null }>()
+    await lcCRPagamento(c.env.DB_SHARED, {
+      tenantId: tenant.tenantId,
+      empresaId: empresa?.empresa_id ?? null,
+      crId: id,
+      dataPagamento,
+      valorPago,
+    })
+  } catch (e) {
+    console.warn('[contabilidade] Falha ao gerar lançamento automático (CR pagamento):', e)
+  }
+
   return c.json({
     message: novoStatus === 'pago' ? 'Título quitado com sucesso.' : 'Recebimento parcial registrado.',
     status: novoStatus,
@@ -578,6 +597,25 @@ app.patch('/pagar/:id/pagar', async (c) => {
   }
 
   await c.env.DB_SHARED.batch(stmts)
+
+  // ── Lançamento contábil automático ──────────────────────────────────────
+  try {
+    const { lcCPPagamento } = await import('../lib/contabilidade/lancamentosAutomaticos')
+    const empresa = await c.env.DB_SHARED
+      .prepare('SELECT empresa_id FROM contas_pagar WHERE id = ? LIMIT 1')
+      .bind(id)
+      .first<{ empresa_id: string | null }>()
+    await lcCPPagamento(c.env.DB_SHARED, {
+      tenantId: tenant.tenantId,
+      empresaId: empresa?.empresa_id ?? null,
+      cpId: id,
+      dataPagamento,
+      valorPago,
+    })
+  } catch (e) {
+    console.warn('[contabilidade] Falha ao gerar lançamento automático (CP pagamento):', e)
+  }
+
   return c.json({
     message: novoStatus === 'pago' ? 'Título quitado com sucesso.' : 'Pagamento parcial registrado.',
     status: novoStatus,

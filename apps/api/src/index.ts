@@ -26,6 +26,7 @@ import queueRoutes from './routes/queue'
 import logsRoutes from './routes/logs'
 import frotaRoutes from './routes/frota'
 import preferencesRoutes from './routes/preferences'
+import contabilidadeRoutes from './routes/contabilidade'
 
 export type Env = {
   // D1 — banco compartilhado (tenants, planos, billing)
@@ -146,6 +147,7 @@ app.route('/api/tenant/vendas', vendasRoutes)
 app.route('/api/tenant/logs', logsRoutes)
 app.route('/api/tenant/frota', frotaRoutes)
 app.route('/api/tenant/preferences', preferencesRoutes)
+app.route('/api/tenant/contabilidade', contabilidadeRoutes)
 
 // ─── Rotas internas (Cron + Queue handlers) ───────────────────
 app.route('/__cron', cronRoutes)
