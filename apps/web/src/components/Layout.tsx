@@ -50,6 +50,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'contas-receber': 'Contas a Receber',
   'contas-pagar': 'Contas a Pagar',
   'contas-bancarias': 'Contas Bancárias',
+  conciliacao: 'Conciliação Bancária',
   'regua-cobranca': 'Régua de Cobrança',
   dashboard: 'Dashboard',
   faturamento: 'Faturamento',
@@ -338,6 +339,7 @@ export default function Layout({ children }: LayoutProps) {
             <SubLink to="/financeiro/regua-cobranca" label="Régua de cobrança" />
             <SubLink to="/financeiro/contas-pagar" label="Contas a Pagar" />
             <SubLink to="/financeiro/contas-bancarias" label="Contas Bancárias" />
+            <SubLink to="/financeiro/conciliacao/nova" label="Conciliação Bancária" />
             <SubLink to="/financeiro/dashboard" label="Dashboard" />
           </SubMenu>
         )}
@@ -474,6 +476,7 @@ export default function Layout({ children }: LayoutProps) {
               { label: 'Contas a Receber', to: '/financeiro/contas-receber' },
               { label: 'Contas a Pagar', to: '/financeiro/contas-pagar' },
               { label: 'Contas Bancárias', to: '/financeiro/contas-bancarias' },
+              { label: 'Conciliação Bancária', to: '/financeiro/conciliacao/nova' },
               { label: 'Régua de Cobrança', to: '/financeiro/regua-cobranca' },
               { label: 'Dashboard', to: '/financeiro/dashboard' },
             ]}

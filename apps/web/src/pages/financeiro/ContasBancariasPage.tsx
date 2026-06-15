@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { bancarioService, type ContaBancaria, type ContaBancariaForm } from '../../services/bancario';
 import { fmtBRL as fmt } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
@@ -192,10 +193,10 @@ export function ContasBancariasPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {contas.map(conta => (
-            <div key={conta.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-4">
+            <div key={conta.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+              <Link to={`/financeiro/contas-bancarias/${conta.id}`} className="flex items-start justify-between mb-4 group">
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{conta.nome}</p>
+                  <p className="font-semibold text-slate-800 dark:text-slate-100 truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">{conta.nome}</p>
                   {conta.banco_nome && (
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {conta.banco_codigo && `${conta.banco_codigo} · `}{conta.banco_nome}
@@ -210,7 +211,7 @@ export function ContasBancariasPage() {
                 <span className={`flex-none ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${TIPO_COLOR[conta.tipo] ?? ''}`}>
                   {TIPO_LABEL[conta.tipo] ?? conta.tipo}
                 </span>
-              </div>
+              </Link>
 
               <div className="border-t border-slate-100 dark:border-slate-800 pt-3">
                 <p className="text-xs text-slate-400 dark:text-slate-500 mb-0.5">Saldo atual</p>
@@ -225,6 +226,12 @@ export function ContasBancariasPage() {
               </div>
 
               <div className="flex gap-2 mt-4">
+                <Link
+                  to={`/financeiro/conciliacao/nova?contaId=${conta.id}`}
+                  className="flex-1 text-xs font-semibold border border-brand-200 dark:border-brand-800 text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-950 py-1.5 rounded-lg transition-colors text-center"
+                >
+                  Conciliar
+                </Link>
                 <button
                   onClick={() => openEdit(conta)}
                   className="flex-1 text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 py-1.5 rounded-lg transition-colors"
@@ -233,9 +240,9 @@ export function ContasBancariasPage() {
                 </button>
                 <button
                   onClick={() => handleDelete(conta.id)}
-                  className="flex-1 text-xs font-medium border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 py-1.5 rounded-lg transition-colors"
+                  className="text-xs font-medium border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 py-1.5 px-2.5 rounded-lg transition-colors"
                 >
-                  Desativar
+                  ×
                 </button>
               </div>
             </div>

@@ -41,6 +41,8 @@ import FinanceiroDashboard from './pages/financeiro/FinanceiroDashboard';
 import ReguaCobrancaList from './pages/financeiro/ReguaCobrancaList';
 import ReguaCobrancaDetail from './pages/financeiro/ReguaCobrancaDetail';
 import ContasBancariasPage from './pages/financeiro/ContasBancariasPage';
+import ContaBancariaDetailPage from './pages/financeiro/ContaBancariaDetailPage';
+import ConciliacaoWizard from './pages/financeiro/ConciliacaoWizard';
 import Configuracoes from './pages/Configuracoes';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
 import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
@@ -154,6 +156,8 @@ function App() {
         <Route path="/financeiro/contas-pagar" element={<ProtectedRoute><Layout><ContasPagarList /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-pagar/:id" element={<ProtectedRoute><Layout><ContasPagarDetail /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-bancarias" element={<ProtectedRoute><Layout><ContasBancariasPage /></Layout></ProtectedRoute>} />
+        <Route path="/financeiro/contas-bancarias/:id" element={<ProtectedRoute><ContaBancariaDetailPage /></ProtectedRoute>} />
+        <Route path="/financeiro/conciliacao/nova" element={<ProtectedRoute><ConciliacaoWizard /></ProtectedRoute>} />
 
         {/* Faturamento */}
         <Route path="/faturamento/cotacoes" element={<ProtectedRoute><Layout><CotacoesPage /></Layout></ProtectedRoute>} />
