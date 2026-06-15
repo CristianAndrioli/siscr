@@ -54,6 +54,11 @@ app.get('/receber', async (c) => {
     FROM contas_receber cr
     LEFT JOIN pessoas p ON p.id = cr.pessoa_id
     LEFT JOIN regua_cobranca rg ON rg.id = cr.regua_id AND rg.tenant_id = cr.tenant_id
+    LEFT JOIN conciliacao_itens ci
+           ON ci.origem_id = cr.id
+          AND ci.origem_tipo = 'contas_receber'
+          AND ci.status = 'conciliado'
+          AND ci.tenant_id = cr.tenant_id
     WHERE cr.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
@@ -69,7 +74,9 @@ app.get('/receber', async (c) => {
            cr.categoria, cr.observacoes, cr.data_pagamento, cr.valor_pago,
            cr.created_at, cr.pessoa_id, cr.pedido_id, cr.regua_id,
            p.nome as cliente,
-           rg.nome as regua_nome
+           rg.nome as regua_nome,
+           CASE WHEN ci.id IS NOT NULL THEN 1 ELSE 0 END as conciliado,
+           ci.conciliacao_id
   `
 
   const query = `${selectList} ${where} ORDER BY cr.vencimento`
@@ -352,6 +359,11 @@ app.get('/pagar', async (c) => {
   let where = `
     FROM contas_pagar cp
     LEFT JOIN pessoas p ON p.id = cp.pessoa_id
+    LEFT JOIN conciliacao_itens ci
+           ON ci.origem_id = cp.id
+          AND ci.origem_tipo = 'contas_pagar'
+          AND ci.status = 'conciliado'
+          AND ci.tenant_id = cp.tenant_id
     WHERE cp.tenant_id = ?
   `
   const params: unknown[] = [tenant.tenantId]
@@ -364,7 +376,9 @@ app.get('/pagar', async (c) => {
     SELECT cp.id, cp.codigo, cp.descricao, cp.valor, cp.vencimento, cp.status,
            cp.categoria, cp.observacoes, cp.data_pagamento, cp.valor_pago,
            cp.created_at, cp.pessoa_id,
-           p.nome as fornecedor
+           p.nome as fornecedor,
+           CASE WHEN ci.id IS NOT NULL THEN 1 ELSE 0 END as conciliado,
+           ci.conciliacao_id
   `
   const query = `${selectList} ${where} ORDER BY cp.vencimento`
 

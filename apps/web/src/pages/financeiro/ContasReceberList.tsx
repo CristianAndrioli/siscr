@@ -47,6 +47,17 @@ const COLUMNS: SmartColumn<ContaReceber>[] = [
         {STATUS_LABEL[String(v)] ?? String(v)}
       </span>
     ) },
+  { key: 'conciliado', label: 'Conciliado', width: 100, align: 'center', filterable: false,
+    render: v => v === 1 || v === '1' ? (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
+        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 6l3 3 5-5" />
+        </svg>
+        Sim
+      </span>
+    ) : (
+      <span className="text-slate-400 dark:text-slate-600 text-xs">—</span>
+    ) },
 ];
 
 export function ContasReceberList() {

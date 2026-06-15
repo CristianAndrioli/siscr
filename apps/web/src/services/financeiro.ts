@@ -25,6 +25,8 @@ export interface ContaReceber {
   nota_fiscal_id?: string;
   regua_id?: string | null;
   regua_nome?: string | null;
+  conciliado?: 0 | 1;
+  conciliacao_id?: string | null;
 }
 
 export interface PagamentoHistorico {
@@ -56,6 +58,8 @@ export interface ContaPagar {
   data_emissao?: string;
   data_lancamento?: string;
   moeda?: string;
+  conciliado?: 0 | 1;
+  conciliacao_id?: string | null;
 }
 
 export interface ContaForm {
