@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import { bancarioService, ContaBancaria, ConciliacaoItemInput, SugestaoMatch } from '../../services/bancario';
-import { parseOFXFile, OFXResult, OFXTransaction, ofxSummary } from '../../utils/ofxParser';
+import { parseOFXFile, OFXResult, ofxSummary } from '../../utils/ofxParser';
 
 // ─── Icons ────────────────────────────────────────────────────────
 
@@ -293,11 +293,20 @@ function Step2({
   );
 }
 
-// ─── Step 3: Review & match ───────────────────────────────────────
+// ─── Step 3: Two-panel reconciliation ────────────────────────────
+
+type LeftFilter = 'all' | 'pendente' | 'vinculado' | 'ignorado';
+type RightFilter = 'all' | 'contas_receber' | 'contas_pagar';
+
+function StatusPill({ acao }: { acao: string | null | undefined }) {
+  if (acao === 'conciliar') return <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">vinculado</span>;
+  if (acao === 'ignorar')   return <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">ignorado</span>;
+  if (acao === 'manual')    return <span className="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">manual</span>;
+  return null;
+}
 
 function Step3({
   ofxResult,
-  conta,
   decisions,
   sugestoes,
   fitidsDuplicados,
@@ -316,79 +325,159 @@ function Step3({
   onBack: () => void;
   onNext: () => void;
 }) {
-  const summary = ofxSummary(ofxResult);
-  const pending = ofxResult.transactions.filter(t => !decisions[t.fitid]?.acao);
-  const allDecided = pending.length === 0;
+  const [selectedFitid, setSelectedFitid] = useState<string | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<SugestaoMatch | null>(null);
+  const [leftSearch, setLeftSearch]   = useState('');
+  const [leftFilter, setLeftFilter]   = useState<LeftFilter>('pendente');
+  const [rightSearch, setRightSearch] = useState('');
+  const [rightFilter, setRightFilter] = useState<RightFilter>('all');
 
-  const [search, setSearch] = useState('');
-  const [filterAcao, setFilterAcao] = useState<'all' | 'pendente' | 'conciliar' | 'ignorar' | 'manual'>('all');
+  const selectedOFXTrn = useMemo(
+    () => ofxResult.transactions.find(t => t.fitid === selectedFitid),
+    [ofxResult.transactions, selectedFitid],
+  );
 
-  const filtered = ofxResult.transactions.filter(t => {
-    const matchSearch = !search || t.descricao.toLowerCase().includes(search.toLowerCase()) || t.fitid.includes(search);
+  const delta = selectedOFXTrn && selectedMatch
+    ? Math.abs(selectedOFXTrn.valor - selectedMatch.valor)
+    : null;
+  const deltaOk = delta !== null && delta < 0.02;
+
+  // IDs already consumed by decisions
+  const linkedIds = useMemo(() => new Set(
+    Object.values(decisions)
+      .filter(d => d.acao === 'conciliar' && d.origem_id)
+      .map(d => d.origem_id!),
+  ), [decisions]);
+
+  // Full deduplicated pool from all suggestions
+  const allPool = useMemo(() => {
+    const seen = new Set<string>();
+    const recs: SugestaoMatch[] = [];
+    for (const ms of Object.values(sugestoes)) {
+      for (const m of (ms as SugestaoMatch[])) {
+        if (!seen.has(m.id)) { seen.add(m.id); recs.push(m); }
+      }
+    }
+    return recs.sort((a, b) => a.data.localeCompare(b.data));
+  }, [sugestoes]);
+
+  // Suggestions for the currently selected OFX line
+  const currentSugg = useMemo(
+    () => selectedFitid ? (sugestoes[selectedFitid] ?? []) as SugestaoMatch[] : [],
+    [selectedFitid, sugestoes],
+  );
+  const suggestedIds = useMemo(() => new Set(currentSugg.map(s => s.id)), [currentSugg]);
+
+  // Right panel: current suggestions first, then rest of pool
+  const rightPool = useMemo(() => {
+    if (!selectedFitid) return allPool;
+    const curIds = new Set(currentSugg.map(s => s.id));
+    return [...currentSugg, ...allPool.filter(r => !curIds.has(r.id))];
+  }, [selectedFitid, currentSugg, allPool]);
+
+  // ── Filtered lists ────────────────────────────────────────────────
+
+  const filteredLeft = ofxResult.transactions.filter(t => {
     const dec = decisions[t.fitid];
-    const matchFilter =
-      filterAcao === 'all' ? true :
-      filterAcao === 'pendente' ? !dec?.acao :
-      dec?.acao === filterAcao;
-    return matchSearch && matchFilter;
+    if (leftFilter === 'pendente'  && dec?.acao) return false;
+    if (leftFilter === 'vinculado' && dec?.acao !== 'conciliar') return false;
+    if (leftFilter === 'ignorado'  && dec?.acao !== 'ignorar' && dec?.acao !== 'manual') return false;
+    if (leftSearch) {
+      const q = leftSearch.toLowerCase();
+      if (!t.descricao.toLowerCase().includes(q) && !t.fitid.includes(q)) return false;
+    }
+    return true;
   });
 
-  const isDuplicate = (fitid: string) => fitidsDuplicados.includes(fitid);
+  const filteredRight = rightPool.filter(r => {
+    if (rightFilter !== 'all' && r.tipo !== rightFilter) return false;
+    // Hide records already linked to other OFX lines (unless it's the currently selected match)
+    if (linkedIds.has(r.id) && selectedMatch?.id !== r.id) return false;
+    if (rightSearch) {
+      const q = rightSearch.toLowerCase();
+      if (
+        !r.descricao.toLowerCase().includes(q) &&
+        !(r.pessoa_nome ?? '').toLowerCase().includes(q) &&
+        !String(r.valor).includes(q)
+      ) return false;
+    }
+    return true;
+  });
+
+  // ── Handlers ──────────────────────────────────────────────────────
+
+  const handleSelectOFX = (fitid: string) => {
+    if (decisions[fitid]?.acao) return; // already decided — not interactive
+    if (fitid === selectedFitid) { setSelectedFitid(null); setSelectedMatch(null); return; }
+    setSelectedFitid(fitid);
+    const sug = (sugestoes[fitid] ?? []) as SugestaoMatch[];
+    const top = sug.find(s => !linkedIds.has(s.id));
+    setSelectedMatch(top && top.score >= 60 ? top : null);
+  };
+
+  const handleVincular = () => {
+    if (!selectedFitid || !selectedMatch) return;
+    onDecide(selectedFitid, {
+      acao: 'conciliar',
+      origem_tipo: selectedMatch.tipo,
+      origem_id: selectedMatch.id,
+      origem_desc: `${selectedMatch.tipo === 'contas_receber' ? 'CR' : 'CP'} · ${selectedMatch.descricao}${selectedMatch.pessoa_nome ? ` · ${selectedMatch.pessoa_nome}` : ''} · ${fmtCurrency(selectedMatch.valor)}`,
+    });
+    setSelectedFitid(null); setSelectedMatch(null);
+  };
+
+  const handleIgnorar = () => {
+    if (!selectedFitid) return;
+    onDecide(selectedFitid, { acao: 'ignorar' });
+    setSelectedFitid(null); setSelectedMatch(null);
+  };
+
+  const handleManual = () => {
+    if (!selectedFitid) return;
+    onDecide(selectedFitid, { acao: 'manual' });
+    setSelectedFitid(null); setSelectedMatch(null);
+  };
+
+  const handleUndoDecision = (fitid: string) => {
+    onDecide(fitid, { acao: null });
+  };
+
+  // ── Counters ──────────────────────────────────────────────────────
+
+  const pending   = ofxResult.transactions.filter(t => !decisions[t.fitid]?.acao);
+  const countVinc = Object.values(decisions).filter(d => d.acao === 'conciliar').length;
+  const countIgn  = Object.values(decisions).filter(d => d.acao === 'ignorar').length;
+  const countMan  = Object.values(decisions).filter(d => d.acao === 'manual').length;
+  const allDecided = pending.length === 0;
+  const canVincular = !!selectedFitid && !!selectedMatch;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
-        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Revisar e vincular transações</h2>
+        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Vincular transações</h2>
         <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">
-          Para cada transação do extrato, defina como ela deve ser tratada.
+          Selecione uma linha do extrato (esquerda) e o lançamento correspondente (direita), depois clique em <strong>Vincular</strong>.
         </p>
       </div>
 
-      {/* Summary bar */}
-      <div className="grid grid-cols-4 gap-3">
+      {/* ── Stats ── */}
+      <div className="grid grid-cols-4 gap-2">
         {[
-          { label: 'Total', value: summary.total, color: 'text-slate-700 dark:text-slate-200' },
-          { label: 'Pendentes', value: pending.length, color: 'text-yellow-600 dark:text-yellow-400' },
-          { label: 'Conciliados', value: Object.values(decisions).filter(d => d.acao === 'conciliar').length, color: 'text-emerald-600 dark:text-emerald-400' },
-          { label: 'Ignorados', value: Object.values(decisions).filter(d => d.acao === 'ignorar').length, color: 'text-slate-400 dark:text-slate-500' },
-        ].map(item => (
-          <div key={item.label} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-center">
-            <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
-            <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{item.label}</div>
+          { label: 'Total',      v: ofxResult.transactions.length, cls: 'text-slate-700 dark:text-slate-200' },
+          { label: 'Pendentes',  v: pending.length,  cls: 'text-amber-600 dark:text-amber-400' },
+          { label: 'Vinculados', v: countVinc,        cls: 'text-emerald-600 dark:text-emerald-400' },
+          { label: 'Ignorados',  v: countIgn + countMan, cls: 'text-slate-400 dark:text-slate-500' },
+        ].map(s => (
+          <div key={s.label} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-center">
+            <div className={`text-xl font-bold ${s.cls}`}>{s.v}</div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{s.label}</div>
           </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-[180px]">
-          <Icon d={icons.search} className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Buscar por descrição ou FITID…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-        </div>
-        {(['all', 'pendente', 'conciliar', 'ignorar', 'manual'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilterAcao(f)}
-            className={`px-3 py-2 text-xs font-medium rounded-xl border transition-colors ${
-              filterAcao === f
-                ? 'bg-brand-600 text-white border-brand-600'
-                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
-            }`}
-          >
-            {{ all: 'Todos', pendente: 'Pendentes', conciliar: 'Conciliados', ignorar: 'Ignorados', manual: 'Manuais' }[f]}
-          </button>
         ))}
       </div>
 
       {loadingSugestoes && (
         <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-          <svg className="w-4 h-4 animate-spin text-brand-600" fill="none" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 animate-spin text-brand-600 flex-none" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
@@ -396,177 +485,316 @@ function Step3({
         </div>
       )}
 
-      {/* Transaction list */}
-      <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
-        {filtered.map(t => (
-          <TransactionRow
-            key={t.fitid}
-            trn={t}
-            decision={decisions[t.fitid] ?? { acao: null }}
-            sugestoes={sugestoes[t.fitid] ?? []}
-            isDuplicate={isDuplicate(t.fitid)}
-            onDecide={(d) => onDecide(t.fitid, d)}
-          />
-        ))}
-        {filtered.length === 0 && (
-          <div className="text-center py-10 text-slate-400 dark:text-slate-500 text-sm">Nenhuma transação encontrada.</div>
-        )}
-      </div>
+      {/* ── Two-panel ── */}
+      <div className="grid grid-cols-[1fr_32px_1fr] gap-0 items-stretch">
 
-      <div className="flex justify-between pt-2">
-        <button onClick={onBack} className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-          Voltar
-        </button>
-        <button
-          onClick={onNext}
-          disabled={!allDecided}
-          className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {!allDecided ? `${pending.length} pendente${pending.length > 1 ? 's' : ''}` : 'Confirmar importação'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Transaction row ──────────────────────────────────────────────
-
-function TransactionRow({
-  trn,
-  decision,
-  sugestoes,
-  isDuplicate,
-  onDecide,
-}: {
-  trn: OFXTransaction;
-  decision: ItemDecision;
-  sugestoes: SugestaoMatch[];
-  isDuplicate: boolean;
-  onDecide: (d: ItemDecision) => void;
-}) {
-  const [showSugestoes, setShowSugestoes] = useState(false);
-
-  const isCredito = trn.tipo === 'credito';
-  const acao = decision.acao;
-
-  const actionCls = (a: typeof acao) => {
-    const base = 'px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ';
-    if (acao === a) {
-      if (a === 'conciliar') return base + 'bg-emerald-600 text-white border-emerald-600';
-      if (a === 'ignorar')   return base + 'bg-slate-500 text-white border-slate-500';
-      if (a === 'manual')    return base + 'bg-amber-500 text-white border-amber-500';
-    }
-    return base + 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600';
-  };
-
-  return (
-    <div className={`border rounded-xl overflow-hidden transition-colors ${
-      acao === 'conciliar' ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30' :
-      acao === 'ignorar'   ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 opacity-60' :
-      acao === 'manual'    ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30' :
-                             'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'
-    }`}>
-      <div className="p-3 flex items-center gap-3">
-        {/* Tipo indicator */}
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-none text-xs font-bold ${
-          isCredito ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
-        }`}>
-          {isCredito ? '+' : '−'}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{trn.descricao}</span>
-            {isDuplicate && <Badge color="yellow">já importado</Badge>}
-          </div>
-          <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{fmtDate(trn.data)} · FITID: {trn.fitid}</div>
-          {acao === 'conciliar' && decision.origem_desc && (
-            <div className="mt-1 text-xs text-emerald-700 dark:text-emerald-300 font-medium">
-              ↔ {decision.origem_desc}
+        {/* ──── Left: OFX transactions ──── */}
+        <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-none">
+            <div>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Extrato bancário (OFX)</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500">Selecione uma linha do banco</p>
             </div>
-          )}
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-brand-50 dark:bg-brand-950 text-brand-600 dark:text-brand-400 border border-brand-100 dark:border-brand-900">
+              {ofxResult.transactions.length} linhas
+            </span>
+          </div>
+          {/* Search + filter */}
+          <div className="flex gap-1.5 px-2 py-1.5 border-b border-slate-100 dark:border-slate-800 flex-none">
+            <div className="relative flex-1">
+              <Icon d={icons.search} className="absolute left-2 top-[7px] w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input
+                value={leftSearch}
+                onChange={e => setLeftSearch(e.target.value)}
+                placeholder="Buscar…"
+                className="w-full pl-6 pr-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+            <select
+              value={leftFilter}
+              onChange={e => setLeftFilter(e.target.value as LeftFilter)}
+              className="text-[11px] px-1.5 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 focus:outline-none"
+            >
+              <option value="all">Todos</option>
+              <option value="pendente">Pendentes</option>
+              <option value="vinculado">Vinculados</option>
+              <option value="ignorado">Ignorados</option>
+            </select>
+          </div>
+          {/* List */}
+          <div className="overflow-y-auto flex-1" style={{ maxHeight: '44vh' }}>
+            {filteredLeft.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500">Nenhuma transação.</div>
+            ) : filteredLeft.map(t => {
+              const dec = decisions[t.fitid];
+              const isSelected = selectedFitid === t.fitid;
+              const isDone = !!dec?.acao;
+              const isCr = t.tipo === 'credito';
+              const isDup = fitidsDuplicados.includes(t.fitid);
+
+              return (
+                <div
+                  key={t.fitid}
+                  onClick={() => isDone ? undefined : handleSelectOFX(t.fitid)}
+                  className={[
+                    'flex items-start gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0 transition-colors',
+                    isDone
+                      ? 'opacity-60 cursor-default'
+                      : isSelected
+                        ? 'bg-brand-50 dark:bg-brand-950 cursor-pointer border-l-2 !border-l-brand-500'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer',
+                  ].join(' ')}
+                >
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-none mt-0.5 text-[10px] font-bold ${
+                    isCr ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300'
+                         : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+                  }`}>
+                    {isCr ? '+' : '−'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate max-w-[110px]">{t.descricao}</span>
+                      {isDup && <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">dup</span>}
+                      {dec && <StatusPill acao={dec.acao} />}
+                    </div>
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{fmtDate(t.data)}</div>
+                    {dec?.acao === 'conciliar' && dec.origem_desc && (
+                      <div className="text-[10px] text-emerald-600 dark:text-emerald-400 truncate">↔ {dec.origem_desc}</div>
+                    )}
+                  </div>
+                  <div className="flex-none flex flex-col items-end gap-1">
+                    <span className={`text-xs font-bold ${isCr ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {isCr ? '+' : '−'}{fmtCurrency(t.valor)}
+                    </span>
+                    {isDone && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleUndoDecision(t.fitid); }}
+                        className="text-[9px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline"
+                      >
+                        desfazer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Value */}
-        <div className={`text-sm font-bold flex-none ${isCredito ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-          {isCredito ? '+' : '−'}{fmtCurrency(trn.valor)}
+        {/* ──── Connector column ──── */}
+        <div className="flex flex-col items-center py-8 gap-1 self-stretch">
+          <div className="flex-1 w-px bg-slate-200 dark:bg-slate-700" />
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-colors ${
+            canVincular
+              ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-400 dark:border-emerald-600'
+              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+          }`}>
+            <Icon d={icons.link} className={`w-3.5 h-3.5 ${canVincular ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`} />
+          </div>
+          <div className="flex-1 w-px bg-slate-200 dark:bg-slate-700" />
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-1.5 flex-none">
-          {sugestoes.length > 0 && acao !== 'ignorar' && (
-            <button
-              onClick={() => setShowSugestoes(!showSugestoes)}
-              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                showSugestoes
-                  ? 'bg-brand-50 dark:bg-brand-950 border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600'
-              }`}
+        {/* ──── Right: CR/CP records ──── */}
+        <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-none">
+            <div>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Lançamentos financeiros</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                {selectedFitid
+                  ? currentSugg.length > 0
+                    ? `${currentSugg.length} sugestão${currentSugg.length > 1 ? 'ões' : ''} para esta linha`
+                    : 'Nenhuma sugestão — selecione manualmente'
+                  : 'Selecione uma linha do extrato'}
+              </p>
+            </div>
+            <select
+              value={rightFilter}
+              onChange={e => setRightFilter(e.target.value as RightFilter)}
+              className="text-[10px] px-1.5 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 focus:outline-none"
             >
-              <Icon d={icons.eye} className="w-3.5 h-3.5 inline mr-1" />
-              {sugestoes.length} sugestão{sugestoes.length > 1 ? 'ões' : ''}
-            </button>
-          )}
-          <button
-            onClick={() => onDecide({ acao: 'conciliar' })}
-            className={actionCls('conciliar')}
-            title="Vincular a um registro financeiro"
-          >
-            Conciliar
-          </button>
-          <button
-            onClick={() => onDecide({ acao: 'ignorar' })}
-            className={actionCls('ignorar')}
-          >
-            Ignorar
-          </button>
-          <button
-            onClick={() => onDecide({ acao: 'manual' })}
-            className={actionCls('manual')}
-            title="Criar novo movimento manualmente"
-          >
-            Manual
-          </button>
-          {acao && (
-            <button
-              onClick={() => onDecide({ acao: null })}
-              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-              title="Limpar decisão"
-            >
-              <Icon d={icons.x} className="w-3.5 h-3.5" />
-            </button>
-          )}
+              <option value="all">CR + CP</option>
+              <option value="contas_receber">Só CR</option>
+              <option value="contas_pagar">Só CP</option>
+            </select>
+          </div>
+          {/* Search */}
+          <div className="px-2 py-1.5 border-b border-slate-100 dark:border-slate-800 flex-none">
+            <div className="relative">
+              <Icon d={icons.search} className="absolute left-2 top-[7px] w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <input
+                value={rightSearch}
+                onChange={e => setRightSearch(e.target.value)}
+                placeholder="Buscar por nome, valor…"
+                className="w-full pl-6 pr-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+          </div>
+          {/* List */}
+          <div className="overflow-y-auto flex-1" style={{ maxHeight: '44vh' }}>
+            {!selectedFitid ? (
+              <div className="py-10 text-center text-xs text-slate-400 dark:text-slate-500 px-4">
+                ← Selecione uma linha do extrato para ver sugestões
+              </div>
+            ) : filteredRight.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500 px-4">
+                Nenhum lançamento encontrado.<br />
+                Use <span className="font-semibold">Baixar sem vínculo</span> para criar um movimento avulso.
+              </div>
+            ) : filteredRight.map(r => {
+              const isSelected = selectedMatch?.id === r.id;
+              const isSugg = suggestedIds.has(r.id);
+              const isCr   = r.tipo === 'contas_receber';
+
+              return (
+                <div
+                  key={r.id}
+                  onClick={() => setSelectedMatch(isSelected ? null : r)}
+                  className={[
+                    'flex items-start gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0 cursor-pointer transition-colors',
+                    isSelected
+                      ? 'bg-emerald-50 dark:bg-emerald-950 border-l-2 !border-l-emerald-500'
+                      : isSugg
+                        ? 'bg-brand-50/60 dark:bg-brand-950/40 hover:bg-brand-50 dark:hover:bg-brand-950'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800',
+                  ].join(' ')}
+                >
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-none mt-0.5 text-[9px] font-bold ${
+                    isCr ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300'
+                         : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'
+                  }`}>
+                    {isCr ? 'CR' : 'CP'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="text-xs font-medium text-slate-800 dark:text-slate-100 truncate max-w-[100px]">{r.descricao}</span>
+                      {isSugg && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300">sugerido</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                      {r.pessoa_nome ? `${r.pessoa_nome} · ` : ''}{fmtDate(r.data)}
+                    </div>
+                  </div>
+                  <div className="flex-none text-right">
+                    <div className={`text-xs font-bold ${isCr ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {fmtCurrency(r.valor)}
+                    </div>
+                    {isSugg && (
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500">{r.score}%</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Sugestões dropdown */}
-      {showSugestoes && sugestoes.length > 0 && (
-        <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-3 space-y-2">
-          <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Sugestões de vinculação</p>
-          {sugestoes.map(s => (
-            <button
-              key={s.id}
-              onClick={() => {
-                onDecide({ acao: 'conciliar', origem_tipo: s.tipo, origem_id: s.id, origem_desc: `${s.tipo === 'contas_receber' ? 'CR' : 'CP'} · ${s.descricao} · ${fmtCurrency(s.valor)} · ${fmtDate(s.data)}${s.pessoa_nome ? ` · ${s.pessoa_nome}` : ''}` });
-                setShowSugestoes(false);
-              }}
-              className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-brand-300 dark:hover:border-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950 transition-colors"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{s.descricao}</div>
-                <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  {s.tipo === 'contas_receber' ? 'Contas a Receber' : 'Contas a Pagar'} · {fmtDate(s.data)}{s.pessoa_nome ? ` · ${s.pessoa_nome}` : ''}
+      {/* ── Delta footer ── */}
+      {(selectedFitid || selectedMatch) && (
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+          <div className={`px-3 py-2 rounded-xl border text-xs ${
+            selectedOFXTrn
+              ? 'border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950'
+              : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900'
+          }`}>
+            {selectedOFXTrn ? (
+              <>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">Extrato selecionado</div>
+                <div className={`font-bold ${selectedOFXTrn.tipo === 'credito' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {selectedOFXTrn.tipo === 'credito' ? '+' : '−'}{fmtCurrency(selectedOFXTrn.valor)}
                 </div>
-              </div>
-              <div className="text-xs font-bold text-slate-600 dark:text-slate-300 flex-none">{fmtCurrency(s.valor)}</div>
-              <Badge color={s.score >= 70 ? 'green' : s.score >= 50 ? 'blue' : 'gray'}>
-                {s.score}%
-              </Badge>
-            </button>
-          ))}
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">{fmtDate(selectedOFXTrn.data)}</div>
+              </>
+            ) : <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>}
+          </div>
+
+          <div className={`px-3 py-2 rounded-xl border text-center min-w-[80px] ${
+            delta === null
+              ? 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900'
+              : deltaOk
+                ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950'
+                : 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950'
+          }`}>
+            <div className="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">Δ diferença</div>
+            <div className={`text-xs font-bold ${
+              delta === null ? 'text-slate-400'
+              : deltaOk ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-amber-600 dark:text-amber-400'
+            }`}>
+              {delta === null ? '—' : deltaOk ? 'R$ 0,00 ✓' : fmtCurrency(delta)}
+            </div>
+          </div>
+
+          <div className={`px-3 py-2 rounded-xl border text-xs ${
+            selectedMatch
+              ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950'
+              : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900'
+          }`}>
+            {selectedMatch ? (
+              <>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 mb-0.5">Lançamento selecionado</div>
+                <div className={`font-bold ${selectedMatch.tipo === 'contas_receber' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {fmtCurrency(selectedMatch.valor)}
+                </div>
+                <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                  {selectedMatch.pessoa_nome ?? selectedMatch.descricao}
+                </div>
+              </>
+            ) : <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>}
+          </div>
         </div>
       )}
+
+      {/* ── Action bar ── */}
+      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={onBack}
+            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            Voltar
+          </button>
+          {selectedFitid && (
+            <>
+              <button
+                onClick={handleIgnorar}
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Ignorar linha
+              </button>
+              <button
+                onClick={handleManual}
+                className="px-3 py-2 rounded-xl border border-amber-200 dark:border-amber-800 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors"
+              >
+                Baixar sem vínculo
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleVincular}
+            disabled={!canVincular}
+            title={!canVincular ? 'Selecione uma linha de cada painel' : ''}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+          >
+            <Icon d={icons.link} className="w-4 h-4" />
+            Vincular ↔
+          </button>
+          <button
+            onClick={onNext}
+            disabled={!allDecided}
+            title={!allDecided ? `${pending.length} transação${pending.length > 1 ? 'ões' : ''} sem decisão` : ''}
+            className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {allDecided ? 'Confirmar →' : `${pending.length} pendente${pending.length > 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -780,7 +1008,7 @@ export function ConciliacaoWizard() {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 font-display">Conciliação Bancária</h1>
           <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Importe um extrato OFX e vincule as transações ao financeiro.</p>
