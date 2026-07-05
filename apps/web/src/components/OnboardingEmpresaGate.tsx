@@ -81,7 +81,7 @@ export default function OnboardingEmpresaGate() {
   if (mode === 'load_error') {
     return (
       <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 pointer-events-auto">
-        <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
           <h2 className="font-display text-xl font-bold text-white">Não foi possível continuar</h2>
           <p className="mt-3 text-sm text-slate-400">{loadErrorMsg}</p>
           <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
@@ -111,7 +111,7 @@ export default function OnboardingEmpresaGate() {
   if (mode === 'wait_admin') {
     return (
       <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 pointer-events-auto">
-        <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-8 text-center shadow-2xl">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15 text-2xl">⏳</div>
           <h2 className="font-display text-xl font-bold text-white">Configuração pendente</h2>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">
@@ -379,7 +379,7 @@ function OnboardingWizard({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto pointer-events-auto">
-      <div className="my-auto w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div className="my-auto w-full max-w-xl rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
         <div className="border-b border-slate-800 px-6 py-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-brand-400">Configuração inicial</p>
           <h2 className="font-display mt-1 text-xl font-bold text-white">{head.title}</h2>

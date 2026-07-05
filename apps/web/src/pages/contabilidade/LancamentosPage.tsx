@@ -239,7 +239,7 @@ export function LancamentosPage() {
       {/* Modal novo lançamento */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 bg-black/40 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 max-h-[85vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
               <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Novo Lançamento Contábil</h2>
               <button onClick={() => setShowModal(false)}

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 
 type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -15,6 +15,15 @@ interface ModalProps {
  * Componente Modal reutilizável
  */
 export default function Modal({ isOpen, onClose, title, children, size = 'md', footer }: ModalProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const sizeClasses: Record<ModalSize, string> = {
@@ -38,10 +47,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', f
       />
 
       {/* Modal */}
-      <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+      <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center">
         <div
           className={`
-            relative transform overflow-hidden rounded-2xl text-left shadow-xl transition-all
+            relative transform overflow-hidden rounded-xl text-left shadow-pop transition-all
             bg-white dark:bg-slate-900
             border border-slate-200 dark:border-slate-800
             w-full ${sizeClasses[size]}
@@ -69,13 +78,13 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', f
           )}
 
           {/* Body */}
-          <div className="px-6 py-5 text-slate-700 dark:text-slate-300">
+          <div className="px-4 sm:px-6 py-5 text-slate-700 dark:text-slate-300 max-h-[75vh] overflow-y-auto">
             {children}
           </div>
 
           {/* Footer */}
           {footer && (
-            <div className="border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex justify-end gap-3">
+            <div className="border-t border-slate-100 dark:border-slate-800 px-4 sm:px-6 py-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
               {footer}
             </div>
           )}

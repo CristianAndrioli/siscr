@@ -49,7 +49,7 @@ export const MaskedInput = forwardRef<HTMLInputElement, MaskedInputProps>(
     };
 
     const defaultCls =
-      'w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500';
+      'w-full h-9 border border-slate-300 dark:border-slate-700 rounded-lg px-3 text-sm bg-white dark:bg-slate-900 dark:text-slate-100 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-colors';
 
     return (
       <input

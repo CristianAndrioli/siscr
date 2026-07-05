@@ -77,7 +77,7 @@ function Perfil() {
       )}
 
       {/* Card — Dados do usuário */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         {/* Avatar + nome */}
         <div className="flex items-center gap-5 p-6 border-b border-slate-100 dark:border-slate-800">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-500 to-violet-500 flex items-center justify-center text-white text-2xl font-bold flex-none">
@@ -155,7 +155,7 @@ function Perfil() {
       </div>
 
       {/* Card — Aparência */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">Aparência</h3>
 
         <div className="grid grid-cols-2 gap-3">
@@ -230,7 +230,7 @@ function Perfil() {
       </div>
 
       {/* Card — Segurança */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">Segurança</h3>
         <div className="flex items-center justify-between py-2">
           <div>
@@ -241,7 +241,7 @@ function Perfil() {
             href="/forgot-password"
             className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
           >
-            Redefinir senha →
+            Redefinir senha
           </a>
         </div>
       </div>

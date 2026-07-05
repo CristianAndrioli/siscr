@@ -21,7 +21,7 @@ const COLUMNS: SmartColumn<OrdemServico>[] = [
   { key: 'operador_nome', label: 'Operador', width: 140 },
   { key: 'horas_trabalhadas', label: 'Horas', width: 80, align: 'right', render: v => <span className="tabular-nums">{v != null ? `${Number(v).toFixed(1)} h` : '—'}</span> },
   { key: 'valor_total', label: 'Valor', width: 110, align: 'right', render: v => v != null ? <span className="font-semibold tabular-nums">{fmtBRL(Number(v))}</span> : <span className="text-slate-400">—</span> },
-  { key: 'nota_fiscal_id', label: 'NF', width: 60, align: 'center', render: v => v ? <span title="Faturada" className="text-emerald-500">✓</span> : <span className="text-slate-300 dark:text-slate-600">—</span> },
+  { key: 'nota_fiscal_id', label: 'NF', width: 60, align: 'center', render: v => v ? <span title="Faturada" className="text-emerald-500"><svg className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></span> : <span className="text-slate-300 dark:text-slate-600">—</span> },
   { key: 'status', label: 'Status', width: 110, render: v => <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[String(v)] ?? ''}`}>{STATUS_LABEL[String(v)] ?? String(v)}</span> },
 ];
 

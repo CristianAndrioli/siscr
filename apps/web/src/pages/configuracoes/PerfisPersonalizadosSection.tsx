@@ -212,7 +212,7 @@ export function PerfisPersonalizadosSection({ isAdmin, onChanged }: Props) {
 
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
               {editingId ? 'Editar perfil' : 'Novo perfil personalizado'}
             </h3>

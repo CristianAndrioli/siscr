@@ -143,7 +143,7 @@ export function ContasBancariasPage() {
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Contas Bancárias</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Gerencie suas contas e acompanhe o saldo disponível</p>
@@ -253,7 +253,7 @@ export function ContasBancariasPage() {
       {/* Modal — Criar / Editar */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-lg">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
               <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
                 {editing ? 'Editar Conta Bancária' : 'Nova Conta Bancária'}

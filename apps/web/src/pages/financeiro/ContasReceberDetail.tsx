@@ -678,7 +678,7 @@ export function ContasReceberDetail() {
       {/* Modal — Registrar Recebimento */}
       {showPagarModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
             <div>
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Registrar Recebimento</h2>
               {record && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">{record.descricao}</p>}

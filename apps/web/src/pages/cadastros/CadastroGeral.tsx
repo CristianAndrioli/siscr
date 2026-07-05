@@ -154,16 +154,16 @@ function CadastroGeral() {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando dados...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-2 border-slate-200 dark:border-slate-700 border-t-brand-600 dark:border-t-brand-400 mx-auto mb-4"></div>
+          <p className="text-slate-500 dark:text-slate-400">Carregando dados...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white p-8 rounded-xl shadow-2xl transition-all duration-300">
-      <h2 className="text-3xl font-extrabold text-gray-800 mb-6 border-b-2 border-indigo-600 pb-2">
+    <div className="bg-white dark:bg-slate-900 p-5 lg:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card">
+      <h2 className="text-xl lg:text-2xl font-bold font-display text-slate-900 dark:text-slate-100 mb-6 border-b border-slate-200 dark:border-slate-800 pb-3">
         Cadastro Geral de Pessoas
       </h2>
 
@@ -179,7 +179,7 @@ function CadastroGeral() {
               value={String(formData.codigo_cadastro)}
               readOnly
             />
-            <p className="text-xs text-gray-500 mt-1">Gerado automaticamente.</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Gerado automaticamente.</p>
           </div>
 
           <Select
@@ -243,7 +243,7 @@ function CadastroGeral() {
 
           {mostrarContribuinte && (
             <div className="col-span-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Contribuinte ICMS?</label>
+              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-2">Contribuinte ICMS?</label>
               <div className="flex space-x-4">
                 <label className="inline-flex items-center">
                   <input
@@ -252,9 +252,9 @@ function CadastroGeral() {
                     value="true"
                     checked={formData.contribuinte === true}
                     onChange={() => setFormData((prev) => ({ ...prev, contribuinte: true }))}
-                    className="form-radio text-indigo-600"
+                    className="w-4 h-4 text-brand-600 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-0"
                   />
-                  <span className="ml-2 text-gray-700">Sim</span>
+                  <span className="ml-2 text-sm text-slate-700 dark:text-slate-300">Sim</span>
                 </label>
                 <label className="inline-flex items-center">
                   <input
@@ -263,9 +263,9 @@ function CadastroGeral() {
                     value="false"
                     checked={formData.contribuinte === false}
                     onChange={() => setFormData((prev) => ({ ...prev, contribuinte: false }))}
-                    className="form-radio text-indigo-600"
+                    className="w-4 h-4 text-brand-600 border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-0"
                   />
-                  <span className="ml-2 text-gray-700">Não</span>
+                  <span className="ml-2 text-sm text-slate-700 dark:text-slate-300">Não</span>
                 </label>
               </div>
             </div>
@@ -283,8 +283,8 @@ function CadastroGeral() {
         </div>
 
         {/* Endereço */}
-        <div className="border-t border-gray-200 pt-6 mt-6">
-          <h3 className="text-2xl font-semibold text-gray-800 mb-4">Endereço</h3>
+        <div className="border-t border-slate-200 dark:border-slate-800 pt-6 mt-6">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Endereço</h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <Input
               label="CEP"
@@ -352,8 +352,8 @@ function CadastroGeral() {
         </div>
 
         {/* Contato e Comercial */}
-        <div className="border-t border-gray-200 pt-6 mt-6">
-          <h3 className="text-2xl font-semibold text-gray-800 mb-4">Contato e Comercial</h3>
+        <div className="border-t border-slate-200 dark:border-slate-800 pt-6 mt-6">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Contato e Comercial</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Input
               label="Nome do Contato"
@@ -404,8 +404,8 @@ function CadastroGeral() {
         </div>
 
         {/* Observações */}
-        <div className="border-t border-gray-200 pt-6 mt-6">
-          <h3 className="text-2xl font-semibold text-gray-800 mb-4">Observações</h3>
+        <div className="border-t border-slate-200 dark:border-slate-800 pt-6 mt-6">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Observações</h3>
           <Textarea
             label="Detalhes Adicionais"
             name="observacoes"
@@ -417,7 +417,7 @@ function CadastroGeral() {
         </div>
 
         {/* Botões */}
-        <div className="mt-8 pt-4 border-t border-gray-200 flex justify-start space-x-4">
+        <div className="mt-8 pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap gap-3">
           <Button type="submit" loading={loading} variant="primary">
             Salvar Cadastro
           </Button>

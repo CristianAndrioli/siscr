@@ -174,12 +174,23 @@ export default function Login() {
           {/* features */}
           <div className="mt-auto grid grid-cols-3 gap-3">
             {[
-              { icon: '⚡', label: 'Edge Computing', desc: '< 50ms no Brasil' },
-              { icon: '🔒', label: 'Multi-tenant',   desc: 'Dados isolados' },
-              { icon: '📊', label: 'Relatórios',     desc: 'Em tempo real' },
+              {
+                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />,
+                label: 'Edge Computing', desc: '< 50ms no Brasil',
+              },
+              {
+                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />,
+                label: 'Multi-tenant', desc: 'Dados isolados',
+              },
+              {
+                icon: <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />,
+                label: 'Relatórios', desc: 'Em tempo real',
+              },
             ].map(f => (
               <div key={f.label} className="bg-white/5 border border-white/10 rounded-xl p-3">
-                <div className="text-xl mb-1">{f.icon}</div>
+                <div className="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center text-brand-300 mb-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>{f.icon}</svg>
+                </div>
                 <div className="text-white text-xs font-semibold">{f.label}</div>
                 <div className="text-slate-500 text-[11px]">{f.desc}</div>
               </div>
@@ -274,7 +285,7 @@ export default function Login() {
                   placeholder="seu@email.com"
                   required
                   autoComplete="email"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all shadow-sm"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-colors shadow-sm"
                 />
               </div>
             </div>
@@ -300,7 +311,7 @@ export default function Login() {
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all shadow-sm"
+                  className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-200 bg-white text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-colors shadow-sm"
                 />
                 <button
                   type="button"
@@ -333,7 +344,7 @@ export default function Login() {
                     value={tenantSlug}
                     onChange={e => setTenantSlug(e.target.value)}
                     placeholder="minha-empresa"
-                    className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    className="w-full pl-8 pr-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-colors"
                     list="tenant-slug-suggestions"
                   />
                   {tenantChoices.length > 0 && (

@@ -18,29 +18,29 @@ export default function AccessDenied({
   const navigate = useNavigate();
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-        <div className="mb-6">
+    <div className="flex items-center justify-center min-h-[60vh] px-4">
+      <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card p-8 text-center">
+        <div className="mx-auto mb-5 w-14 h-14 rounded-full bg-red-50 dark:bg-red-950 flex items-center justify-center">
           <svg
-            className="mx-auto h-16 w-16 text-red-500"
+            className="h-7 w-7 text-red-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            strokeWidth={1.75}
           >
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
             />
           </svg>
         </div>
-        
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">{title}</h1>
-        <p className="text-gray-600 mb-6">{message}</p>
-        
+
+        <h1 className="text-xl font-bold font-display text-slate-900 dark:text-slate-100 mb-2">{title}</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">{message}</p>
+
         {showBackButton && (
-          <div className="flex gap-4 justify-center">
+          <div className="flex gap-3 justify-center">
             <Button
               variant="secondary"
               onClick={() => navigate(-1)}
@@ -51,7 +51,7 @@ export default function AccessDenied({
               variant="primary"
               onClick={() => navigate('/app')}
             >
-              Ir para Home
+              Ir para Início
             </Button>
           </div>
         )}
@@ -59,4 +59,3 @@ export default function AccessDenied({
     </div>
   );
 }
-

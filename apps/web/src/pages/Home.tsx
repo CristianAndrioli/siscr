@@ -1,33 +1,79 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+
+/* ─── ícones ────────────────────────────────────── */
+
+const icon = (d: React.ReactNode, cls = 'w-6 h-6') => (
+  <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>{d}</svg>
+);
+
+const CheckIcon = ({ className = 'w-3 h-3' }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+  </svg>
+);
+
+const ArrowRightIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+  </svg>
+);
 
 /* ─── dados ─────────────────────────────────────── */
 
 const segments = [
-  { icon: '🏭', title: 'Indústria',           desc: 'Do pedido à produção — controle total do chão de fábrica ao faturamento.' },
-  { icon: '🚚', title: 'Distribuidora',       desc: 'Compra, venda, estoque e logística integrados em tempo real.' },
-  { icon: '🏪', title: 'Comércio',            desc: 'Mais inteligência comercial e agilidade nas operações do dia a dia.' },
-  { icon: '🔧', title: 'Serviços',            desc: 'Tarefas, contratos e faturamento de serviços sob controle.' },
-  { icon: '📋', title: 'Escritório Contábil', desc: 'Contabilidade, fiscal e obrigações acessórias em um único sistema.' },
-  { icon: '⚙️', title: 'Oficina Mecânica',    desc: 'OS, peças, mão de obra e histórico do cliente em um só lugar.' },
+  {
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />),
+    title: 'Indústria',
+    desc: 'Do pedido à produção — controle total do chão de fábrica ao faturamento.',
+  },
+  {
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />),
+    title: 'Distribuidora',
+    desc: 'Compra, venda, estoque e logística integrados em tempo real.',
+  },
+  {
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />),
+    title: 'Comércio',
+    desc: 'Mais inteligência comercial e agilidade nas operações do dia a dia.',
+  },
+  {
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0M12 12.75h.008v.008H12v-.008z" />),
+    title: 'Serviços',
+    desc: 'Tarefas, contratos e faturamento de serviços sob controle.',
+  },
+  {
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />),
+    title: 'Escritório Contábil',
+    desc: 'Contabilidade, fiscal e obrigações acessórias em um único sistema.',
+  },
+  {
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />),
+    title: 'Oficina Mecânica',
+    desc: 'OS, peças, mão de obra e histórico do cliente em um só lugar.',
+  },
 ];
 
 const pillars = [
   {
     label: 'Gerenciais',
     color: 'from-brand-600/20 to-violet-600/10 border-brand-500/20',
-    icon: '📊',
+    iconColor: 'bg-brand-500/15 text-brand-300',
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />),
     items: ['Vendas & Pedidos', 'Estoque', 'Compras', 'Financeiro', 'Contratos', 'CRM', 'Faturamento NF-e/NFSe'],
   },
   {
     label: 'Controladoria',
     color: 'from-emerald-600/20 to-teal-600/10 border-emerald-500/20',
-    icon: '📑',
+    iconColor: 'bg-emerald-500/15 text-emerald-300',
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />),
     items: ['Contábil', 'Fiscal', 'Custos', 'Tributos', 'Imobilizado'],
   },
   {
     label: 'Produtividade',
     color: 'from-amber-600/20 to-orange-600/10 border-amber-500/20',
-    icon: '⚡',
+    iconColor: 'bg-amber-500/15 text-amber-300',
+    icon: icon(<path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />),
     items: ['Dashboards em tempo real', 'Relatórios CSV', 'Monitor NF-e', 'Painéis de análise', 'Edge computing'],
   },
 ];
@@ -105,7 +151,7 @@ function DashMock() {
       {/* brilho ao redor */}
       <div className="absolute inset-0 -m-8 bg-brand-500/10 rounded-3xl blur-2xl" />
 
-      <div className="relative bg-surface-card border border-surface-border rounded-2xl overflow-hidden shadow-2xl shadow-brand-900/40">
+      <div className="relative bg-surface-card border border-surface-border rounded-xl overflow-hidden shadow-2xl shadow-brand-900/40">
         {/* barra de app */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-border bg-surface/60">
           <div className="w-3 h-3 rounded-full bg-red-500/60" />
@@ -177,12 +223,14 @@ function DashMock() {
 
 /* ─── página principal ───────────────────────────── */
 export default function Home() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-surface font-sans text-white">
 
       {/* ── Navbar ── */}
       <header className="fixed top-0 inset-x-0 z-50 border-b border-surface-border/60 bg-surface/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-brand-600/30">S</div>
             <span className="font-display font-bold text-lg text-white">SISCR</span>
@@ -193,10 +241,51 @@ export default function Home() {
             <a href="#pricing"   className="hover:text-white transition-colors">Planos</a>
             <Link to="/login"   className="hover:text-white transition-colors">Entrar</Link>
           </nav>
-          <Link to="/plans" className="btn-primary text-sm px-5 py-2.5">
-            Começar grátis
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/plans" className="btn-primary text-sm h-10 px-5">
+              Começar grátis
+            </Link>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(v => !v)}
+              className="md:hidden w-10 h-10 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+              aria-label="Abrir menu"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {mobileMenuOpen
+                  ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {/* Menu mobile */}
+        {mobileMenuOpen && (
+          <nav className="md:hidden border-t border-surface-border/60 bg-surface/95 backdrop-blur-md px-4 py-3 space-y-1">
+            {[
+              { label: 'Soluções', href: '#solucoes' },
+              { label: 'Funcionalidades', href: '#funcional' },
+              { label: 'Planos', href: '#pricing' },
+            ].map(l => (
+              <a
+                key={l.href}
+                href={l.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                {l.label}
+              </a>
+            ))}
+            <Link
+              to="/login"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+            >
+              Entrar
+            </Link>
+          </nav>
+        )}
       </header>
 
       {/* ── Hero ── */}
@@ -223,8 +312,9 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/plans" className="btn-primary text-base px-8 py-4 shadow-xl shadow-brand-600/30">
-              Nossas soluções →
+            <Link to="/plans" className="btn-primary text-base h-12 px-8 shadow-xl shadow-brand-600/30">
+              Nossas soluções
+              <ArrowRightIcon />
             </Link>
             <Link to="/login" className="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-medium transition-colors">
               Já tenho conta · Entrar
@@ -233,7 +323,7 @@ export default function Home() {
         </div>
 
         {/* stats */}
-        <div className="relative max-w-3xl mx-auto mt-20 grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-border rounded-2xl overflow-hidden">
+        <div className="relative max-w-3xl mx-auto mt-20 grid grid-cols-2 md:grid-cols-4 gap-px bg-surface-border rounded-xl overflow-hidden">
           {[
             { value: '< 50ms', label: 'Latência média' },
             { value: '99.99%', label: 'Disponibilidade' },
@@ -264,7 +354,7 @@ export default function Home() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {segments.map(s => (
               <div key={s.title} className="group card-dark p-6 hover:border-brand-500/40 hover:bg-surface-card/80 transition-all duration-200 cursor-default">
-                <div className="w-12 h-12 rounded-xl bg-brand-600/15 flex items-center justify-center text-2xl mb-4 group-hover:bg-brand-600/25 transition-colors">
+                <div className="w-12 h-12 rounded-xl bg-brand-600/15 flex items-center justify-center text-brand-300 mb-4 group-hover:bg-brand-600/25 transition-colors">
                   {s.icon}
                 </div>
                 <h3 className="font-display font-semibold text-white text-lg mb-2">{s.title}</h3>
@@ -290,8 +380,10 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-6">
             {pillars.map(p => (
-              <div key={p.label} className={`rounded-2xl border bg-gradient-to-br ${p.color} p-6`}>
-                <div className="text-3xl mb-3">{p.icon}</div>
+              <div key={p.label} className={`rounded-xl border bg-gradient-to-br ${p.color} p-6`}>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${p.iconColor}`}>
+                  {p.icon}
+                </div>
                 <h3 className="font-display font-bold text-white text-xl mb-4">{p.label}</h3>
                 <ul className="space-y-2">
                   {p.items.map(item => (
@@ -349,7 +441,7 @@ export default function Home() {
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {plans.map(plan => (
-              <div key={plan.name} className={`relative flex flex-col rounded-2xl p-6 border ${plan.highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30' : 'bg-surface-card border-surface-border hover:border-brand-600/30 transition-colors'}`}>
+              <div key={plan.name} className={`relative flex flex-col rounded-xl p-6 border ${plan.highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30' : 'bg-surface-card border-surface-border hover:border-brand-600/30 transition-colors'}`}>
                 {plan.highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-white text-brand-700 text-xs font-bold rounded-full shadow">
                     MAIS POPULAR
@@ -361,7 +453,9 @@ export default function Home() {
                 <ul className="space-y-2 mb-6 flex-1">
                   {plan.features.map(f => (
                     <li key={f} className={`flex items-center gap-2 text-xs ${plan.highlight ? 'text-white/90' : 'text-slate-300'}`}>
-                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-xs flex-none ${plan.highlight ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}>✓</span>
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-none ${plan.highlight ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}>
+                        <CheckIcon className="w-2.5 h-2.5" />
+                      </span>
                       {f}
                     </li>
                   ))}
@@ -423,8 +517,9 @@ export default function Home() {
             Configure sua conta em menos de 2 minutos. Sem cartão de crédito no plano gratuito.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/plans" className="btn-primary text-base px-10 py-4 shadow-xl shadow-brand-600/30">
-              Criar minha conta grátis →
+            <Link to="/plans" className="btn-primary text-base h-12 px-10 shadow-xl shadow-brand-600/30">
+              Criar minha conta grátis
+              <ArrowRightIcon />
             </Link>
             <Link to="/login" className="text-slate-400 hover:text-white text-sm font-medium transition-colors">
               Já tenho conta · Entrar

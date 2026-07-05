@@ -1,0 +1,223 @@
+# Plano de Redesign do Frontend — SISCR ERP SaaS
+
+> Documento técnico de planejamento. Escrito antes da implementação, conforme solicitado.
+> Escopo: `apps/web` (landing SaaS, autenticação e sistema interno).
+> Data: 2026-07-05
+
+---
+
+## 1. Diagnóstico do estado atual
+
+A base do projeto é boa (React 19 + Vite + Tailwind 3, dark mode via classe, fontes Inter +
+Plus Jakarta Sans, paleta `brand` indigo). O problema não é ausência de design — é a
+**convivência de duas gerações de UI**, o que produz a sensação de "amador":
+
+### 1.1 Camada moderna (manter e polir)
+| Arquivo | Estado |
+|---|---|
+| `src/components/Layout.tsx` | Sidebar + topbar modernos, dark mode, command palette |
+| `src/components/common/DataGrid.tsx` | Tabela moderna (slate + brand, dark mode) |
+| `src/components/common/SmartGrid.tsx` | Moderna |
+| `src/components/common/Modal.tsx` | Moderno |
+| `src/components/common/Button.tsx` | Moderno (ajustes menores) |
+| `src/pages/**` (maioria) | Já usam `slate-*` + `dark:` (2.066 ocorrências de `dark:`) |
+
+### 1.2 Camada legada (reescrever) — visual "Bootstrap 2019", sem dark mode
+| Arquivo | Problemas |
+|---|---|
+| `common/Input.tsx` | `gray-*`/`indigo-*`, `rounded-md`, `p-2`, sem dark mode, sem ícone/foco moderno |
+| `common/Select.tsx` | Idem, sem chevron custom |
+| `common/Textarea.tsx` | Idem |
+| `common/Checkbox.tsx` | Idem |
+| `common/Tabs.tsx` | `gray/indigo`, sem dark mode |
+| `common/Alert.tsx` | `bg-green-100 border-l-4` (estilo Bootstrap), sem dark mode, sem ícones |
+| `common/ErrorMessage.tsx` | Paleta antiga, sem dark mode |
+| `common/DetailView.tsx` | `shadow-2xl`, `text-3xl font-extrabold`, `gray-*`, sem dark mode |
+| `common/LoadingSpinner.tsx` | `border-b-2 indigo` (spinner "meia-lua"), sem dark mode |
+| `common/Tooltip.tsx` | `gray-800`, sem dark mode |
+| `common/AccessDenied.tsx` | `bg-gray-50`, card antigo |
+| `common/RelatedRecords.tsx` | `gray-*`, spinner antigo |
+| `common/DynamicForm.tsx` | Checkbox inline `indigo/gray`, cabeçalho de seção `gray-800` |
+| `common/CodeEditor.tsx` | `gray-*` |
+| `pages/ForgotPassword.tsx` | Página inteira no padrão antigo (`bg-gray-100`, card centrado genérico) — destoa completamente do Login |
+| `pages/ResetPassword.tsx` | Idem |
+| `pages/cadastros/CadastroGeral.tsx` | 13 usos de `gray-*` |
+
+### 1.3 Problemas transversais
+1. **Emojis como ícones** na landing (`Home.tsx`: 🏭🚚🏪🔧📋⚙️ nos segmentos, 📊📑⚡ nos pilares)
+   e no Login (⚡🔒📊 nos cards de features) — o marcador nº 1 de design amador em SaaS B2B.
+2. **Setas e checks em texto** (`→`, `✓`) em CTAs e listas de planos, em vez de SVG.
+3. **`App.css` morto** — boilerplate do Vite (logo girando, `#root { max-width: 1280px }`) não
+   importado em lugar nenhum; deve ser removido.
+4. **Densidade inconsistente de controles**: `.input` do `index.css` usa `py-3 rounded-xl`
+   (48px de altura), `Input.tsx` usa `p-2 rounded-md` (~36px), busca do DataGrid usa `py-2 rounded-xl`.
+   ERP profissional usa altura de controle **fixa e densa** (36px) em todo o produto.
+5. **Raios de borda exagerados/mistos**: `rounded-2xl` em cards + `rounded-xl` em botões dá
+   aparência "consumer app"; ERPs profissionais (Salesforce Lightning, SAP Fiori, Linear,
+   Conta Azul/Omie) usam raios menores e consistentes.
+6. **Landing sem menu mobile**: navbar some em `<md` sem hambúrguer.
+7. **Foco/acessibilidade**: mistura de `focus:ring-2 ring-brand-500 border-transparent`
+   (anel duro) com estilos sem foco visível.
+
+---
+
+## 2. Direção de design (referências)
+
+Princípios extraídos de design systems de ERP/enterprise (Salesforce Lightning, SAP Fiori,
+Microsoft Fluent) e dos líderes brasileiros (Conta Azul, Omie, Bling):
+
+1. **Densidade controlada**: controles de 36px, tabelas com padding vertical de 10–12px,
+   tipografia de trabalho em 13–14px. Espaço em branco vem do layout, não de controles inchados.
+2. **Hierarquia por peso e cor, não por tamanho**: títulos de página `text-xl/2xl semibold`;
+   `extrabold`/`text-3xl` reservado à landing.
+3. **Cor com parcimônia**: neutros `slate` dominam; `brand` (indigo) apenas para ação primária,
+   navegação ativa e links; cores semânticas (emerald/amber/red/sky) só para status.
+4. **Dark mode 100%**: todo componente com par claro/escuro — hoje metade da biblioteca ignora.
+5. **Ícones vetoriais consistentes**: um único estilo (outline, stroke 1.75, 24px viewBox) em
+   todo o produto; zero emojis em UI.
+6. **Estados explícitos**: hover, focus-visible (anel suave `ring-brand-500/30` + borda),
+   disabled, loading, empty state e error em todos os componentes interativos.
+7. **Responsividade mobile-first**: toolbars empilham, tabelas roláveis com indicação,
+   formulários de 3→2→1 colunas, alvos de toque ≥40px no mobile.
+
+---
+
+## 3. Design tokens (fundação)
+
+### 3.1 `tailwind.config.js`
+- Manter paleta `brand` (indigo 50–950) e fontes atuais.
+- Adicionar tokens de sombra suaves: `shadow-card` (`0 1px 2px rgb(15 23 42 / .05)`) e
+  `shadow-pop` (dropdowns/popovers).
+- Manter `surface-*` (usado na landing dark).
+
+### 3.2 `src/index.css` — classes utilitárias revisadas
+```css
+/* Controles — altura padrão 36px (h-9) */
+.input        → h-9 px-3 rounded-lg border-slate-300 dark:border-slate-700
+                bg-white dark:bg-slate-900 text-sm
+                focus: border-brand-500 + ring-2 ring-brand-500/20 (anel suave)
+.input-label  → text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-1.5
+.btn-primary  → h-9 (lg: h-11 na landing) px-4 rounded-lg bg-brand-600 …
+.btn-secondary→ h-9 px-4 rounded-lg border bg-white dark:bg-slate-800 …
+.btn-ghost    → h-9 px-3 rounded-lg …
+.card         → rounded-xl border shadow-card (rebaixado de rounded-2xl/shadow-sm)
+.badge        → mantém pílula, adiciona variantes dark
+```
+- Remover `App.css` (morto) e a menção no `App.tsx` se houver (não há import — apagar arquivo).
+
+### 3.3 Escalas normativas
+| Token | Valor |
+|---|---|
+| Altura de controle (input/select/botão md) | `h-9` (36px) |
+| Raio de controles | `rounded-lg` (8px) |
+| Raio de cards/modais | `rounded-xl` (12px) |
+| Fonte de trabalho (tabelas, forms) | `text-sm` (14px) / labels `text-[13px]` |
+| Título de página | `text-xl lg:text-2xl font-bold font-display` |
+| Foco | `focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20` |
+| Status: sucesso / alerta / erro / info | emerald / amber / red / sky (50–950 c/ dark) |
+
+---
+
+## 4. Especificação por componente (`src/components/common`)
+
+Todos ganham dark mode completo e o token de foco padrão.
+
+| Componente | Mudanças técnicas |
+|---|---|
+| `Input.tsx` | Reescrever: wrapper c/ label (`.input-label`-like), input `h-9 px-3 rounded-lg`, borda `slate-300/700`, erro = borda `red-500` + `ring-red-500/20` + msg `text-xs text-red-600 dark:text-red-400`, `readOnly` = `bg-slate-50 dark:bg-slate-800/60`; API inalterada (label, error, helpText, ...rest) |
+| `Select.tsx` | Idem Input + `appearance-none` com chevron SVG posicionado; mantém API |
+| `Textarea.tsx` | Idem Input (sem altura fixa, `py-2`) |
+| `Checkbox.tsx` | `accent`/classes brand, label `text-sm slate-700/300`, área clicável ≥36px |
+| `Tabs.tsx` | Underline 2px brand, texto `slate-500→slate-900` hover, dark mode, contador em pílula `slate-100/800`, scroll horizontal no mobile (`overflow-x-auto`, `-mb-px`) |
+| `Alert.tsx` | Redesenhar: card `rounded-lg border` com fundo 50/950, ícone SVG por tipo, título opcional, botão fechar; paleta emerald/red/amber/sky c/ dark |
+| `ErrorMessage.tsx` | Alinhar ao novo Alert (mesma anatomia) + dark mode |
+| `DetailView.tsx` | Header `text-xl font-bold` (não 3xl extrabold), card `rounded-xl shadow-card`, campos com label `text-xs uppercase tracking-wide slate-400` + valor `text-sm`, divisórias `slate-100/800`, dark mode, loading via `LoadingSpinner` |
+| `LoadingSpinner.tsx` | Spinner anelar (`border-2 border-slate-200 border-t-brand-600`), dark mode, `fullScreen` sem `min-h-screen` dentro do layout (usar `min-h-[50vh]`) |
+| `Tooltip.tsx` | `bg-slate-800 dark:bg-slate-700`, `text-xs`, raio `rounded-md`, seta consistente |
+| `AccessDenied.tsx` | Card moderno `rounded-xl border`, ícone em disco `red-50/950`, dark mode |
+| `RelatedRecords.tsx` | Títulos slate + dark, empty state moderno, remover borda dupla em volta do DataGrid |
+| `DynamicForm.tsx` | Checkbox interno no novo padrão, cabeçalho de seção `text-sm font-semibold uppercase tracking-wide` c/ divisória, rodapé de ações `border-slate-100 dark:border-slate-800` |
+| `CodeEditor.tsx` | Trocar `gray-*` por slate + dark |
+| `Button.tsx` | Ajuste fino: `rounded-lg`, alturas `sm h-8 / md h-9 / lg h-11`, novo variant `ghost`, spinner sem texto fixo "Carregando..." (usa children) |
+| `DataGrid.tsx` | Polir: toolbar empilha no mobile (`flex-col sm:flex-row`), busca full-width no mobile, `rounded-xl`, paginação com botões-ícone compactos |
+| `Modal.tsx` | `rounded-xl`, padding mobile, fechar com `Esc` (listener), manter API |
+
+---
+
+## 5. Especificação por página
+
+### 5.1 Autenticação (padrão único "split-panel")
+- **`Login.tsx`**: manter estrutura (painel brand + formulário); trocar emojis dos cards de
+  features por ícones SVG; unificar inputs com o novo token (h-11 aqui por ser página de foco
+  único); polir preview do dashboard.
+- **`ForgotPassword.tsx` / `ResetPassword.tsx`**: reescrever no mesmo padrão visual do Login
+  (painel esquerdo compacto ou card sobre fundo `slate-50` com logo, tipografia display,
+  inputs e botões novos, estados de sucesso/erro com o novo Alert).
+- **`VerifyEmail.tsx`**: conferir consistência (tema dark da landing) e alinhar botões.
+
+### 5.2 Landing SaaS (`Home.tsx`) — manter tema dark, elevar acabamento
+1. Substituir **todos os emojis** por ícones SVG outline em discos `bg-brand-600/15`.
+2. Substituir `→` e `✓` por SVGs (`ArrowRight`, `Check`).
+3. Navbar: adicionar **menu mobile** (hambúrguer + painel).
+4. Hero: manter; refinar espaçamentos e badge.
+5. Cards de plano: raio `rounded-xl`, check SVG, destaque "MAIS POPULAR" com melhor contraste.
+6. Footer: manter estrutura.
+7. **`Plans.tsx` / `Signup.tsx` / `Checkout*.tsx` / `SubscriptionExpired.tsx`**: mesmos ajustes
+   (ícones SVG, botões/inputs novos, consistência com a landing).
+
+### 5.3 Sistema interno
+- **`Layout.tsx`**: já bom. Ajustes: breadcrumb sem `capitalize` global (labels já formatados),
+  item ativo da sidebar com indicador de barra (2px brand à esquerda), polimento do botão de
+  busca (kbd), transições.
+- **`AppHome.tsx`**: já moderno — apenas conferir tokens (raios, sombras).
+- **Páginas de lista** (Pessoas, Produtos, Serviços, CR/CP, NF-e, Estoque, Frota…):
+  padrão de cabeçalho unificado:
+  `header: flex flex-col sm:flex-row sm:items-center justify-between gap-3` com
+  título + subtítulo à esquerda e ações à direita (empilha no mobile).
+- **Páginas de detalhe/wizard**: herdam ganhos dos componentes; revisar casos com `gray-*`
+  (`CadastroGeral.tsx`) e espaçamentos.
+- **`configuracoes/*`, `contabilidade/*`, `financeiro/*`**: herdam dos componentes; revisão
+  pontual de classes fora do padrão.
+
+---
+
+## 6. Responsividade (regras)
+
+| Padrão | Regra |
+|---|---|
+| Toolbar de página | `flex-col sm:flex-row`, ações full-width no mobile quando únicas |
+| Tabelas | wrapper `overflow-x-auto` (já existe no DataGrid); células com `min-w` |
+| Formulários | `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` (já usado no DynamicForm) |
+| Modais | `p-4` no mobile, `max-h-[90vh] overflow-y-auto` no corpo |
+| Sidebar | já responsiva (drawer mobile) — manter |
+| Landing | menu mobile novo; grids `sm:grid-cols-2 lg:grid-cols-3/4` (já ok) |
+| Alvos de toque | botões-ícone ≥ `w-8 h-8` (mobile ≥ 40px em barras principais) |
+
+---
+
+## 7. Ordem de execução
+
+```mermaid
+flowchart TD
+    A[1. Fundação\ntailwind.config.js + index.css\nremover App.css] --> B[2. Componentes base\nInput, Select, Textarea, Checkbox,\nButton, Tabs, Alert, ErrorMessage,\nLoadingSpinner, Tooltip]
+    B --> C[3. Componentes compostos\nDetailView, DynamicForm, DataGrid,\nModal, RelatedRecords, AccessDenied,\nCodeEditor]
+    C --> D[4. Auth\nLogin, ForgotPassword,\nResetPassword, VerifyEmail]
+    C --> E[5. Landing SaaS\nHome, Plans, Signup,\nCheckout*, SubscriptionExpired]
+    C --> F[6. Sistema\nLayout + varredura de páginas\ncom classes legadas]
+    D --> G[7. Verificação\nbuild + typecheck + preview\ndesktop/mobile/dark]
+    E --> G
+    F --> G
+```
+
+### Critérios de aceite
+- [ ] Zero ocorrências de `gray-*` em `src/` (exceto onde semanticamente necessário — nenhuma prevista)
+- [ ] Zero emojis usados como ícone em UI
+- [ ] Todos os componentes de `common/` com dark mode
+- [ ] Altura de controles uniforme (36px) no sistema interno
+- [ ] `pnpm build` e `tsc` sem erros
+- [ ] Preview verificado em 375px (mobile), 768px (tablet) e 1280px (desktop), claro e escuro
+
+### Não-objetivos (fora de escopo desta rodada)
+- Troca de biblioteca de componentes (manter biblioteca própria)
+- Mudança de identidade de marca (mantém indigo "brand" e nome SISCR)
+- Refatoração de lógica/serviços — mudanças são estritamente visuais/estruturais de JSX/CSS

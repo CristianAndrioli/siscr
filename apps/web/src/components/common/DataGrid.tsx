@@ -176,20 +176,20 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
 
   return (
     <>
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full max-w-full overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card w-full max-w-full overflow-hidden">
         {/* Header com pesquisa e ações */}
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
-          <div className="flex-1 max-w-md">
+        <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex-1 sm:max-w-md">
             <div className="relative">
               <input
                 type="text"
                 value={searchTerm}
                 onChange={handleSearchChange}
                 placeholder={searchPlaceholder}
-                className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
+                className="w-full h-9 pl-10 pr-4 text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-colors"
               />
               <svg
-                className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -199,7 +199,7 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 justify-end">
             <Button onClick={() => setShowColumnModal(true)} variant="secondary" size="sm" title="Personalizar colunas">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
@@ -269,7 +269,7 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
                     className="px-5 py-12 text-center"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-brand-600" />
+                      <div className="animate-spin rounded-full h-7 w-7 border-2 border-slate-200 dark:border-slate-700 border-t-brand-600 dark:border-t-brand-400" />
                       <p className="text-sm text-slate-400 dark:text-slate-500">Carregando...</p>
                     </div>
                   </td>
@@ -346,7 +346,7 @@ export function DataGrid<T extends Record<string, unknown> = Record<string, unkn
 
         {/* Paginação */}
         {pagination && pagination.total > 0 && (
-          <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+          <div className="px-4 sm:px-5 py-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-xs text-slate-500 dark:text-slate-400">
               Mostrando {(pagination.page - 1) * pagination.pageSize + 1}–
               {Math.min(pagination.page * pagination.pageSize, pagination.total)} de{' '}

@@ -162,7 +162,7 @@ export function LocaisPage() {
       {/* Modal Cadastro/Edição */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{editingId ? 'Editar Local' : 'Novo Local'}</h2>
 
             {modalError && (
@@ -215,7 +215,7 @@ export function LocaisPage() {
       {/* Confirm Delete */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Confirmar remoção</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Tem certeza que deseja remover este local? Esta ação não pode ser desfeita.</p>
             <div className="flex gap-3">

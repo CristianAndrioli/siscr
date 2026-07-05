@@ -211,7 +211,7 @@ export function CotacoesPage() {
       {/* Modal Cotação */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-5 p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-5 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{editingId ? 'Editar Cotação' : 'Nova Cotação'}</h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
@@ -331,7 +331,7 @@ export function CotacoesPage() {
 
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Excluir cotação?</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Esta ação não pode ser desfeita.</p>
             <div className="flex gap-3">

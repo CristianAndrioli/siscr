@@ -442,7 +442,7 @@ export function NFVendaPage() {
       {/* Modal Nova NF-e */}
       {modalMode === 'new' && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-5 p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-5 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Nova NF-e (Rascunho)</h2>
               <button onClick={() => setModalMode(null)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -532,7 +532,7 @@ export function NFVendaPage() {
       {/* Modal Detalhe NF-e */}
       {modalMode === 'view' && selectedNota && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-2xl my-6 p-6 space-y-5">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-2xl my-6 p-6 space-y-5">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
@@ -707,7 +707,7 @@ export function NFVendaPage() {
       {/* Modal Faturar */}
       {modalMode === 'faturar' && selectedNota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-5">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-5">
 
             {/* ── Fase 1: Condição de pagamento ── */}
             {!faturarConfirmando && (
@@ -857,7 +857,7 @@ export function NFVendaPage() {
       {/* Modal Cancelar */}
       {modalMode === 'cancel' && selectedNota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Cancelar NF-e</h2>
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Motivo do cancelamento</label>

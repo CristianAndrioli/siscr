@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { DataGrid } from './DataGrid';
+import LoadingSpinner from './LoadingSpinner';
 import type { GridColumn } from '../../types';
 
 export interface RelatedRecord {
@@ -39,35 +40,33 @@ export default function RelatedRecords<T extends RelatedRecord = RelatedRecord>(
 
   return (
     <div className="mb-6">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-        <p className="text-sm text-gray-500 mt-1">
+      <div className="mb-3">
+        <h3 className="text-base font-semibold font-display text-slate-800 dark:text-slate-200">{title}</h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
           {records.length} registro(s) encontrado(s)
         </p>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <LoadingSpinner />
         </div>
       ) : records.length === 0 ? (
-        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-gray-500">{emptyMessage}</p>
+        <div className="text-center py-8 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-200 dark:border-slate-700">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{emptyMessage}</p>
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <DataGrid<T>
-            data={records}
-            columns={columns}
-            onRowClick={handleRowClick}
-            loading={false}
-            pagination={null}
-            showActions={false}
-            searchPlaceholder=""
-            emptyMessage={emptyMessage}
-            gridId={`related-${title.toLowerCase().replace(/\s+/g, '-')}`}
-          />
-        </div>
+        <DataGrid<T>
+          data={records}
+          columns={columns}
+          onRowClick={handleRowClick}
+          loading={false}
+          pagination={null}
+          showActions={false}
+          searchPlaceholder=""
+          emptyMessage={emptyMessage}
+          gridId={`related-${title.toLowerCase().replace(/\s+/g, '-')}`}
+        />
       )}
     </div>
   );

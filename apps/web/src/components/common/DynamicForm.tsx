@@ -146,7 +146,7 @@ function DynamicForm({
       
       case 'checkbox':
         return (
-          <div key={field.name} className="flex items-center">
+          <div key={field.name} className="flex items-center min-h-[36px]">
             <input
               type="checkbox"
               id={field.name}
@@ -154,15 +154,15 @@ function DynamicForm({
               checked={Boolean(value)}
               onChange={handleChange}
               disabled={field.readOnly}
-              className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+              className="w-4 h-4 rounded text-brand-600 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-0"
             />
             {field.label && (
-              <label htmlFor={field.name} className="ml-2 block text-sm font-medium text-gray-700">
+              <label htmlFor={field.name} className="ml-2 block text-sm text-slate-700 dark:text-slate-300">
                 {field.label}
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
             )}
-            {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+            {error && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>}
           </div>
         );
       
@@ -199,7 +199,7 @@ function DynamicForm({
       {Object.entries(groupedFields).map(([section, sectionFields]) => (
         <div key={section} className="space-y-4">
           {Object.keys(groupedFields).length > 1 && (
-            <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 pb-2">
               {section}
             </h3>
           )}
@@ -214,7 +214,7 @@ function DynamicForm({
       ))}
 
       {/* Botões de ação */}
-      <div className="flex justify-end gap-4 pt-4 border-t">
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
         {onCancel && (
           <Button
             type="button"

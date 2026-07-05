@@ -160,8 +160,10 @@ export default function Checkout() {
             {features.length > 0 && (
               <ul className="mt-4 space-y-1.5 text-sm text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-4">
                 {features.slice(0, 12).map((f) => (
-                  <li key={f} className="flex gap-2">
-                    <span className="text-green-600 dark:text-green-400">✓</span>
+                  <li key={f} className="flex items-start gap-2">
+                    <svg className="w-4 h-4 mt-0.5 flex-none text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
                     {f}
                   </li>
                 ))}

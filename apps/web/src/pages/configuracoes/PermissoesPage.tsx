@@ -253,7 +253,7 @@ export function PermissoesPage() {
       {/* Confirm role change */}
       {changingRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Alterar perfil?</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               O usuário receberá o perfil de <strong>{ROLES.find(r => r.role === changingRole.newRole)?.label}</strong> imediatamente.

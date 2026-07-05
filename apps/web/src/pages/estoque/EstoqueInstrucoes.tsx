@@ -7,7 +7,7 @@ export function EstoqueInstrucoes() {
       </div>
 
       {/* Visão Geral */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-950 flex items-center justify-center">
             <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -29,7 +29,7 @@ export function EstoqueInstrucoes() {
       </section>
 
       {/* Locais */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
             <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -67,7 +67,7 @@ export function EstoqueInstrucoes() {
       </section>
 
       {/* Movimentações */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
             <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -112,7 +112,7 @@ export function EstoqueInstrucoes() {
       </section>
 
       {/* Transferências */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
             <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -151,7 +151,7 @@ export function EstoqueInstrucoes() {
       </section>
 
       {/* Posição Atual */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-3">
           <span className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950 flex items-center justify-center">
             <svg className="w-5 h-5 text-violet-600 dark:text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -166,7 +166,7 @@ export function EstoqueInstrucoes() {
         </p>
         <div className="grid sm:grid-cols-2 gap-3 text-sm">
           <div className="flex items-start gap-2">
-            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">✓</span>
+            <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 mt-0.5"><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg></span>
             <span className="text-slate-600 dark:text-slate-400 text-xs">Saldo positivo: produto disponível naquele local</span>
           </div>
           <div className="flex items-start gap-2">
@@ -177,7 +177,7 @@ export function EstoqueInstrucoes() {
       </section>
 
       {/* Fluxo recomendado */}
-      <section className="bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-800 rounded-2xl p-6 space-y-4">
+      <section className="bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-800 rounded-xl p-6 space-y-4">
         <h2 className="text-lg font-bold text-brand-800 dark:text-brand-200">Fluxo de uso recomendado</h2>
         <ol className="space-y-3">
           {[

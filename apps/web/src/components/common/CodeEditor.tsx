@@ -36,17 +36,16 @@ export default function CodeEditor({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         readOnly={readOnly}
-        className="w-full font-mono text-sm border border-gray-300 rounded-md p-3 focus:border-indigo-500 focus:ring-indigo-500 resize-none"
+        className="w-full font-mono text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 resize-none transition-colors"
         style={{ minHeight: height }}
         placeholder={`Digite o código ${language.toUpperCase()} aqui...`}
         spellCheck={false}
       />
       <div className="absolute top-2 right-2">
-        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+        <span className="text-[10px] font-semibold tracking-wide text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
           {language.toUpperCase()}
         </span>
       </div>
     </div>
   );
 }
-

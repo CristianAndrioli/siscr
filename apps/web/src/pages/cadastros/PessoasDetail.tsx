@@ -165,7 +165,7 @@ export function PessoasDetail() {
   return (
     <div className="max-w-2xl space-y-6">
       {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <button
             onClick={() => navigate('/cadastros/pessoas')}

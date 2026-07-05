@@ -119,7 +119,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="command-palette-title"
-        className="relative w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl shadow-slate-900/20 overflow-hidden"
+        className="relative w-full max-w-xl rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl shadow-slate-900/20 overflow-hidden"
       >
         <div className="border-b border-slate-100 dark:border-slate-800 px-4 py-3">
           <div className="flex items-center gap-3">

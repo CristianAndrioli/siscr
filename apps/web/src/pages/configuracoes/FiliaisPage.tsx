@@ -633,7 +633,7 @@ export function FiliaisPage() {
       {/* Modal Empresa */}
       {showEmpresaModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-slate-900 px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{empresaEditing ? 'Editar Empresa' : 'Nova Empresa'}</h2>
               <button onClick={() => setShowEmpresaModal(false)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -769,7 +769,7 @@ export function FiliaisPage() {
       {/* Modal Filial */}
       {showFilialModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white dark:bg-slate-900 px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{filialEditing ? 'Editar Filial' : 'Nova Filial'}</h2>
               <button onClick={() => setShowFilialModal(false)} className="text-slate-400 hover:text-slate-600"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
@@ -902,7 +902,7 @@ export function FiliaisPage() {
       {/* Confirm Delete */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Excluir {deleteTarget.tipo === 'empresa' ? 'empresa' : 'filial'}?</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {deleteTarget.tipo === 'empresa' ? 'Todas as filiais vinculadas também serão removidas. ' : ''}Esta ação não pode ser desfeita.

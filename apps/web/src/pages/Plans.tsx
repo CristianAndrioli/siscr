@@ -133,8 +133,11 @@ export default function Plans() {
             <div className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-white font-bold text-sm">S</div>
             <span className="font-display font-bold text-lg text-white">SISCR</span>
           </Link>
-          <Link to="/login" className="text-sm text-slate-400 hover:text-white transition-colors">
-            Já tenho conta →
+          <Link to="/login" className="inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors">
+            Já tenho conta
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
           </Link>
         </div>
       </header>
@@ -167,7 +170,7 @@ export default function Plans() {
               return (
                 <div
                   key={plan.id}
-                  className={`relative flex flex-col rounded-2xl border p-8 transition-all duration-200 ${
+                  className={`relative flex flex-col rounded-xl border p-8 transition-all duration-200 ${
                     isBrand
                       ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30'
                       : 'bg-surface-card border-surface-border hover:border-brand-600/30'
@@ -205,9 +208,11 @@ export default function Plans() {
                           className={`flex items-center gap-2.5 text-sm ${isBrand ? 'text-white/90' : 'text-slate-300'}`}
                         >
                           <span
-                            className={`flex-none w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${isBrand ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}
+                            className={`flex-none w-5 h-5 rounded-full flex items-center justify-center ${isBrand ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}
                           >
-                            ✓
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
                           </span>
                           {f}
                         </li>
@@ -217,7 +222,11 @@ export default function Plans() {
                           key={f}
                           className={`flex items-center gap-2.5 text-sm opacity-40 ${isBrand ? 'text-white' : 'text-slate-500'}`}
                         >
-                          <span className="flex-none w-5 h-5 rounded-full flex items-center justify-center text-xs">✕</span>
+                          <span className="flex-none w-5 h-5 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </span>
                           {f}
                         </li>
                       ))}

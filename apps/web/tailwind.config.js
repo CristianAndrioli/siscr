@@ -32,6 +32,10 @@ export default {
           muted:   '#475569',
         },
       },
+      boxShadow: {
+        card: '0 1px 2px 0 rgb(15 23 42 / 0.05)',
+        pop:  '0 4px 16px -2px rgb(15 23 42 / 0.12), 0 2px 4px -2px rgb(15 23 42 / 0.08)',
+      },
       backgroundImage: {
         'gradient-brand': 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
         'gradient-dark':  'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',

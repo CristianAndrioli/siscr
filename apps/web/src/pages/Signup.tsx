@@ -180,7 +180,11 @@ export default function Signup() {
                 s < step ? 'bg-brand-600/30 text-brand-400' :
                 'bg-surface-card border border-surface-border text-slate-600'
               }`}>
-                {s < step ? '✓' : s}
+                {s < step ? (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                ) : s}
               </div>
               <span className={`text-sm ${s === step ? 'text-white font-semibold' : 'text-slate-500'}`}>
                 {s === 1 ? 'Empresa' : s === 2 ? 'Acesso' : 'E-mail'}
@@ -192,7 +196,9 @@ export default function Signup() {
 
         {error && (
           <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-            <span>⚠️</span>
+            <svg className="w-4 h-4 mt-0.5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
             <span>{error}</span>
           </div>
         )}
@@ -235,7 +241,7 @@ export default function Signup() {
                   type="button"
                   onClick={() => void runSlugAvailability()}
                   disabled={slugChecking || !tenantSlug.trim()}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-surface-border text-slate-200 hover:bg-slate-800/50 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  className="h-9 px-4 rounded-lg text-sm font-semibold border border-surface-border text-slate-200 hover:bg-slate-800/50 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                 >
                   {slugChecking ? 'Verificando…' : 'Validar disponibilidade'}
                 </button>
@@ -260,8 +266,11 @@ export default function Signup() {
               )}
             </div>
 
-            <button type="submit" className="btn-primary w-full py-3.5 text-base">
-              Continuar →
+            <button type="submit" className="btn-primary w-full h-12 text-base">
+              Continuar
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
             </button>
           </form>
         )}
@@ -322,14 +331,17 @@ export default function Signup() {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="btn-ghost text-slate-400 border border-surface-border px-5 py-3.5"
+                className="btn-ghost text-slate-400 border border-surface-border h-12 px-5"
               >
-                ← Voltar
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+                </svg>
+                Voltar
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="btn-primary flex-1 py-3.5 text-base"
+                className="btn-primary flex-1 h-12 text-base"
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -339,7 +351,7 @@ export default function Signup() {
                     </svg>
                     {plan === 'free' ? 'Criando conta...' : 'Indo para pagamento...'}
                   </span>
-                ) : plan === 'free' ? 'Criar conta grátis' : 'Ir para pagamento →'}
+                ) : plan === 'free' ? 'Criar conta grátis' : 'Ir para pagamento'}
               </button>
             </div>
           </form>

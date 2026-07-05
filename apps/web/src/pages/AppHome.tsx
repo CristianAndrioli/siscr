@@ -331,12 +331,12 @@ function AppHome() {
           <div>
             <p className="text-sm text-slate-400 dark:text-slate-500 capitalize">{todayFormatted()}</p>
             <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display mt-0.5">
-              {greeting()}, {userName ? userName.split(' ')[0] : 'Usuário'} 👋
+              {greeting()}, {userName ? userName.split(' ')[0] : 'Usuário'}
             </h1>
           </div>
           <Link
             to="/faturamento/cotacoes"
-            className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-xl transition-colors"
+            className="self-start sm:self-auto inline-flex items-center gap-2 h-9 px-4 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -396,11 +396,17 @@ function AppHome() {
                 {qtdVencido} título(s) vencido(s) — {fmtBRL(totalVencido)} em aberto
               </p>
               <div className="flex gap-3 mt-1.5">
-                <Link to="/financeiro/contas-receber" className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline">
-                  Contas a Receber →
+                <Link to="/financeiro/contas-receber" className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline">
+                  Contas a Receber
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                  </svg>
                 </Link>
-                <Link to="/financeiro/contas-pagar" className="text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline">
-                  Contas a Pagar →
+                <Link to="/financeiro/contas-pagar" className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline">
+                  Contas a Pagar
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                  </svg>
                 </Link>
               </div>
             </div>

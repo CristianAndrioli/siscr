@@ -634,14 +634,14 @@ export default function Layout({ children }: LayoutProps) {
             <Icon d={icons.menu} className="w-5 h-5" />
           </button>
 
-          <div className="flex-1 text-sm text-slate-400 dark:text-slate-500 capitalize truncate min-w-0">
+          <div className="flex-1 text-sm text-slate-400 dark:text-slate-500 truncate min-w-0">
             {buildBreadcrumb(location.pathname)}
           </div>
 
           <button
             type="button"
             onClick={() => setCommandPaletteOpen(true)}
-            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-sm text-slate-500 dark:text-slate-400 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors flex-none"
+            className="hidden sm:flex items-center gap-2 px-3 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-sm text-slate-500 dark:text-slate-400 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300 transition-colors flex-none"
             title="Busca universal"
           >
             <svg className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">

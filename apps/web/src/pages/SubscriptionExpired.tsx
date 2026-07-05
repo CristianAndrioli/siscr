@@ -42,7 +42,7 @@ function SubscriptionExpired() {
     <div className="min-h-screen bg-surface flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         {/* Card principal */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl overflow-hidden">
 
           {/* Cabeçalho vermelho */}
           <div className="bg-gradient-to-br from-red-500 to-rose-600 px-8 py-10 text-center">

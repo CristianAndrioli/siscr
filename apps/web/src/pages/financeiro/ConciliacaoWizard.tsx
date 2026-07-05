@@ -231,7 +231,7 @@ function Step2({
         onDragLeave={() => setDragging(false)}
         onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
         onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-12 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center gap-3 cursor-pointer transition-colors ${
           dragging
             ? 'border-brand-500 bg-brand-50 dark:bg-brand-950'
             : 'border-slate-200 dark:border-slate-700 hover:border-brand-300 dark:hover:border-brand-600 bg-slate-50 dark:bg-slate-900'
@@ -254,7 +254,7 @@ function Step2({
           </div>
         ) : (
           <>
-            <div className="w-14 h-14 rounded-2xl bg-brand-100 dark:bg-brand-900 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-xl bg-brand-100 dark:bg-brand-900 flex items-center justify-center">
               <Icon d={icons.upload} className="w-7 h-7 text-brand-600 dark:text-brand-400" />
             </div>
             <div className="text-center">
@@ -1014,7 +1014,7 @@ export function ConciliacaoWizard() {
           <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Importe um extrato OFX e vincule as transações ao financeiro.</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm">
           <StepBar current={step} />
 
           {step === 0 && (

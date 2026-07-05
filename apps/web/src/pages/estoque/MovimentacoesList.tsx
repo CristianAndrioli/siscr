@@ -317,7 +317,7 @@ export function MovimentacoesList() {
       {/* Modal Nova Movimentação */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-5">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-md space-y-5">
 
             <div>
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Nova Movimentação</h2>

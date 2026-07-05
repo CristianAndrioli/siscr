@@ -267,7 +267,7 @@ export default function NfEntradaWizardPage() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm space-y-5">
         {step === 0 && (
           <>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">XML e destinatário</h2>
