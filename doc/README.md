@@ -11,6 +11,7 @@
 | [padroes-arquitetura.md](./padroes-arquitetura.md) | Padrões de arquitetura adotados no projeto. |
 | [seguranca.md](./seguranca.md) | Práticas e requisitos de segurança. |
 | [plano-contabilidade-fiscal.md](./plano-contabilidade-fiscal.md) | Plano do módulo de contabilidade e obrigações fiscais. |
+| [integracoes-contabilidade.md](./integracoes-contabilidade.md) | Integração com escritórios contábeis: exportação ZIP, Distribuição DFe, APIs Domínio/Alterdata e o modelo de Conexões (named credentials). |
 | [redesign-frontend.mmd](./redesign-frontend.mmd) | Plano técnico do redesign do frontend (design system, componentes, páginas, responsividade). |
 
 Atualize estes arquivos quando alterar fluxos de autenticação, domínio ou infraestrutura.
