@@ -27,6 +27,7 @@ import logsRoutes from './routes/logs'
 import frotaRoutes from './routes/frota'
 import preferencesRoutes from './routes/preferences'
 import contabilidadeRoutes from './routes/contabilidade'
+import conexoesRoutes from './routes/conexoes'
 
 export type Env = {
   // D1 — banco compartilhado (tenants, planos, billing)
@@ -133,6 +134,7 @@ app.use('/api/tenant/bancario', requireTenantModule('financeiro'))
 app.use('/api/tenant/faturamento', requireTenantModule('faturamento'))
 app.use('/api/tenant/entrada', requireTenantModule('faturamento'))
 app.use('/api/tenant/vendas', requireTenantModule('faturamento'))
+app.use('/api/tenant/conexoes', requireTenantModule('configuracoes'))
 
 // ─── Rotas do tenant (autenticadas + tenant identificado) ──────
 app.route('/api/tenant/info', tenantRoutes)
@@ -148,6 +150,7 @@ app.route('/api/tenant/logs', logsRoutes)
 app.route('/api/tenant/frota', frotaRoutes)
 app.route('/api/tenant/preferences', preferencesRoutes)
 app.route('/api/tenant/contabilidade', contabilidadeRoutes)
+app.route('/api/tenant/conexoes', conexoesRoutes)
 
 // ─── Rotas internas (Cron + Queue handlers) ───────────────────
 app.route('/__cron', cronRoutes)
