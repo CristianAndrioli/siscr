@@ -1052,4 +1052,199 @@ app.patch('/nf-entradas/:id', zValidator('json', patchFornecedorSchema), async (
   return c.json({ message: 'Fornecedor vinculado.' })
 })
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Distribuição DFe — busca automática de NF-e destinadas ao CNPJ da empresa
+// Ver doc/integracoes-contabilidade.md §2
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /dfe/consultar { empresaId }
+ * Executa um lote de consulta no Ambiente Nacional (≤50 docs por chamada),
+ * grava XMLs no R2 e metadados em dfe_documentos, avança o NSU em dfe_sync.
+ */
+app.post('/dfe/consultar', zValidator('json', z.object({ empresaId: z.string().min(1) })), async (c) => {
+  const tenant = c.get('tenant')
+  const { empresaId } = c.req.valid('json')
+
+  if (!c.env.R2_STORAGE) return c.json({ error: 'Armazenamento R2 não configurado.' }, 503)
+
+  const empresa = await c.env.DB_SHARED
+    .prepare('SELECT id, cnpj, uf, nfe_ambiente FROM empresas WHERE id = ? AND tenant_id = ?')
+    .bind(empresaId, tenant.tenantId)
+    .first<{ id: string; cnpj: string | null; uf: string | null; nfe_ambiente: number | null }>()
+
+  if (!empresa) return c.json({ error: 'Empresa não encontrada.' }, 404)
+  const cnpj = (empresa.cnpj ?? '').replace(/\D/g, '')
+  if (cnpj.length !== 14) return c.json({ error: 'Empresa sem CNPJ válido cadastrado.' }, 400)
+
+  const now = new Date().toISOString()
+
+  // Estado de sincronização (cria se não existir)
+  let sync = await c.env.DB_SHARED
+    .prepare('SELECT * FROM dfe_sync WHERE tenant_id = ? AND empresa_id = ?')
+    .bind(tenant.tenantId, empresaId)
+    .first<{ id: string; ult_nsu: string }>()
+
+  if (!sync) {
+    const id = crypto.randomUUID()
+    await c.env.DB_SHARED
+      .prepare('INSERT INTO dfe_sync (id, tenant_id, empresa_id, ult_nsu, created_at) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, tenant.tenantId, empresaId, '0', now)
+      .run()
+    sync = { id, ult_nsu: '0' }
+  }
+
+  const { consultarDistribuicaoDfe, extractDocMeta } = await import('../lib/dfe/distribuicaoDfe')
+  const { cUfFromSigla } = await import('../lib/nfe/ufIbge')
+
+  try {
+    const resultado = await consultarDistribuicaoDfe(c.env, tenant.tenantId, {
+      tpAmb: empresa.nfe_ambiente === 1 ? 1 : 2,
+      cUfAutor: Number(cUfFromSigla(empresa.uf)) || 91,
+      cnpj,
+      ultNsu: sync.ult_nsu,
+    })
+
+    // 137 = nenhum documento; 138 = documentos localizados; demais = rejeição
+    if (resultado.cStat !== '137' && resultado.cStat !== '138') {
+      throw new Error(`SEFAZ rejeitou a consulta: cStat=${resultado.cStat} — ${resultado.xMotivo}`)
+    }
+
+    let novos = 0
+    for (const doc of resultado.documentos) {
+      const existe = await c.env.DB_SHARED
+        .prepare('SELECT id FROM dfe_documentos WHERE tenant_id = ? AND empresa_id = ? AND nsu = ?')
+        .bind(tenant.tenantId, empresaId, doc.nsu)
+        .first()
+      if (existe) continue
+
+      const meta = extractDocMeta(doc.schema, doc.xml)
+      const xmlPath = `tenants/${tenant.tenantId}/dfe/${empresaId}/${doc.nsu}.xml`
+      await c.env.R2_STORAGE.put(xmlPath, doc.xml)
+
+      await c.env.DB_SHARED
+        .prepare(`
+          INSERT INTO dfe_documentos
+            (id, tenant_id, empresa_id, nsu, schema_doc, tipo, chave_acesso,
+             emitente_cnpj, emitente_nome, valor_total, dh_emissao, xml_path, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'novo', ?)
+        `)
+        .bind(
+          crypto.randomUUID(), tenant.tenantId, empresaId, doc.nsu, doc.schema, meta.tipo,
+          meta.chaveAcesso, meta.emitenteCnpj, meta.emitenteNome, meta.valorTotal,
+          meta.dhEmissao, xmlPath, now,
+        )
+        .run()
+      novos++
+    }
+
+    await c.env.DB_SHARED
+      .prepare(`
+        UPDATE dfe_sync SET ult_nsu = ?, max_nsu = ?, ultima_consulta_em = ?,
+                            ultimo_status = 'ok', ultimo_erro = NULL, updated_at = ?
+        WHERE id = ?
+      `)
+      .bind(resultado.ultNsu, resultado.maxNsu, now, now, sync.id)
+      .run()
+
+    const pendentes = BigInt(resultado.maxNsu || '0') > BigInt(resultado.ultNsu || '0')
+    return c.json({
+      cStat: resultado.cStat,
+      xMotivo: resultado.xMotivo,
+      documentos_novos: novos,
+      ult_nsu: resultado.ultNsu,
+      max_nsu: resultado.maxNsu,
+      ha_mais: pendentes,
+      message: resultado.cStat === '137'
+        ? 'Nenhum documento novo na SEFAZ.'
+        : `${novos} documento(s) novo(s) baixado(s).${pendentes ? ' Há mais documentos — consulte novamente.' : ''}`,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro na consulta DFe.'
+    await c.env.DB_SHARED
+      .prepare(`
+        UPDATE dfe_sync SET ultima_consulta_em = ?, ultimo_status = 'erro', ultimo_erro = ?, updated_at = ?
+        WHERE id = ?
+      `)
+      .bind(now, msg.slice(0, 500), now, sync.id)
+      .run()
+    return c.json({ error: msg }, 502)
+  }
+})
+
+/** GET /dfe/status?empresaId= — estado da sincronização. */
+app.get('/dfe/status', async (c) => {
+  const tenant = c.get('tenant')
+  const empresaId = c.req.query('empresaId')
+  if (!empresaId) return c.json({ error: 'empresaId é obrigatório.' }, 400)
+
+  const sync = await c.env.DB_SHARED
+    .prepare('SELECT ult_nsu, max_nsu, ultima_consulta_em, ultimo_status, ultimo_erro FROM dfe_sync WHERE tenant_id = ? AND empresa_id = ?')
+    .bind(tenant.tenantId, empresaId)
+    .first()
+  return c.json({ sync: sync ?? null })
+})
+
+/** GET /dfe/documentos?empresaId=&status= — lista documentos distribuídos. */
+app.get('/dfe/documentos', async (c) => {
+  const tenant = c.get('tenant')
+  const empresaId = c.req.query('empresaId')
+  const status = c.req.query('status')
+  if (!empresaId) return c.json({ error: 'empresaId é obrigatório.' }, 400)
+
+  const { results } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT id, nsu, schema_doc, tipo, chave_acesso, emitente_cnpj, emitente_nome,
+             valor_total, dh_emissao, status, created_at
+      FROM dfe_documentos
+      WHERE tenant_id = ? AND empresa_id = ? ${status ? 'AND status = ?' : ''}
+      ORDER BY CAST(nsu AS INTEGER) DESC
+      LIMIT 200
+    `)
+    .bind(tenant.tenantId, empresaId, ...(status ? [status] : []))
+    .all()
+  return c.json({ documentos: results })
+})
+
+/** GET /dfe/documentos/:id/xml — baixa o XML armazenado. */
+app.get('/dfe/documentos/:id/xml', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+
+  const doc = await c.env.DB_SHARED
+    .prepare('SELECT xml_path, chave_acesso, nsu FROM dfe_documentos WHERE id = ? AND tenant_id = ?')
+    .bind(id, tenant.tenantId)
+    .first<{ xml_path: string; chave_acesso: string | null; nsu: string }>()
+  if (!doc) return c.json({ error: 'Documento não encontrado.' }, 404)
+
+  if (!c.env.R2_STORAGE) return c.json({ error: 'Armazenamento R2 não configurado.' }, 503)
+  const obj = await c.env.R2_STORAGE.get(doc.xml_path)
+  if (!obj) return c.json({ error: 'XML não encontrado no storage.' }, 404)
+
+  return new Response(await obj.text(), {
+    headers: {
+      'Content-Type': 'application/xml',
+      'Content-Disposition': `attachment; filename="${doc.chave_acesso ?? doc.nsu}.xml"`,
+    },
+  })
+})
+
+/** POST /dfe/documentos/:id/status { status } — marcar importada/ignorada/novo. */
+app.post(
+  '/dfe/documentos/:id/status',
+  zValidator('json', z.object({ status: z.enum(['novo', 'importada', 'ignorada']) })),
+  async (c) => {
+    const tenant = c.get('tenant')
+    const id = c.req.param('id')
+    const { status } = c.req.valid('json')
+
+    const { meta } = await c.env.DB_SHARED
+      .prepare('UPDATE dfe_documentos SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+      .bind(status, new Date().toISOString(), id, tenant.tenantId)
+      .run()
+    if (!meta.changes) return c.json({ error: 'Documento não encontrado.' }, 404)
+    return c.json({ message: 'Status atualizado.' })
+  },
+)
+
 export default app

@@ -61,6 +61,7 @@ const ROUTE_LABELS: Record<string, string> = {
   nfse: 'NFSe',
   entrada: 'Entrada',
   notas: 'Notas Importadas',
+  dfe: 'Distribuição DFe',
   nova: 'Nova',
   'nf-e': 'NF-e',
   estoque: 'Estoque',
@@ -330,6 +331,7 @@ export default function Layout({ children }: LayoutProps) {
           <SubMenu menuKey="entrada" label="Entrada" iconD={icons.truck}>
             <SubLink to="/entrada/nf-e/nova" label="NF-e de entrada" />
             <SubLink to="/entrada/notas" label="Notas importadas" />
+            <SubLink to="/entrada/dfe" label="Distribuição DFe" />
           </SubMenu>
         )}
 
@@ -469,6 +471,7 @@ export default function Layout({ children }: LayoutProps) {
             items={[
               { label: 'NF-e de entrada', to: '/entrada/nf-e/nova' },
               { label: 'Notas importadas', to: '/entrada/notas' },
+              { label: 'Distribuição DFe', to: '/entrada/dfe' },
             ]}
           />
         )}

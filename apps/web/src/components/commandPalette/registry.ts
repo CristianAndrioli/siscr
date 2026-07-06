@@ -135,6 +135,13 @@ export const COMMAND_PALETTE_ITEMS: CommandPaletteItem[] = [
     module: 'faturamento',
   },
   {
+    id: 'ent-dfe',
+    title: 'Distribuição DFe (NF-e destinadas)',
+    path: '/entrada/dfe',
+    keywords: ['sefaz', 'monitor nfe', 'nsu', 'notas destinadas', 'download automático'],
+    module: 'faturamento',
+  },
+  {
     id: 'est-posicao',
     title: 'Estoque — posição atual',
     path: '/estoque/posicao',

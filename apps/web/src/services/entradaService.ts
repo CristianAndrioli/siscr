@@ -101,3 +101,75 @@ export async function vincularFornecedor(nfEntradaId: string, fornecedorId: stri
   const { data } = await api.patch(`/tenant/entrada/nf-entradas/${nfEntradaId}`, { fornecedorId });
   return data;
 }
+
+// ─── Distribuição DFe ────────────────────────────────────────────────────────
+
+export interface DfeSyncStatus {
+  ult_nsu: string;
+  max_nsu: string | null;
+  ultima_consulta_em: string | null;
+  ultimo_status: 'ok' | 'erro' | null;
+  ultimo_erro: string | null;
+}
+
+export interface DfeDocumento {
+  id: string;
+  nsu: string;
+  schema_doc: string;
+  tipo: 'resumo' | 'nfe_completa' | 'evento';
+  chave_acesso: string | null;
+  emitente_cnpj: string | null;
+  emitente_nome: string | null;
+  valor_total: number | null;
+  dh_emissao: string | null;
+  status: 'novo' | 'importada' | 'ignorada';
+  created_at: string;
+}
+
+export async function dfeConsultar(empresaId: string) {
+  const { data } = await api.post<{
+    cStat: string; xMotivo: string; documentos_novos: number;
+    ult_nsu: string; max_nsu: string; ha_mais: boolean; message: string;
+  }>('/tenant/entrada/dfe/consultar', { empresaId });
+  return data;
+}
+
+export async function dfeStatus(empresaId: string) {
+  const { data } = await api.get<{ sync: DfeSyncStatus | null }>('/tenant/entrada/dfe/status', {
+    params: { empresaId },
+  });
+  return data.sync;
+}
+
+export async function dfeListarDocumentos(empresaId: string, status?: string) {
+  const { data } = await api.get<{ documentos: DfeDocumento[] }>('/tenant/entrada/dfe/documentos', {
+    params: { empresaId, ...(status ? { status } : {}) },
+  });
+  return data.documentos;
+}
+
+export async function dfeBaixarXml(doc: DfeDocumento): Promise<void> {
+  const res = await api.get(`/tenant/entrada/dfe/documentos/${doc.id}/xml`, { responseType: 'blob' });
+  const url = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${doc.chave_acesso ?? doc.nsu}.xml`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function dfeAtualizarStatus(id: string, status: 'novo' | 'importada' | 'ignorada') {
+  const { data } = await api.post(`/tenant/entrada/dfe/documentos/${id}/status`, { status });
+  return data;
+}
+
+/** Importa uma NF-e completa (procNFe) do DFe no fluxo padrão de entrada. */
+export async function dfeImportarNoErp(doc: DfeDocumento, empresaId: string) {
+  const res = await api.get(`/tenant/entrada/dfe/documentos/${doc.id}/xml`, { responseType: 'blob' });
+  const file = new File([res.data as Blob], `${doc.chave_acesso ?? doc.nsu}.xml`, { type: 'application/xml' });
+  const resultado = await importarNfEntradaXml(file, empresaId);
+  await dfeAtualizarStatus(doc.id, 'importada');
+  return resultado;
+}
