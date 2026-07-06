@@ -83,6 +83,7 @@ const ROUTE_LABELS: Record<string, string> = {
   usuarios: 'Usuários',
   permissoes: 'Permissões',
   filiais: 'Empresas e Filiais',
+  conexoes: 'Conexões',
   logs: 'Log de Erros',
   'subscription-management': 'Assinatura',
   perfil: 'Perfil',
@@ -396,6 +397,7 @@ export default function Layout({ children }: LayoutProps) {
               <SubLink to="/configuracoes/permissoes" label="Permissões" />
               <SubLink to="/configuracoes/filiais" label="Empresas e Filiais" />
               <SubLink to="/configuracoes/faturamento" label="Faturamento (NF-e)" />
+              <SubLink to="/configuracoes/conexoes" label="Conexões" />
               <SubLink to="/configuracoes/personalizacao" label="Personalização" />
               <SubLink to="/subscription-management" label="Assinatura" />
               <SubLink to="/configuracoes/logs" label="Log de Erros" />
@@ -567,6 +569,7 @@ export default function Layout({ children }: LayoutProps) {
               { label: 'Visão Geral', to: '/configuracoes' },
               { label: 'Usuários', to: '/configuracoes/usuarios' },
               { label: 'Permissões', to: '/configuracoes/permissoes' },
+              { label: 'Conexões', to: '/configuracoes/conexoes' },
               { label: 'Personalização', to: '/configuracoes/personalizacao' },
               { label: 'Log de Erros', to: '/configuracoes/logs' },
             ]}

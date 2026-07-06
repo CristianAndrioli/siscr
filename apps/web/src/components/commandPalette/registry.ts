@@ -227,6 +227,13 @@ export const COMMAND_PALETTE_ITEMS: CommandPaletteItem[] = [
     module: 'configuracoes',
   },
   {
+    id: 'cfg-conexoes',
+    title: 'Conexões (integrações)',
+    path: '/configuracoes/conexoes',
+    keywords: ['credenciais', 'api', 'integração', 'contabilidade', 'domínio', 'token'],
+    module: 'configuracoes',
+  },
+  {
     id: 'cfg-logs',
     title: 'Log de erros',
     path: '/configuracoes/logs',

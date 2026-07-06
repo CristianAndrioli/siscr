@@ -49,6 +49,7 @@ import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
 import { FaturamentoConfigPage } from './pages/configuracoes/FaturamentoConfigPage';
 import { PermissoesPage } from './pages/configuracoes/PermissoesPage';
 import PersonalizacaoPage from './pages/configuracoes/PersonalizacaoPage';
+import ConexoesPage from './pages/configuracoes/ConexoesPage';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
 import MovimentacoesList from './pages/estoque/MovimentacoesList';
 import Transferencias from './pages/estoque/Transferencias';
@@ -222,6 +223,7 @@ function App() {
         <Route path="/configuracoes/faturamento" element={<ProtectedRoute><Layout><FaturamentoConfigPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/permissoes" element={<ProtectedRoute><Layout><PermissoesPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/personalizacao" element={<ProtectedRoute><PersonalizacaoPage /></ProtectedRoute>} />
+        <Route path="/configuracoes/conexoes" element={<ProtectedRoute><Layout><ConexoesPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs/:id" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes" element={<ProtectedRoute><Layout><Configuracoes /></Layout></ProtectedRoute>} />
