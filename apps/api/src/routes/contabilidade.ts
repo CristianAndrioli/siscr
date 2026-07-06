@@ -732,4 +732,203 @@ app.get('/exportar/ecd', async (c) => {
   }
 })
 
+// ─── Exportação para Contador (ZIP) ──────────────────────────────────────────
+
+/**
+ * GET /exportar/contador?de=YYYY-MM-DD&ate=YYYY-MM-DD[&empresaId=…]
+ *
+ * Pacote único para o escritório contábil:
+ *   xml/saida/*.xml       — NF-e emitidas no período (com XML gerado)
+ *   xml/entrada/*.xml     — NF-e de entrada importadas no período
+ *   contabil/lancamentos.csv, contabil/balancete.csv
+ *   financeiro/contas_receber.csv, financeiro/contas_pagar.csv
+ *   LEIA-ME.txt           — sumário
+ *
+ * Formato universal: qualquer sistema contábil (Domínio, Alterdata, Questor…)
+ * importa XML de NF-e e CSV. Ver doc/integracoes-contabilidade.md.
+ */
+app.get('/exportar/contador', async (c) => {
+  const tenant = c.get('tenant')
+  const { de, ate, empresaId } = c.req.query()
+
+  if (!de || !ate || !/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) {
+    return c.json({ error: 'Informe o período: de e ate no formato YYYY-MM-DD.' }, 400)
+  }
+  if (!c.env.R2_STORAGE) {
+    return c.json({ error: 'Armazenamento R2 não configurado.' }, 503)
+  }
+
+  const MAX_XML = 500 // proteção de memória/CPU do Worker
+  const enc = new TextEncoder()
+  const { buildZip } = await import('../lib/zip')
+  const entries: { name: string; data: Uint8Array }[] = []
+  const avisos: string[] = []
+
+  const empFilter = empresaId ? ' AND empresa_id = ?' : ''
+  const empBind = empresaId ? [empresaId] : []
+
+  // ── XMLs de saída (NF-e emitidas) ──────────────────────────────────────────
+  const { results: saida } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT chave_acesso, xml_path FROM notas_fiscais
+      WHERE tenant_id = ? AND xml_path IS NOT NULL AND status != 'cancelada'
+        AND substr(COALESCE(data_emissao, created_at), 1, 10) >= ?
+        AND substr(COALESCE(data_emissao, created_at), 1, 10) <= ?
+        ${empFilter}
+      ORDER BY data_emissao LIMIT ?
+    `)
+    .bind(tenant.tenantId, de, ate, ...empBind, MAX_XML + 1)
+    .all<{ chave_acesso: string | null; xml_path: string }>()
+
+  // ── XMLs de entrada (NF-e importadas) ──────────────────────────────────────
+  const { results: entrada } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT chave_acesso, xml_path FROM nf_entradas
+      WHERE tenant_id = ?
+        AND substr(COALESCE(data_emissao, created_at), 1, 10) >= ?
+        AND substr(COALESCE(data_emissao, created_at), 1, 10) <= ?
+        ${empFilter}
+      ORDER BY data_emissao LIMIT ?
+    `)
+    .bind(tenant.tenantId, de, ate, ...empBind, MAX_XML + 1)
+    .all<{ chave_acesso: string; xml_path: string }>()
+
+  if (saida.length > MAX_XML || entrada.length > MAX_XML) {
+    avisos.push(`Período com mais de ${MAX_XML} XMLs em um dos grupos — exporte períodos menores para obter todos.`)
+  }
+
+  let xmlSaidaOk = 0
+  for (const n of saida.slice(0, MAX_XML)) {
+    const obj = await c.env.R2_STORAGE.get(n.xml_path)
+    if (!obj) { avisos.push(`XML de saída não encontrado no storage: ${n.chave_acesso ?? n.xml_path}`); continue }
+    entries.push({
+      name: `xml/saida/${n.chave_acesso ?? n.xml_path.split('/').pop()}.xml`.replace(/\.xml\.xml$/, '.xml'),
+      data: new Uint8Array(await obj.arrayBuffer()),
+    })
+    xmlSaidaOk++
+  }
+
+  let xmlEntradaOk = 0
+  for (const n of entrada.slice(0, MAX_XML)) {
+    const obj = await c.env.R2_STORAGE.get(n.xml_path)
+    if (!obj) { avisos.push(`XML de entrada não encontrado no storage: ${n.chave_acesso}`); continue }
+    entries.push({
+      name: `xml/entrada/${n.chave_acesso}.xml`,
+      data: new Uint8Array(await obj.arrayBuffer()),
+    })
+    xmlEntradaOk++
+  }
+
+  // ── CSV contábil: lançamentos ──────────────────────────────────────────────
+  const { results: lanc } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT lc.numero, lc.data_lancamento, lc.historico, lc.origem_tipo,
+             pc.codigo as conta_codigo, pc.descricao as conta_descricao,
+             lci.debito, lci.credito
+      FROM lancamentos_contabeis lc
+      JOIN lancamentos_contabeis_itens lci ON lci.lancamento_id = lc.id
+      JOIN plano_contas pc ON pc.id = lci.conta_id
+      WHERE lc.tenant_id = ? AND lc.status = 'ativo'
+        AND lc.data_lancamento >= ? AND lc.data_lancamento <= ?
+      ORDER BY lc.data_lancamento, lc.numero
+    `)
+    .bind(tenant.tenantId, de, ate)
+    .all()
+
+  let lancCsv = 'Numero;Data;Historico;Origem;Conta Codigo;Conta Descricao;Debito;Credito\n'
+  for (const r of lanc as any[]) {
+    lancCsv += `${r.numero};${r.data_lancamento};"${r.historico}";"${r.origem_tipo ?? ''}";${r.conta_codigo};"${r.conta_descricao}";${r.debito.toFixed(2)};${r.credito.toFixed(2)}\n`
+  }
+  entries.push({ name: 'contabil/lancamentos.csv', data: enc.encode(lancCsv) })
+
+  // ── CSV contábil: balancete ────────────────────────────────────────────────
+  const { results: bal } = await c.env.DB_SHARED
+    .prepare(`
+      SELECT pc.codigo, pc.descricao, pc.tipo, pc.natureza,
+             COALESCE(SUM(lci.debito), 0) as total_debito,
+             COALESCE(SUM(lci.credito), 0) as total_credito
+      FROM plano_contas pc
+      LEFT JOIN lancamentos_contabeis_itens lci ON lci.conta_id = pc.id
+      LEFT JOIN lancamentos_contabeis lc ON lc.id = lci.lancamento_id
+        AND lc.status = 'ativo' AND lc.data_lancamento >= ? AND lc.data_lancamento <= ?
+      WHERE pc.tenant_id = ? AND pc.ativo = 1
+      GROUP BY pc.id
+      ORDER BY pc.codigo
+    `)
+    .bind(de, ate, tenant.tenantId)
+    .all()
+
+  let balCsv = 'Codigo;Descricao;Tipo;Natureza;Total Debito;Total Credito;Saldo\n'
+  for (const r of bal as any[]) {
+    const saldo = r.total_debito - r.total_credito
+    balCsv += `${r.codigo};"${r.descricao}";${r.tipo};${r.natureza};${r.total_debito.toFixed(2)};${r.total_credito.toFixed(2)};${saldo.toFixed(2)}\n`
+  }
+  entries.push({ name: 'contabil/balancete.csv', data: enc.encode(balCsv) })
+
+  // ── CSVs financeiro: CR e CP do período (por emissão/criação) ─────────────
+  const finCsv = async (tabela: 'contas_receber' | 'contas_pagar') => {
+    const { results } = await c.env.DB_SHARED
+      .prepare(`
+        SELECT t.descricao, p.nome as pessoa_nome, t.valor, t.vencimento, t.status,
+               t.data_pagamento, t.valor_pago, t.categoria,
+               substr(COALESCE(t.data_emissao, t.created_at), 1, 10) as emissao
+        FROM ${tabela} t
+        LEFT JOIN pessoas p ON p.id = t.pessoa_id
+        WHERE t.tenant_id = ?
+          AND substr(COALESCE(t.data_emissao, t.created_at), 1, 10) >= ?
+          AND substr(COALESCE(t.data_emissao, t.created_at), 1, 10) <= ?
+          ${empresaId ? ' AND t.empresa_id = ?' : ''}
+        ORDER BY t.vencimento
+      `)
+      .bind(tenant.tenantId, de, ate, ...empBind)
+      .all()
+
+    let csv = 'Emissao;Descricao;Pessoa;Valor;Vencimento;Status;Data Pagamento;Valor Pago;Categoria\n'
+    for (const r of results as any[]) {
+      csv += `${r.emissao};"${r.descricao}";"${r.pessoa_nome ?? ''}";${Number(r.valor).toFixed(2)};${r.vencimento};${r.status};${r.data_pagamento ?? ''};${r.valor_pago != null ? Number(r.valor_pago).toFixed(2) : ''};"${r.categoria ?? ''}"\n`
+    }
+    return { csv, qtd: results.length }
+  }
+
+  const cr = await finCsv('contas_receber')
+  const cp = await finCsv('contas_pagar')
+  entries.push({ name: 'financeiro/contas_receber.csv', data: enc.encode(cr.csv) })
+  entries.push({ name: 'financeiro/contas_pagar.csv', data: enc.encode(cp.csv) })
+
+  // ── LEIA-ME ────────────────────────────────────────────────────────────────
+  const leiame = [
+    'EXPORTAÇÃO PARA CONTADOR — SISCR ERP',
+    '=====================================',
+    '',
+    `Período: ${de} a ${ate}`,
+    `Gerado em: ${new Date().toISOString()}`,
+    empresaId ? `Empresa: ${empresaId}` : 'Empresas: todas do tenant',
+    '',
+    'Conteúdo:',
+    `  xml/saida/    — ${xmlSaidaOk} NF-e emitida(s)`,
+    `  xml/entrada/  — ${xmlEntradaOk} NF-e de entrada`,
+    `  contabil/lancamentos.csv       — ${lanc.length} partida(s)`,
+    '  contabil/balancete.csv         — saldos por conta no período',
+    `  financeiro/contas_receber.csv  — ${cr.qtd} título(s)`,
+    `  financeiro/contas_pagar.csv    — ${cp.qtd} título(s)`,
+    '',
+    'CSVs usam ";" como separador e codificação UTF-8.',
+    'Os XMLs seguem o leiaute nacional da NF-e e podem ser importados',
+    'diretamente em qualquer sistema contábil (Domínio, Alterdata, Questor…).',
+    ...(avisos.length ? ['', 'AVISOS:', ...avisos.map(a => `  - ${a}`)] : []),
+    '',
+  ].join('\r\n')
+  entries.unshift({ name: 'LEIA-ME.txt', data: enc.encode(leiame) })
+
+  const zip = buildZip(entries)
+  const filename = `exportacao-contador_${de}_${ate}.zip`
+
+  return new Response(zip.buffer as ArrayBuffer, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  })
+})
+
 export default app

@@ -200,4 +200,19 @@ export const exportacoesContabeis = {
   ecd: (ano: number, empresaId: string): string => {
     return `${BASE}/exportar/ecd?ano=${ano}&empresaId=${empresaId}`
   },
+  /** Baixa o ZIP de exportação para o contador (XMLs + CSVs) com autenticação. */
+  contadorZip: async (de: string, ate: string, empresaId?: string): Promise<void> => {
+    const res = await api.get(`${BASE}/exportar/contador`, {
+      params: { de, ate, ...(empresaId ? { empresaId } : {}) },
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(res.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `exportacao-contador_${de}_${ate}.zip`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
 }
