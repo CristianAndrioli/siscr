@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchErrorLog, fetchErrorById, clearErrorLog, type ErrorLogEntry } from '../../utils/errorLogger';
 import { SmartGrid, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -213,15 +215,13 @@ function ErrorLogList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Log de Erros</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Erros registrados pelo sistema para este tenant.
-          </p>
-        </div>
-        {total > 0 && (
+    <BaseListPage
+      title="Log de Erros"
+      description="Erros registrados pelo sistema para este tenant."
+      onExport={() => exportRowsToCsv('logs-erro', smartColumnsToCsv(COLUMNS), entries)}
+    >
+      {total > 0 && (
+        <div className="flex justify-end">
           <button
             onClick={handleClear}
             disabled={clearing}
@@ -232,8 +232,8 @@ function ErrorLogList() {
             </svg>
             {clearing ? 'Limpando…' : 'Limpar tudo'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <SmartGrid<ErrorLogEntry>
         gridId={ERROR_LOG_GRID_ID}
@@ -254,7 +254,7 @@ function ErrorLogList() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 

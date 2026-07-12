@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { servicosService, type Servico } from '../../services/cadastros/servicos';
 import { fmtBRL } from '../../utils/format';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -72,14 +74,11 @@ export function ServicosList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Serviços</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Catálogo de serviços prestados</p>
-        </div>
-      </div>
-
+    <BaseListPage
+      title="Serviços"
+      description="Catálogo de serviços prestados"
+      onExport={() => exportRowsToCsv('servicos', smartColumnsToCsv(COLUMNS), servicos)}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -128,7 +127,7 @@ export function ServicosList() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 

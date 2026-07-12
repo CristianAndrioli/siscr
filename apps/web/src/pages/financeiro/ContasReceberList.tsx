@@ -5,6 +5,8 @@ import { fmtBRL as fmt, fmtDate } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatApiError } from '../../utils/helpers';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -134,14 +136,11 @@ export function ContasReceberList() {
   const totalVencido = resumo?.vencido ?? 0;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Contas a Receber</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Gerencie os valores a receber</p>
-        </div>
-      </div>
-
+    <BaseListPage
+      title="Contas a Receber"
+      description="Gerencie os valores a receber"
+      onExport={() => exportRowsToCsv('contas-receber', smartColumnsToCsv(COLUMNS), contas)}
+    >
       {/* Resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
@@ -202,7 +201,7 @@ export function ContasReceberList() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 

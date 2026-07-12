@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { maquinasService, type Maquina } from '../../services/frota';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatApiError } from '../../utils/helpers';
 
@@ -53,13 +55,11 @@ export function MaquinasList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Máquinas</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Equipamentos e veículos da frota</p>
-        </div>
-      </div>
+    <BaseListPage
+      title="Máquinas"
+      description="Equipamentos e veículos da frota"
+      onExport={() => exportRowsToCsv('maquinas', smartColumnsToCsv(COLUMNS), maquinas)}
+    >
       <form onSubmit={e => { e.preventDefault(); setPage(0); setApplied(busca.trim()); }} className="flex gap-2">
         <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome, modelo ou placa..."
           className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
@@ -74,7 +74,7 @@ export function MaquinasList() {
         actions={m => <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(m.id), String(m.nome)); }} />}
         serverPagination={{ total, page, pageSize: 20, onPageChange: setPage, onPageSizeChange: () => {} }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 export default MaquinasList;

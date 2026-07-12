@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { obrasService, type Obra } from '../../services/frota';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import { fmtDateISO } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatApiError } from '../../utils/helpers';
@@ -48,8 +50,11 @@ export function ObrasList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div><h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Obras / Projetos</h1><p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Projetos e contratos da frota</p></div>
+    <BaseListPage
+      title="Obras / Projetos"
+      description="Projetos e contratos da frota"
+      onExport={() => exportRowsToCsv('obras', smartColumnsToCsv(COLUMNS), obras)}
+    >
       <form onSubmit={e => { e.preventDefault(); setPage(0); setApplied(busca.trim()); }} className="flex gap-2">
         <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por nome ou município..."
           className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
@@ -64,7 +69,7 @@ export function ObrasList() {
         actions={o => <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(o.id), String(o.nome)); }} />}
         serverPagination={{ total, page, pageSize: 20, onPageChange: setPage, onPageSizeChange: () => {} }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 export default ObrasList;

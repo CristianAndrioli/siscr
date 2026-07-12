@@ -5,6 +5,8 @@ import { fmtBRL } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatApiError } from '../../utils/helpers';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -82,14 +84,11 @@ export function ProdutosList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Produtos</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Catálogo de produtos</p>
-        </div>
-      </div>
-
+    <BaseListPage
+      title="Produtos"
+      description="Catálogo de produtos"
+      onExport={() => exportRowsToCsv('produtos', smartColumnsToCsv(COLUMNS), produtos)}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -138,7 +137,7 @@ export function ProdutosList() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 

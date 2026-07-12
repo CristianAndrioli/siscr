@@ -8,6 +8,8 @@ import {
   type NcmSyncPostResponse,
 } from '../../services/faturamentoService';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -164,19 +166,15 @@ export function NcmConfigPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <BaseListPage
+      title="Tabela NCM"
+      description="O código NCM classifica mercadorias para emissão de notas fiscais. A lista abaixo é o catálogo disponível para consulta e uso nos cadastros."
+      onExport={() => exportRowsToCsv('ncm', smartColumnsToCsv(NCM_COLUMNS), rows)}
+    >
       <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
         <Link to="/faturamento/nf-venda" className="hover:text-brand-600 dark:hover:text-brand-400">
           ← Faturamento
         </Link>
-      </div>
-
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Tabela NCM</h1>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 max-w-2xl">
-          O código NCM classifica mercadorias para emissão de notas fiscais. A lista abaixo é o catálogo disponível para
-          consulta e uso nos cadastros.
-        </p>
       </div>
 
       {loading ? (
@@ -308,6 +306,6 @@ export function NcmConfigPage() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }

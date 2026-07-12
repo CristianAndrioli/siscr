@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { estoqueService, type ItemEstoque } from '../../services/estoqueService';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -82,12 +84,12 @@ export function EstoqueAtualList() {
   const locaisCount = meta.locais;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Posição Atual</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Saldo de estoque por produto e local</p>
-        </div>
+    <BaseListPage
+      title="Posição Atual"
+      description="Saldo de estoque por produto e local"
+      onExport={() => exportRowsToCsv('estoque-atual', smartColumnsToCsv(COLUMNS), itens)}
+    >
+      <div className="flex items-center justify-end">
         <button
           onClick={load}
           className="flex items-center gap-2 px-3 py-2 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 text-sm rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
@@ -139,7 +141,7 @@ export function EstoqueAtualList() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 

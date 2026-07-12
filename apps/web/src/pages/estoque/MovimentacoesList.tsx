@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { movimentacoesService, estoqueService, locaisService, type Movimentacao } from '../../services/estoqueService';
 import api from '../../services/api';
 import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -255,12 +257,12 @@ export function MovimentacoesList() {
   ];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Movimentações</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Entradas, saídas e ajustes de estoque</p>
-        </div>
+    <BaseListPage
+      title="Movimentações"
+      description="Entradas, saídas e ajustes de estoque"
+      onExport={() => exportRowsToCsv('movimentacoes-estoque', smartColumnsToCsv(COLUMNS), movs)}
+    >
+      <div className="flex items-center justify-end">
         <button
           onClick={openModal}
           className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
@@ -425,7 +427,7 @@ export function MovimentacoesList() {
           </div>
         </div>
       )}
-    </div>
+    </BaseListPage>
   );
 }
 

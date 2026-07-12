@@ -5,6 +5,8 @@ import { formatCPFCNPJ } from '../../utils/formatters';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatApiError } from '../../utils/helpers';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import {
   loadGridListPage,
   loadGridPreferences,
@@ -89,14 +91,11 @@ export function PessoasList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Pessoas</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Clientes, fornecedores e funcionários</p>
-        </div>
-      </div>
-
+    <BaseListPage
+      title="Pessoas"
+      description="Clientes, fornecedores e funcionários"
+      onExport={() => exportRowsToCsv('pessoas', smartColumnsToCsv(COLUMNS), pessoas)}
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -145,7 +144,7 @@ export function PessoasList() {
           },
         }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 

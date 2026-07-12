@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ordensServicoService, type OrdemServico } from '../../services/frota';
 import SmartGrid, { GridDeleteBtn, type SmartColumn } from '../../components/common/SmartGrid';
+import BaseListPage from '../../components/common/BaseListPage';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 import { fmtBRL, fmtDateISO } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import { formatApiError } from '../../utils/helpers';
@@ -55,8 +57,11 @@ export function OrdensServicoList() {
   };
 
   return (
-    <div className="space-y-5">
-      <div><h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Ordens de Serviço</h1><p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Registro de horas trabalhadas por máquina</p></div>
+    <BaseListPage
+      title="Ordens de Serviço"
+      description="Registro de horas trabalhadas por máquina"
+      onExport={() => exportRowsToCsv('ordens-servico', smartColumnsToCsv(COLUMNS), ordens)}
+    >
       <div className="flex flex-wrap gap-3">
         <form onSubmit={e => { e.preventDefault(); setPage(0); setApplied(busca.trim()); }} className="flex gap-2 flex-1">
           <input type="text" value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por obra, máquina ou operador..."
@@ -81,7 +86,7 @@ export function OrdensServicoList() {
         actions={o => <GridDeleteBtn onClick={e => { e.stopPropagation(); handleDelete(String(o.id)); }} />}
         serverPagination={{ total, page, pageSize: 20, onPageChange: setPage, onPageSizeChange: () => {} }}
       />
-    </div>
+    </BaseListPage>
   );
 }
 export default OrdensServicoList;
