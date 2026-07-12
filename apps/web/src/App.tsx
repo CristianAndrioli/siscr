@@ -25,6 +25,7 @@ import CheckoutSuccess from './pages/CheckoutSuccess';
 import CheckoutCancel from './pages/CheckoutCancel';
 import SubscriptionExpired from './pages/SubscriptionExpired';
 import Layout from './components/Layout';
+import ModuleHub from './components/hub/ModuleHub';
 import ProtectedRouteWithPermission from './components/common/ProtectedRouteWithPermission';
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
@@ -43,7 +44,6 @@ import ReguaCobrancaDetail from './pages/financeiro/ReguaCobrancaDetail';
 import ContasBancariasPage from './pages/financeiro/ContasBancariasPage';
 import ContaBancariaDetailPage from './pages/financeiro/ContaBancariaDetailPage';
 import ConciliacaoWizard from './pages/financeiro/ConciliacaoWizard';
-import Configuracoes from './pages/Configuracoes';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
 import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
 import { FaturamentoConfigPage } from './pages/configuracoes/FaturamentoConfigPage';
@@ -155,6 +155,7 @@ function App() {
         <Route path="/subscription-expired" element={<ProtectedRoute skipStatusCheck><SubscriptionExpired /></ProtectedRoute>} />
 
         {/* Financeiro */}
+        <Route path="/financeiro" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="financeiro" requiredAction="view"><ModuleHub moduleKey="financeiro" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/financeiro/dashboard" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="financeiro" requiredAction="view"><FinanceiroDashboard /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/financeiro/regua-cobranca" element={<ProtectedRoute><Layout><ReguaCobrancaList /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/regua-cobranca/:id" element={<ProtectedRoute><Layout><ReguaCobrancaDetail /></Layout></ProtectedRoute>} />
@@ -166,7 +167,14 @@ function App() {
         <Route path="/financeiro/contas-bancarias/:id" element={<ProtectedRoute><ContaBancariaDetailPage /></ProtectedRoute>} />
         <Route path="/financeiro/conciliacao/nova" element={<ProtectedRoute><ConciliacaoWizard /></ProtectedRoute>} />
 
+        {/* Vendas & CRM (hub — funcionalidades em desenvolvimento) */}
+        <Route path="/vendas-crm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="vendas-crm" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+
+        {/* Compras (hub — funcionalidades em desenvolvimento) */}
+        <Route path="/compras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="compras" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+
         {/* Faturamento */}
+        <Route path="/faturamento" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="faturamento" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/faturamento/cotacoes" element={<ProtectedRoute><Layout><CotacoesPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nf-venda" element={<ProtectedRoute><Layout><NFVendaPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nf-venda/nova" element={<ProtectedRoute><Layout><NfeNovaWizardPage /></Layout></ProtectedRoute>} />
@@ -174,6 +182,7 @@ function App() {
         <Route path="/faturamento/nfse" element={<ProtectedRoute><Layout><NFSePage /></Layout></ProtectedRoute>} />
 
         {/* Entrada (NF-e compra) */}
+        <Route path="/entrada" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="entrada" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/nf-e/nova" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="change"><NfEntradaWizardPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/notas" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NfEntradaList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/notas/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NfEntradaDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
@@ -187,6 +196,7 @@ function App() {
         <Route path="/perfil" element={<ProtectedRoute><Layout><Perfil /></Layout></ProtectedRoute>} />
 
         {/* Cadastros */}
+        <Route path="/cadastros" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="cadastros" requiredAction="view"><ModuleHub moduleKey="cadastros" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/cadastros/geral" element={<ProtectedRoute><Layout><CadastroGeral /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/geral/:codigo" element={<ProtectedRoute><Layout><CadastroGeral /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/pessoas" element={<ProtectedRoute><Layout><PessoasList /></Layout></ProtectedRoute>} />
@@ -197,6 +207,7 @@ function App() {
         <Route path="/cadastros/servicos/:id" element={<ProtectedRoute><Layout><ServicosDetail /></Layout></ProtectedRoute>} />
 
         {/* Estoque */}
+        <Route path="/estoque" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><ModuleHub moduleKey="estoque" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/posicao" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><EstoqueAtualList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/movimentacoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><MovimentacoesList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/transferencias" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><Transferencias /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
@@ -204,6 +215,7 @@ function App() {
         <Route path="/estoque/instrucoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><EstoqueInstrucoes /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* ─── Frota ──────────────────────────────────────────────────── */}
+        <Route path="/frota" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ModuleHub moduleKey="frota" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/maquinas" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><MaquinasList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/maquinas/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><MaquinasDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/obras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ObrasList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
@@ -217,7 +229,7 @@ function App() {
         <Route path="/contabilidade/balancete" element={<ProtectedRoute><Layout><BalancetePage /></Layout></ProtectedRoute>} />
         <Route path="/contabilidade/dre" element={<ProtectedRoute><Layout><DrePage /></Layout></ProtectedRoute>} />
         <Route path="/contabilidade/exportacoes" element={<ProtectedRoute><Layout><ExportacoesPage /></Layout></ProtectedRoute>} />
-        <Route path="/contabilidade" element={<Navigate to="/contabilidade/lancamentos" replace />} />
+        <Route path="/contabilidade" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="financeiro" requiredAction="view"><ModuleHub moduleKey="contabilidade" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* Configurações */}
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />
@@ -228,7 +240,7 @@ function App() {
         <Route path="/configuracoes/conexoes" element={<ProtectedRoute><Layout><ConexoesPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs/:id" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
-        <Route path="/configuracoes" element={<ProtectedRoute><Layout><Configuracoes /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="configuracoes" requiredAction="view"><ModuleHub moduleKey="configuracoes" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
