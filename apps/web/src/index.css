@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,6 +8,25 @@
   *, *::before, *::after { box-sizing: border-box; }
 
   html { scroll-behavior: smooth; }
+
+  :root {
+    /* Fallback do acento (índigo) até `useUserPreferences` aplicar a cor
+       escolhida pelo usuário — ver utils/colorScale.ts. */
+    --brand-50: 238 242 255;
+    --brand-100: 224 231 255;
+    --brand-200: 199 210 254;
+    --brand-300: 165 180 252;
+    --brand-400: 129 140 248;
+    --brand-500: 99 102 241;
+    --brand-600: 79 70 229;
+    --brand-700: 67 56 202;
+    --brand-800: 55 48 163;
+    --brand-900: 49 46 129;
+    --brand-950: 30 27 75;
+    --tint-rgb: 79 70 229;
+    --acc-light: #a5b4fc;
+    --acc-deep: #302b81;
+  }
 
   body {
     @apply font-sans text-slate-900 bg-slate-50 antialiased;
@@ -25,25 +44,25 @@
 @layer components {
   /* Botões — altura padrão 36px (h-9); landing usa classes extras para h-11 */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg
+    @apply inline-flex items-center justify-center gap-2 h-9 px-4 rounded-control
            bg-brand-600 text-white font-semibold text-sm
-           hover:bg-brand-700 active:bg-brand-800
-           transition-colors duration-150 shadow-sm
+           hover:brightness-[.94] active:brightness-90
+           transition-all duration-150 shadow-sm
            focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 h-9 px-4 rounded-lg
+    @apply inline-flex items-center justify-center gap-2 h-9 px-4 rounded-control
            bg-white text-slate-700 font-semibold text-sm border border-slate-300
-           hover:bg-slate-50 active:bg-slate-100
-           dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-slate-700
+           hover:border-brand-400 hover:text-brand-700 active:bg-slate-50
+           dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:border-brand-400 dark:hover:text-brand-300
            transition-colors duration-150
            focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 h-9 px-3 rounded-lg
+    @apply inline-flex items-center justify-center gap-2 h-9 px-3 rounded-control
            text-slate-600 font-medium text-sm
            hover:bg-slate-100 active:bg-slate-200
            dark:text-slate-400 dark:hover:bg-slate-800 dark:active:bg-slate-700
@@ -53,7 +72,7 @@
 
   /* Inputs — altura padrão 36px, foco com anel suave */
   .input {
-    @apply w-full h-9 px-3 rounded-lg border border-slate-300 bg-white
+    @apply w-full h-9 px-3 rounded-control border border-slate-300 bg-white
            dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500
            text-slate-900 text-sm placeholder-slate-400
            focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20
@@ -66,11 +85,11 @@
 
   /* Cards */
   .card {
-    @apply bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card;
+    @apply bg-white dark:bg-slate-900 rounded-card border border-slate-200 dark:border-slate-800 shadow-card;
   }
 
   .card-dark {
-    @apply bg-surface-card rounded-xl border border-surface-border;
+    @apply bg-surface-card rounded-card border border-surface-border;
   }
 
   /* Badge */

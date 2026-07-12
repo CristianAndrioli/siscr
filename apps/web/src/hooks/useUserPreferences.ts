@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../services/api'
+import { generateScale, rgbTriple, deriveAccentTokens, SCALE_STEPS } from '../utils/colorScale'
 
 export interface RecentItem {
   label: string
@@ -19,11 +20,11 @@ export interface UserPreferences {
 }
 
 const DEFAULT_PREFS: UserPreferences = {
-  accentColor: '#4f46e5',
+  accentColor: '#4e6fdb',
   sidebarMode: 'icons',
   homeLayout: 'grid',
   theme: 'system',
-  density: 'normal',
+  density: 'compact',
   recentItemsCount: 5,
   recentItems: [],
   visibleModules: [],
@@ -54,10 +55,23 @@ function saveLocal(prefs: UserPreferences) {
   } catch { /* noop */ }
 }
 
-/** Aplica a cor de destaque como CSS custom property no :root */
+/**
+ * Aplica a cor de destaque escolhida pelo usuário como custom properties no
+ * :root — a escala `--brand-50..950` (consumida pelas classes `bg-brand-*`
+ * via `rgb(var(--brand-600) / <alpha-value>)` no tailwind.config.js) e os
+ * tokens derivados `--tint-rgb`/`--acc-light`/`--acc-deep` usados em ícones
+ * de hub, item ativo da sidebar e gradiente do avatar.
+ */
 function applyAccentColor(color: string) {
-  document.documentElement.style.setProperty('--color-brand', color)
-  document.documentElement.style.setProperty('--ac', color)
+  const root = document.documentElement.style
+  const scale = generateScale(color)
+  for (const step of SCALE_STEPS) {
+    root.setProperty(`--brand-${step}`, rgbTriple(scale[step]))
+  }
+  const { baseRgb, accLightHex, accDeepHex } = deriveAccentTokens(color)
+  root.setProperty('--tint-rgb', baseRgb)
+  root.setProperty('--acc-light', accLightHex)
+  root.setProperty('--acc-deep', accDeepHex)
 }
 
 /** Aplica o tema (dark/light/system) no documento e sincroniza com useTheme */

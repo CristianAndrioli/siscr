@@ -4,12 +4,10 @@ import type { UserPreferences } from '../../hooks/useUserPreferences'
 import { useTheme } from '../../hooks/useTheme'
 
 const ACCENT_COLORS: { hex: string; label: string }[] = [
-  { hex: '#4f46e5', label: 'Índigo (padrão)' },
-  { hex: '#0ea5e9', label: 'Azul' },
+  { hex: '#4e6fdb', label: 'Azul (padrão)' },
+  { hex: '#17a673', label: 'Verde' },
+  { hex: '#c2542f', label: 'Terracota' },
   { hex: '#8b5cf6', label: 'Violeta' },
-  { hex: '#10b981', label: 'Verde' },
-  { hex: '#f59e0b', label: 'Âmbar' },
-  { hex: '#ef4444', label: 'Vermelho' },
   { hex: '#ec4899', label: 'Rosa' },
   { hex: '#64748b', label: 'Ardósia' },
 ]
