@@ -80,6 +80,8 @@ import BalancetePage from './pages/contabilidade/BalancetePage';
 import DrePage from './pages/contabilidade/DrePage';
 import ExportacoesPage from './pages/contabilidade/ExportacoesPage';
 import RelatoriosPage from './pages/relatorios/RelatoriosPage';
+import PedidosVendaList from './pages/vendas/PedidosVendaList';
+import PedidoVendaDetail from './pages/vendas/PedidoVendaDetail';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -178,8 +180,10 @@ function App() {
         <Route path="/financeiro/contas-bancarias/:id" element={<ProtectedRoute><ContaBancariaDetailPage /></ProtectedRoute>} />
         <Route path="/financeiro/conciliacao/nova" element={<ProtectedRoute><ConciliacaoWizard /></ProtectedRoute>} />
 
-        {/* Vendas & CRM (hub — funcionalidades em desenvolvimento) */}
+        {/* Vendas & CRM */}
         <Route path="/vendas-crm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="vendas-crm" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/vendas-crm/pedidos" element={<ProtectedRoute><Layout><PedidosVendaList /></Layout></ProtectedRoute>} />
+        <Route path="/vendas-crm/pedidos/:id" element={<ProtectedRoute><Layout><PedidoVendaDetail /></Layout></ProtectedRoute>} />
 
         {/* Compras (hub — funcionalidades em desenvolvimento) */}
         <Route path="/compras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="compras" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />

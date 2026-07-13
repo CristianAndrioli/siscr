@@ -38,7 +38,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         title: 'Comercial',
         items: [
           { label: 'Funil de vendas', to: '/vendas-crm', badge: 'DEV' },
-          { label: 'Pedidos de venda', to: '/vendas-crm', badge: 'DEV' },
+          { label: 'Pedidos de venda', to: '/vendas-crm/pedidos', badge: 'NOVO' },
           { label: 'Cotações', to: '/faturamento/cotacoes' },
           { label: 'Metas de vendas', to: '/vendas-crm', badge: 'DEV' },
         ],
