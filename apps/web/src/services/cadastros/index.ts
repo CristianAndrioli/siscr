@@ -9,6 +9,5 @@ export * from './unidadesMedida';
 export * from './tabelasPreco';
 export * from './categoriasFinanceiras';
 export * from './centrosCusto';
-export * from './formasPagamento';
 export * from './condicoesPagamento';
 

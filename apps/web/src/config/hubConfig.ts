@@ -196,7 +196,6 @@ export const HUB_MODULES: Record<string, HubModule> = {
         items: [
           { label: 'Categorias financeiras', to: '/cadastros/categorias-financeiras', badge: 'NOVO' },
           { label: 'Centros de custo', to: '/cadastros/centros-custo', badge: 'NOVO' },
-          { label: 'Formas de pagamento', to: '/cadastros/formas-pagamento', badge: 'NOVO' },
         ],
       },
     ],
@@ -261,7 +260,6 @@ export const HUB_MODULES: Record<string, HubModule> = {
         items: [
           { label: 'Categorias financeiras', to: '/cadastros/categorias-financeiras', badge: 'NOVO' },
           { label: 'Centros de custo', to: '/cadastros/centros-custo', badge: 'NOVO' },
-          { label: 'Formas de pagamento', to: '/cadastros/formas-pagamento', badge: 'NOVO' },
           { label: 'Condições de pagamento', to: '/cadastros/condicoes-pagamento', badge: 'NOVO' },
         ],
       },

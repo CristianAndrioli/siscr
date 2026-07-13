@@ -42,7 +42,6 @@ import UnidadesMedidaPage from './pages/cadastros/UnidadesMedidaPage';
 import TabelasPrecoPage from './pages/cadastros/TabelasPrecoPage';
 import CategoriasFinanceirasPage from './pages/cadastros/CategoriasFinanceirasPage';
 import CentrosCustoPage from './pages/cadastros/CentrosCustoPage';
-import FormasPagamentoPage from './pages/cadastros/FormasPagamentoPage';
 import CondicoesPagamentoPage from './pages/cadastros/CondicoesPagamentoPage';
 import ContasReceberList from './pages/financeiro/ContasReceberList';
 import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
@@ -227,7 +226,6 @@ function App() {
         <Route path="/cadastros/tabelas-preco" element={<ProtectedRoute><Layout><TabelasPrecoPage /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/categorias-financeiras" element={<ProtectedRoute><Layout><CategoriasFinanceirasPage /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/centros-custo" element={<ProtectedRoute><Layout><CentrosCustoPage /></Layout></ProtectedRoute>} />
-        <Route path="/cadastros/formas-pagamento" element={<ProtectedRoute><Layout><FormasPagamentoPage /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/condicoes-pagamento" element={<ProtectedRoute><Layout><CondicoesPagamentoPage /></Layout></ProtectedRoute>} />
 
         {/* Estoque */}

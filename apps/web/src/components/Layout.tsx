@@ -32,7 +32,6 @@ const ROUTE_LABELS: Record<string, string> = {
   'tabelas-preco': 'Tabelas de Preço',
   'categorias-financeiras': 'Categorias Financeiras',
   'centros-custo': 'Centros de Custo',
-  'formas-pagamento': 'Formas de Pagamento',
   'condicoes-pagamento': 'Condições de Pagamento',
   financeiro: 'Financeiro',
   'contas-receber': 'Contas a Receber',
