@@ -54,11 +54,29 @@ function getLocalKey(): string {
   }
 }
 
+/**
+ * Mescla `partial` sobre `DEFAULT_PREFS` sem deixar `null`/`undefined`
+ * sobrescrever um default válido — protege contra respostas antigas da
+ * API (ou cache local) salvas antes de uma coluna nova ganhar valor
+ * (ex.: `home_layouts` NULL em preferências criadas antes da migration
+ * que a adicionou vira `null` na resposta, não `{}`).
+ */
+function withDefaults(partial: Partial<UserPreferences>): UserPreferences {
+  const merged = { ...DEFAULT_PREFS }
+  for (const key of Object.keys(partial) as (keyof UserPreferences)[]) {
+    const value = partial[key]
+    if (value !== null && value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value
+    }
+  }
+  return merged
+}
+
 function readLocal(): UserPreferences {
   try {
     const raw = localStorage.getItem(getLocalKey())
     if (!raw) return DEFAULT_PREFS
-    return { ...DEFAULT_PREFS, ...JSON.parse(raw) }
+    return withDefaults(JSON.parse(raw))
   } catch {
     return DEFAULT_PREFS
   }
@@ -111,7 +129,7 @@ export function useUserPreferences() {
   useEffect(() => {
     api.get('/tenant/preferences')
       .then(res => {
-        const merged = { ...DEFAULT_PREFS, ...res.data }
+        const merged = withDefaults(res.data)
         setPrefs(merged)
         saveLocal(merged)
         applyAccentColor(merged.accentColor)

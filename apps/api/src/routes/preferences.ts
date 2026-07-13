@@ -125,8 +125,14 @@ app.patch('/recent', async (c) => {
   return c.json({ recentItems: updated })
 })
 
-function safeJson<T>(raw: string, fallback: T): T {
-  try { return JSON.parse(raw) } catch { return fallback }
+function safeJson<T>(raw: string | null | undefined, fallback: T): T {
+  if (raw == null) return fallback
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed == null ? fallback : parsed
+  } catch {
+    return fallback
+  }
 }
 
 export default app

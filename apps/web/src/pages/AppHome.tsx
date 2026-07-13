@@ -51,7 +51,7 @@ function AppHome() {
   }, [])
 
   const variant = prefs.homeVariant
-  const order = prefs.homeLayouts[variant] ?? DEFAULT_HOME_LAYOUTS[variant]
+  const order = prefs.homeLayouts?.[variant] ?? DEFAULT_HOME_LAYOUTS[variant]
   const galleryKeys = ALL_WIDGET_KEYS.filter(k => !order.includes(k))
 
   const saveOrder = useCallback((next: string[]) => {
