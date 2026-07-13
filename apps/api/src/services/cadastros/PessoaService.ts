@@ -57,6 +57,13 @@ export class PessoaService {
       indIeDest: input.indIeDest ?? '9',
       codigoMunicipio: input.codigoMunicipio ?? null,
       codigoPais: input.codigoPais ?? '1058',
+      comissaoPercentual: input.comissaoPercentual ?? null,
+      metaMensal: input.metaMensal ?? null,
+      matricula: input.matricula ?? null,
+      tipoOperador: input.tipoOperador ?? null,
+      cnhNumero: input.cnhNumero ?? null,
+      cnhCategoria: input.cnhCategoria ?? null,
+      cnhValidade: input.cnhValidade ?? null,
       createdAt: now,
       auditUserId,
     }
@@ -79,7 +86,7 @@ export class PessoaService {
 
 export type PessoaCreateInput = {
   tipo: 'PF' | 'PJ'
-  tipoCadastro: 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora'
+  tipoCadastro: 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora' | 'vendedor'
   nome: string
   cpfCnpj?: string
   email?: string
@@ -97,4 +104,11 @@ export type PessoaCreateInput = {
   codigoPais?: string
   empresaId?: string
   filialId?: string
+  comissaoPercentual?: number
+  metaMensal?: number
+  matricula?: string
+  tipoOperador?: string
+  cnhNumero?: string
+  cnhCategoria?: string
+  cnhValidade?: string
 }

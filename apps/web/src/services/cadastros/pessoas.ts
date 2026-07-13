@@ -1,10 +1,12 @@
 import api from '../api';
 
+export type PessoaCadastroTipo = 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora' | 'vendedor';
+
 export interface Pessoa {
   id: string;
   codigo?: number;
   tipo: 'PF' | 'PJ';
-  tipo_cadastro: 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora';
+  tipo_cadastro: PessoaCadastroTipo;
   nome: string;
   cpf_cnpj?: string;
   email?: string;
@@ -21,13 +23,22 @@ export interface Pessoa {
   ind_ie_dest?: string | null;
   codigo_municipio?: string | null;
   codigo_pais?: string | null;
+  // papel "vendedor"
+  comissao_percentual?: number | null;
+  meta_mensal?: number | null;
+  // papel "funcionário/operador"
+  matricula?: string | null;
+  tipo_operador?: string | null;
+  cnh_numero?: string | null;
+  cnh_categoria?: string | null;
+  cnh_validade?: string | null;
   ativo: number;
   created_at: string;
 }
 
 export interface PessoaForm {
   tipo: 'PF' | 'PJ';
-  tipoCadastro: 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora';
+  tipoCadastro: PessoaCadastroTipo;
   nome: string;
   cpfCnpj?: string;
   email?: string;
@@ -44,10 +55,17 @@ export interface PessoaForm {
   indIeDest?: '1' | '2' | '9';
   codigoMunicipio?: string;
   codigoPais?: string;
+  comissaoPercentual?: number;
+  metaMensal?: number;
+  matricula?: string;
+  tipoOperador?: string;
+  cnhNumero?: string;
+  cnhCategoria?: string;
+  cnhValidade?: string;
 }
 
 /** Remove campos de string vazia para não falhar validação opcional na API */
-function sanitize<T extends Record<string, unknown>>(dados: T): T {
+function sanitize<T extends object>(dados: T): T {
   return Object.fromEntries(
     Object.entries(dados).filter(([, v]) => v !== ''),
   ) as T;
@@ -61,11 +79,12 @@ export type PessoasListResult = {
 };
 
 export const pessoasService = {
-  list: async (params: { search?: string; page?: number; limit?: number } = {}): Promise<PessoasListResult> => {
+  list: async (params: { search?: string; page?: number; limit?: number; tipoCadastro?: PessoaCadastroTipo } = {}): Promise<PessoasListResult> => {
     const query: Record<string, unknown> = {};
     if (params.search) query.busca = params.search;
     if (params.page !== undefined) query.page = params.page;
     if (params.limit !== undefined) query.limit = params.limit;
+    if (params.tipoCadastro) query.tipoCadastro = params.tipoCadastro;
     const response = await api.get('/tenant/cadastros/pessoas', { params: query });
     const d = response.data;
     return {

@@ -30,6 +30,9 @@ import ProtectedRouteWithPermission from './components/common/ProtectedRouteWith
 import CadastroGeral from './pages/cadastros/CadastroGeral';
 import PessoasList from './pages/cadastros/PessoasList';
 import PessoasDetail from './pages/cadastros/PessoasDetail';
+import {
+  ClientesList, FornecedoresList, VendedoresList, TransportadorasList, FuncionariosList,
+} from './pages/cadastros/PessoaCadastroList';
 import ProdutosList from './pages/cadastros/ProdutosList';
 import ProdutosDetail from './pages/cadastros/ProdutosDetail';
 import ServicosList from './pages/cadastros/ServicosList';
@@ -198,6 +201,11 @@ function App() {
         {/* Cadastros */}
         <Route path="/cadastros" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="cadastros" requiredAction="view"><ModuleHub moduleKey="cadastros" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/cadastros/geral" element={<ProtectedRoute><Layout><CadastroGeral /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/clientes" element={<ProtectedRoute><Layout><ClientesList /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/fornecedores" element={<ProtectedRoute><Layout><FornecedoresList /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/vendedores" element={<ProtectedRoute><Layout><VendedoresList /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/transportadoras" element={<ProtectedRoute><Layout><TransportadorasList /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/funcionarios" element={<ProtectedRoute><Layout><FuncionariosList /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/geral/:codigo" element={<ProtectedRoute><Layout><CadastroGeral /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/pessoas" element={<ProtectedRoute><Layout><PessoasList /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/pessoas/:id" element={<ProtectedRoute><Layout><PessoasDetail /></Layout></ProtectedRoute>} />

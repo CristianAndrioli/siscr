@@ -46,7 +46,7 @@ const emptyToUndef = (schema: z.ZodTypeAny) =>
 
 const pessoaSchema = z.object({
   tipo: z.enum(['PF', 'PJ']),
-  tipoCadastro: z.enum(['cliente', 'fornecedor', 'funcionario', 'transportadora']),
+  tipoCadastro: z.enum(['cliente', 'fornecedor', 'funcionario', 'transportadora', 'vendedor']),
   nome: z.string().min(2),
   cpfCnpj: emptyToUndef(z.string().min(11).max(18).optional()),
   email: emptyToUndef(z.string().email().optional()),
@@ -64,6 +64,15 @@ const pessoaSchema = z.object({
   codigoPais: emptyToUndef(z.string().max(4).optional()),
   empresaId: emptyToUndef(z.string().uuid().optional()),
   filialId: emptyToUndef(z.string().uuid().optional()),
+  // Papel "vendedor"
+  comissaoPercentual: emptyToUndef(z.coerce.number().min(0).max(100).optional()),
+  metaMensal: emptyToUndef(z.coerce.number().min(0).optional()),
+  // Papel "funcionário/operador"
+  matricula: emptyToUndef(z.string().max(30).optional()),
+  tipoOperador: emptyToUndef(z.enum(['motorista', 'operador_maquina', 'tecnico', 'administrativo', 'outro']).optional()),
+  cnhNumero: emptyToUndef(z.string().max(20).optional()),
+  cnhCategoria: emptyToUndef(z.string().max(5).optional()),
+  cnhValidade: emptyToUndef(z.string().optional()),
 })
 
 app.get('/pessoas', async (c) => {

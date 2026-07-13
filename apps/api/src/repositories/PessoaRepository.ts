@@ -14,7 +14,7 @@ import { BaseTenantRepository } from './BaseTenantRepository'
  */
 
 export type PessoaTipo = 'PF' | 'PJ'
-export type PessoaCadastro = 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora'
+export type PessoaCadastro = 'cliente' | 'fornecedor' | 'funcionario' | 'transportadora' | 'vendedor'
 
 export type PessoaInsertRow = {
   id: string
@@ -37,6 +37,13 @@ export type PessoaInsertRow = {
   indIeDest: string
   codigoMunicipio: string | null
   codigoPais: string
+  comissaoPercentual: number | null
+  metaMensal: number | null
+  matricula: string | null
+  tipoOperador: string | null
+  cnhNumero: string | null
+  cnhCategoria: string | null
+  cnhValidade: string | null
   createdAt: string
   auditUserId: string | null
 }
@@ -61,6 +68,13 @@ export type PessoaUpdateFields = {
   codigoPais?: string
   empresaId?: string | null
   filialId?: string | null
+  comissaoPercentual?: number | null
+  metaMensal?: number | null
+  matricula?: string | null
+  tipoOperador?: string | null
+  cnhNumero?: string | null
+  cnhCategoria?: string | null
+  cnhValidade?: string | null
 }
 
 const PESSOA_COLUMN_MAP: Record<keyof PessoaUpdateFields, string> = {
@@ -83,6 +97,13 @@ const PESSOA_COLUMN_MAP: Record<keyof PessoaUpdateFields, string> = {
   codigoPais: 'codigo_pais',
   empresaId: 'empresa_id',
   filialId: 'filial_id',
+  comissaoPercentual: 'comissao_percentual',
+  metaMensal: 'meta_mensal',
+  matricula: 'matricula',
+  tipoOperador: 'tipo_operador',
+  cnhNumero: 'cnh_numero',
+  cnhCategoria: 'cnh_categoria',
+  cnhValidade: 'cnh_validade',
 }
 
 export type PessoaListFilters = {
@@ -129,7 +150,8 @@ export class PessoaRepository extends BaseTenantRepository {
 
     const { results } = await this.db
       .prepare(
-        `SELECT id, codigo, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at
+        `SELECT id, codigo, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone, ativo, created_at,
+                comissao_percentual, meta_mensal, matricula, tipo_operador, cnh_categoria, cnh_validade
          FROM pessoas${where}
          ORDER BY CAST(codigo AS INTEGER) ASC
          LIMIT ? OFFSET ?`,
@@ -154,8 +176,9 @@ export class PessoaRepository extends BaseTenantRepository {
         `INSERT INTO pessoas (id, tenant_id, empresa_id, filial_id, tipo, tipo_cadastro, nome, cpf_cnpj, email, telefone,
            cep, logradouro, numero, complemento, bairro, cidade, uf,
            inscricao_estadual, ind_ie_dest, codigo_municipio, codigo_pais,
+           comissao_percentual, meta_mensal, matricula, tipo_operador, cnh_numero, cnh_categoria, cnh_validade,
            ativo, created_at, updated_at, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
       )
       .bind(
         row.id, this.tenantId,
@@ -169,6 +192,8 @@ export class PessoaRepository extends BaseTenantRepository {
         row.indIeDest,
         row.codigoMunicipio,
         row.codigoPais,
+        row.comissaoPercentual, row.metaMensal, row.matricula,
+        row.tipoOperador, row.cnhNumero, row.cnhCategoria, row.cnhValidade,
         row.createdAt, row.createdAt, row.auditUserId, row.auditUserId,
       )
       .run()

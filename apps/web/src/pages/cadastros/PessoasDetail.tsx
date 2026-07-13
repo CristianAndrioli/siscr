@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { pessoasService, type Pessoa, type PessoaForm } from '../../services/cadastros/pessoas';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { pessoasService, type Pessoa, type PessoaForm, type PessoaCadastroTipo } from '../../services/cadastros/pessoas';
 import { fetchCepComIbge } from '../../services/brasilCepIbge';
 import MaskedInput from '../../components/common/MaskedInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
@@ -10,14 +10,39 @@ import { formatApiError } from '../../utils/helpers';
 const TIPO_CADASTRO_OPTS = [
   { value: 'cliente', label: 'Cliente' },
   { value: 'fornecedor', label: 'Fornecedor' },
-  { value: 'funcionario', label: 'Funcionário' },
+  { value: 'vendedor', label: 'Vendedor' },
+  { value: 'funcionario', label: 'Funcionário / Operador' },
   { value: 'transportadora', label: 'Transportadora' },
+];
+
+const TIPO_OPERADOR_OPTS = [
+  { value: 'motorista', label: 'Motorista' },
+  { value: 'operador_maquina', label: 'Operador de máquina' },
+  { value: 'tecnico', label: 'Técnico' },
+  { value: 'administrativo', label: 'Administrativo' },
+  { value: 'outro', label: 'Outro' },
 ];
 
 const TIPO_OPTS = [
   { value: 'PF', label: 'Pessoa Física' },
   { value: 'PJ', label: 'Pessoa Jurídica' },
 ];
+
+const LIST_ROUTE_BY_TIPO: Record<PessoaCadastroTipo, string> = {
+  cliente: '/cadastros/clientes',
+  fornecedor: '/cadastros/fornecedores',
+  vendedor: '/cadastros/vendedores',
+  transportadora: '/cadastros/transportadoras',
+  funcionario: '/cadastros/funcionarios',
+};
+
+const LIST_LABEL_BY_TIPO: Record<PessoaCadastroTipo, string> = {
+  cliente: 'Clientes',
+  fornecedor: 'Fornecedores',
+  vendedor: 'Vendedores',
+  transportadora: 'Transportadoras',
+  funcionario: 'Funcionários / Operadores',
+};
 
 const IND_IE_LABEL: Record<string, string> = {
   '1': 'Contribuinte ICMS',
@@ -43,6 +68,13 @@ const EMPTY: PessoaForm = {
   indIeDest: '9',
   codigoMunicipio: '',
   codigoPais: '1058',
+  comissaoPercentual: undefined,
+  metaMensal: undefined,
+  matricula: '',
+  tipoOperador: '',
+  cnhNumero: '',
+  cnhCategoria: '',
+  cnhValidade: '',
 };
 
 const INPUT_CLS =
@@ -51,10 +83,14 @@ const INPUT_CLS =
 export function PessoasDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isNew = id === 'novo';
   const { reportError } = useErrorNotification();
 
-  const [form, setForm] = useState<PessoaForm>(EMPTY);
+  const tipoFromQuery = searchParams.get('tipo') as PessoaCadastroTipo | null;
+  const [form, setForm] = useState<PessoaForm>(() =>
+    isNew && tipoFromQuery ? { ...EMPTY, tipoCadastro: tipoFromQuery } : EMPTY,
+  );
   const [record, setRecord] = useState<Pessoa | null>(null);
   const [isEditing, setIsEditing] = useState(isNew);
   const [loading, setLoading] = useState(!isNew);
@@ -88,6 +124,13 @@ export function PessoasDetail() {
             : '9') as '1' | '2' | '9',
           codigoMunicipio: data.codigo_municipio ?? '',
           codigoPais: data.codigo_pais ?? '1058',
+          comissaoPercentual: data.comissao_percentual ?? undefined,
+          metaMensal: data.meta_mensal ?? undefined,
+          matricula: data.matricula ?? '',
+          tipoOperador: data.tipo_operador ?? '',
+          cnhNumero: data.cnh_numero ?? '',
+          cnhCategoria: data.cnh_categoria ?? '',
+          cnhValidade: data.cnh_validade ?? '',
         });
       })
       .catch(() => setError('Erro ao carregar registro.'))
@@ -96,6 +139,13 @@ export function PessoasDetail() {
 
   const set = (field: keyof PessoaForm, value: string) =>
     setForm(prev => ({ ...prev, [field]: value }));
+
+  const setNum = (field: 'comissaoPercentual' | 'metaMensal', value: string) =>
+    setForm(prev => ({ ...prev, [field]: value === '' ? undefined : Number(value) }));
+
+  const backTipo = (record?.tipo_cadastro ?? tipoFromQuery ?? form.tipoCadastro) as PessoaCadastroTipo;
+  const backTo = LIST_ROUTE_BY_TIPO[backTipo] ?? '/cadastros/pessoas';
+  const backLabel = LIST_LABEL_BY_TIPO[backTipo] ?? 'Pessoas';
 
   const handleCepBlur = async () => {
     if (!form.cep) return;
@@ -121,7 +171,7 @@ export function PessoasDetail() {
     try {
       if (isNew) {
         await pessoasService.create(form);
-        navigate('/cadastros/pessoas');
+        navigate(backTo);
       } else {
         await pessoasService.update(id!, form);
         setIsEditing(false);
@@ -141,7 +191,7 @@ export function PessoasDetail() {
     if (!window.confirm('Deseja excluir esta pessoa?')) return;
     try {
       await pessoasService.delete(id!);
-      navigate('/cadastros/pessoas');
+      navigate(backTo);
     } catch (err) {
       const msg = formatApiError(err, 'Erro ao excluir pessoa.');
       reportError(msg, err, 'Cadastro de Pessoa');
@@ -168,13 +218,13 @@ export function PessoasDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <button
-            onClick={() => navigate('/cadastros/pessoas')}
+            onClick={() => navigate(backTo)}
             className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-1 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
-            Pessoas
+            {backLabel}
           </button>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
             {isNew ? 'Nova Pessoa' : (record?.nome ?? 'Detalhe')}
@@ -238,6 +288,48 @@ export function PessoasDetail() {
               ))}
             </dl>
           </div>
+
+          {record.tipo_cadastro === 'vendedor' && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Detalhes do vendedor</p>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Comissão</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.comissao_percentual != null ? `${record.comissao_percentual}%` : '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Meta mensal</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.meta_mensal != null ? record.meta_mensal : '—'}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
+
+          {record.tipo_cadastro === 'funcionario' && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Detalhes do funcionário / operador</p>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Matrícula</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.matricula || '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Função</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{TIPO_OPERADOR_OPTS.find(o => o.value === record.tipo_operador)?.label ?? record.tipo_operador ?? '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">CNH</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">
+                    {record.cnh_numero ? `${record.cnh_numero} · Cat. ${record.cnh_categoria ?? '—'}` : '—'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">CNH — validade</dt>
+                  <dd className="mt-1 text-sm text-slate-800 dark:text-slate-100">{record.cnh_validade || '—'}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
 
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
             <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">Endereço</p>
@@ -365,6 +457,88 @@ export function PessoasDetail() {
               </div>
             </div>
           </div>
+
+          {/* Detalhes do papel — vendedor ou funcionário/operador */}
+          {form.tipoCadastro === 'vendedor' && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Detalhes do vendedor</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Comissão (%)</label>
+                  <input
+                    type="number" step="0.01" min="0" max="100"
+                    value={form.comissaoPercentual ?? ''}
+                    onChange={e => setNum('comissaoPercentual', e.target.value)}
+                    placeholder="0,00"
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Meta mensal (R$)</label>
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={form.metaMensal ?? ''}
+                    onChange={e => setNum('metaMensal', e.target.value)}
+                    placeholder="0,00"
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {form.tipoCadastro === 'funcionario' && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Detalhes do funcionário / operador</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Matrícula</label>
+                  <input
+                    type="text"
+                    value={form.matricula ?? ''}
+                    onChange={e => set('matricula', e.target.value)}
+                    placeholder="Código interno"
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Função</label>
+                  <select value={form.tipoOperador ?? ''} onChange={e => set('tipoOperador', e.target.value)} className={INPUT_CLS}>
+                    <option value="">Selecione…</option>
+                    {TIPO_OPERADOR_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CNH — número</label>
+                  <input
+                    type="text"
+                    value={form.cnhNumero ?? ''}
+                    onChange={e => set('cnhNumero', e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CNH — categoria</label>
+                  <input
+                    type="text" maxLength={5}
+                    value={form.cnhCategoria ?? ''}
+                    onChange={e => set('cnhCategoria', e.target.value.toUpperCase())}
+                    placeholder="AB"
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">CNH — validade</label>
+                  <input
+                    type="date"
+                    value={form.cnhValidade ?? ''}
+                    onChange={e => set('cnhValidade', e.target.value)}
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Endereço */}
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
@@ -525,7 +699,7 @@ export function PessoasDetail() {
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => isNew ? navigate('/cadastros/pessoas') : setIsEditing(false)}
+              onClick={() => isNew ? navigate(backTo) : setIsEditing(false)}
               className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
             >
               Cancelar
