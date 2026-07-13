@@ -13,6 +13,7 @@ import { BaseTenantRepository, type D1PreparedStatement } from './BaseTenantRepo
  */
 
 export type CotacaoStatus = 'rascunho' | 'enviada' | 'aprovada' | 'recusada' | 'expirada'
+export type CotacaoTipo = 'venda' | 'compra'
 
 export type CotacaoItemRow = {
   produtoId: string | null
@@ -27,6 +28,7 @@ export type CotacaoItemRow = {
 export type CotacaoInsertRow = {
   id: string
   numero: string
+  tipo: CotacaoTipo
   pessoaId: string | null
   validade: string | null
   observacoes: string | null
@@ -58,6 +60,7 @@ const COTACAO_COLUMN_MAP: Record<keyof CotacaoUpdatePatch, string> = {
 export type CotacaoListFilters = {
   status?: string
   busca?: string
+  tipo?: CotacaoTipo
 }
 
 export class CotacaoRepository extends BaseTenantRepository {
@@ -67,7 +70,7 @@ export class CotacaoRepository extends BaseTenantRepository {
 
   async list(filters: CotacaoListFilters): Promise<unknown[]> {
     let sql = `
-      SELECT co.id, co.numero, co.status, co.validade, co.valor_total, co.created_at,
+      SELECT co.id, co.numero, co.tipo, co.status, co.validade, co.valor_total, co.created_at,
              p.nome as cliente
       FROM cotacoes co
       LEFT JOIN pessoas p ON p.id = co.pessoa_id AND p.tenant_id = co.tenant_id
@@ -75,6 +78,7 @@ export class CotacaoRepository extends BaseTenantRepository {
     `
     const params: unknown[] = [this.tenantId]
     if (filters.status) { sql += ' AND co.status = ?'; params.push(filters.status) }
+    if (filters.tipo) { sql += ' AND co.tipo = ?'; params.push(filters.tipo) }
     if (filters.busca) {
       sql += ' AND (p.nome LIKE ? OR co.numero LIKE ?)'
       const like = `%${filters.busca}%`
@@ -186,11 +190,11 @@ export class CotacaoRepository extends BaseTenantRepository {
   private insertHeaderStmt(row: CotacaoInsertRow): D1PreparedStatement {
     return this.db
       .prepare(
-        `INSERT INTO cotacoes (id, tenant_id, numero, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO cotacoes (id, tenant_id, numero, tipo, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        row.id, this.tenantId, row.numero,
+        row.id, this.tenantId, row.numero, row.tipo,
         row.pessoaId, row.validade, row.observacoes,
         row.desconto, row.valorTotal, row.status,
         row.createdAt, row.createdAt, row.auditUserId, row.auditUserId,

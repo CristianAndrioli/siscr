@@ -4,6 +4,7 @@ import {
   type CotacaoItemRow,
   type CotacaoListFilters,
   type CotacaoStatus,
+  type CotacaoTipo,
   type CotacaoUpdatePatch,
 } from '../../repositories/CotacaoRepository'
 
@@ -55,6 +56,7 @@ export class CotacaoService {
     const row: CotacaoInsertRow = {
       id,
       numero,
+      tipo: input.tipo ?? 'venda',
       pessoaId: input.pessoaId ?? null,
       validade: input.validade ?? null,
       observacoes: input.observacoes ?? null,
@@ -126,6 +128,7 @@ export type CotacaoItemInput = {
 }
 
 export type CotacaoCreateInput = {
+  tipo?: CotacaoTipo
   pessoaId?: string
   validade?: string
   observacoes?: string

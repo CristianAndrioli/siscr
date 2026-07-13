@@ -1,6 +1,7 @@
 import api from './api';
 
 export type CotacaoStatus = 'rascunho' | 'enviada' | 'aprovada' | 'recusada' | 'expirada';
+export type CotacaoTipo = 'venda' | 'compra';
 export type NFStatus = 'rascunho' | 'pendente_emissao' | 'emitida' | 'cancelada' | 'inutilizada';
 export type NFTipo = 'nfe' | 'nfse';
 
@@ -19,6 +20,7 @@ export interface CotacaoItem {
 export interface Cotacao {
   id: string;
   numero: string;
+  tipo?: CotacaoTipo;
   pessoa_id?: string;
   cliente?: string;
   validade?: string;
@@ -107,7 +109,7 @@ export interface NotaFiscal {
 const BASE = '/tenant/faturamento';
 
 export const cotacoesService = {
-  list: async (params?: { status?: string; busca?: string }): Promise<Cotacao[]> => {
+  list: async (params?: { status?: string; busca?: string; tipo?: CotacaoTipo }): Promise<Cotacao[]> => {
     const res = await api.get(`${BASE}/cotacoes`, { params });
     return res.data.cotacoes ?? [];
   },
@@ -117,6 +119,7 @@ export const cotacoesService = {
   },
   create: async (data: Omit<Cotacao, 'id' | 'numero' | 'created_at'> & { itens: CotacaoItem[] }): Promise<{ id: string; numero: string }> => {
     const res = await api.post(`${BASE}/cotacoes`, {
+      tipo: data.tipo ?? 'venda',
       pessoaId: data.pessoa_id || undefined, // never send empty string
       validade: data.validade,
       observacoes: data.observacoes,

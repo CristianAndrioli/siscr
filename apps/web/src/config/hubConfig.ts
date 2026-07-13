@@ -89,7 +89,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         title: 'Suprimentos',
         items: [
           { label: 'Pedidos de compra', to: '/compras', badge: 'DEV' },
-          { label: 'Cotações de fornecedores', to: '/compras', badge: 'DEV' },
+          { label: 'Cotações de fornecedores', to: '/compras/cotacoes', badge: 'NOVO' },
           { label: 'Recebimento', to: '/compras', badge: 'DEV' },
         ],
       },

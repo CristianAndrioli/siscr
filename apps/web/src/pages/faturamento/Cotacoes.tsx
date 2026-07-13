@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { cotacoesService, type Cotacao, type CotacaoItem, type CotacaoStatus } from '../../services/faturamentoService';
+import { cotacoesService, type Cotacao, type CotacaoItem, type CotacaoStatus, type CotacaoTipo } from '../../services/faturamentoService';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 
@@ -23,7 +23,15 @@ interface Produto { id: string; descricao: string; codigo: string; unidade: stri
 
 const emptyItem = (): CotacaoItem => ({ descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, unidade: 'UN' });
 
-export function CotacoesPage() {
+interface CotacoesPageProps {
+  tipo: CotacaoTipo;
+  titulo: string;
+  descricao: string;
+  pessoaLabel: string;
+  tipoCadastroPessoa: 'cliente' | 'fornecedor';
+}
+
+function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPessoa }: CotacoesPageProps) {
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,10 +53,10 @@ export function CotacoesPage() {
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
-    try { setCotacoes(await cotacoesService.list()); }
+    try { setCotacoes(await cotacoesService.list({ tipo })); }
     catch { setError('Erro ao carregar cotações.'); }
     finally { setLoading(false); }
-  }, []);
+  }, [tipo]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -91,6 +99,7 @@ export function CotacoesPage() {
     setSaving(true); setModalError('');
     try {
       const payload = {
+        tipo,
         pessoa_id: pessoaId || undefined, // nunca envia string vazia
         validade: form.validade || undefined,
         observacoes: form.observacoes || undefined,
@@ -134,8 +143,8 @@ export function CotacoesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Cotações</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Propostas comerciais para clientes</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">{titulo}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{descricao}</p>
         </div>
         <button onClick={openNew} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
@@ -160,7 +169,7 @@ export function CotacoesPage() {
       {error && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>}
 
       <div className="flex flex-wrap gap-3">
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por cliente ou número..."
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar por ${pessoaLabel.toLowerCase()} ou número...`}
           className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
         <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value)}
           className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
@@ -181,7 +190,7 @@ export function CotacoesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  {['Número', 'Cliente', 'Validade', 'Total', 'Status', 'Criado em', ''].map(h => (
+                  {['Número', pessoaLabel, 'Validade', 'Total', 'Status', 'Criado em', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -190,7 +199,7 @@ export function CotacoesPage() {
                 {filtered.map(c => (
                   <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => openEdit(c.id)}>
                     <td className="px-4 py-3 font-mono text-xs font-bold text-brand-600 dark:text-brand-400">{c.numero}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{c.cliente || <span className="text-slate-400 italic">Sem cliente</span>}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{c.cliente || <span className="text-slate-400 italic">Sem {pessoaLabel.toLowerCase()}</span>}</td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{fmtDate(c.validade)}</td>
                     <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 tabular-nums">{fmtBRL(c.valor_total)}</td>
                     <td className="px-4 py-3">
@@ -223,13 +232,13 @@ export function CotacoesPage() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Cliente</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{pessoaLabel}</label>
                 <PessoaBusca
                   value={pessoaId}
                   displayValue={pessoaNome}
                   onChange={(id, nome) => { setPessoaId(id); setPessoaNome(nome); }}
-                  tipoCadastro="cliente"
-                  placeholder="Buscar cliente por nome ou CPF/CNPJ..."
+                  tipoCadastro={tipoCadastroPessoa}
+                  placeholder={`Buscar ${pessoaLabel.toLowerCase()} por nome ou CPF/CNPJ...`}
                 />
               </div>
               <div>
@@ -342,6 +351,30 @@ export function CotacoesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export function CotacoesPage() {
+  return (
+    <CotacoesPageBase
+      tipo="venda"
+      titulo="Cotações"
+      descricao="Propostas comerciais para clientes"
+      pessoaLabel="Cliente"
+      tipoCadastroPessoa="cliente"
+    />
+  );
+}
+
+export function CotacoesFornecedorPage() {
+  return (
+    <CotacoesPageBase
+      tipo="compra"
+      titulo="Cotações de Fornecedores"
+      descricao="Pedido de cotação (RFQ) para fornecedores"
+      pessoaLabel="Fornecedor"
+      tipoCadastroPessoa="fornecedor"
+    />
   );
 }
 

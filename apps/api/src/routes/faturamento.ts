@@ -27,9 +27,11 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.get('/cotacoes', async (c) => {
   const tenant = c.get('tenant')
-  const { status, busca } = c.req.query()
+  const { status, busca, tipo } = c.req.query()
   const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
-  const cotacoes = await svc.list({ status, busca })
+  // Sem `tipo` na query, mantém o comportamento histórico da tela de
+  // Faturamento (só cotações de venda) — Compras sempre passa tipo=compra.
+  const cotacoes = await svc.list({ status, busca, tipo: (tipo as 'venda' | 'compra') || 'venda' })
   return c.json({ cotacoes })
 })
 
@@ -52,6 +54,7 @@ const itemSchema = z.object({
 })
 
 const cotacaoSchema = z.object({
+  tipo: z.enum(['venda', 'compra']).default('venda'),
   pessoaId: z.string().uuid().optional(),
   validade: z.string().optional(),
   observacoes: z.string().optional(),

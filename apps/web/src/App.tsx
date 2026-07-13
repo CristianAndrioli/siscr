@@ -83,6 +83,7 @@ import RelatoriosPage from './pages/relatorios/RelatoriosPage';
 import PedidosVendaList from './pages/vendas/PedidosVendaList';
 import PedidoVendaDetail from './pages/vendas/PedidoVendaDetail';
 import FluxoCaixaPage from './pages/financeiro/FluxoCaixaPage';
+import { CotacoesFornecedorPage } from './pages/faturamento/Cotacoes';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -187,8 +188,9 @@ function App() {
         <Route path="/vendas-crm/pedidos" element={<ProtectedRoute><Layout><PedidosVendaList /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/pedidos/:id" element={<ProtectedRoute><Layout><PedidoVendaDetail /></Layout></ProtectedRoute>} />
 
-        {/* Compras (hub — funcionalidades em desenvolvimento) */}
+        {/* Compras */}
         <Route path="/compras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="compras" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/compras/cotacoes" element={<ProtectedRoute><Layout><CotacoesFornecedorPage /></Layout></ProtectedRoute>} />
 
         {/* Faturamento */}
         <Route path="/faturamento" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="faturamento" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
