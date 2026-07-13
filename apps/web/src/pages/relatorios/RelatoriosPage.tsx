@@ -1,13 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Layout from '../../components/Layout';
+import api from '../../services/api';
 import { icons, Icon } from '../../components/icons';
 import { exportRowsToCsv } from '../../utils/exportCsv';
+import { formatCPFCNPJ } from '../../utils/formatters';
 import {
   relatoriosService,
   type RelatorioFonte, type RelatorioPeriodo, type RelatorioVisualizacao,
   type FontesMap, type RelatorioQueryResult, type RelatorioSalvo,
 } from '../../services/relatorios';
 import ReportPreview from '../../components/relatorios/ReportPreview';
+
+interface EmpresaBasica {
+  razao_social: string;
+  nome_fantasia?: string;
+  cnpj?: string;
+}
 
 const FONTE_ORDEM: RelatorioFonte[] = ['financeiro', 'vendas', 'estoque', 'compras'];
 const PERIODOS: { key: RelatorioPeriodo; label: string }[] = [
@@ -78,6 +86,7 @@ export default function RelatoriosPage() {
   const [salvos, setSalvos] = useState<RelatorioSalvo[]>([]);
   const [nomeSalvar, setNomeSalvar] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [empresa, setEmpresa] = useState<EmpresaBasica | null>(null);
 
   useEffect(() => {
     relatoriosService.fontes().then(f => {
@@ -86,6 +95,9 @@ export default function RelatoriosPage() {
       setColunas(cols.slice(0, 5));
     }).catch(() => setError('Erro ao carregar as fontes de dados disponíveis.'));
     relatoriosService.listSalvos().then(setSalvos).catch(() => {});
+    // Cabeçalho de impressão — não há "empresa/filial ativa" no sistema
+    // (tenant pode ter várias); usa a primeira empresa cadastrada.
+    api.get('/tenant/info/empresas').then(r => setEmpresa(r.data?.empresas?.[0] ?? null)).catch(() => {});
   }, []);
 
   const fonteInfo = fontes?.[fonte] ?? null;
@@ -99,6 +111,17 @@ export default function RelatoriosPage() {
 
   const toggleColuna = (key: string) => {
     setColunas(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  };
+
+  // Barras/linha/pizza só fazem sentido com agrupamento — se o usuário escolher
+  // um gráfico sem ter agrupado, seleciona automaticamente a 1ª coluna agrupável
+  // em vez de silenciosamente continuar mostrando a tabela.
+  const handleVisualizacaoChange = (v: RelatorioVisualizacao) => {
+    setVisualizacao(v);
+    if (v !== 'tabela' && agrupamento === 'nenhum') {
+      const primeiraAgrupavel = fonteInfo?.groupable[0];
+      if (primeiraAgrupavel) setAgrupamento(primeiraAgrupavel);
+    }
   };
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,7 +172,7 @@ export default function RelatoriosPage() {
     setSalvos(await relatoriosService.listSalvos());
   };
 
-  const handleExportarExcel = () => {
+  const handleExportarCsv = () => {
     if (!result) return;
     if (result.agrupado) {
       exportRowsToCsv('relatorio', [
@@ -162,9 +185,14 @@ export default function RelatoriosPage() {
     }
   };
 
+  const nomeEmpresa = empresa?.nome_fantasia || empresa?.razao_social || '';
+  const agora = new Date();
+  const dataHoraGerado = agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
   return (
     <Layout>
-      <div className="space-y-5 animate-fade-up">
+      {/* Conteúdo interativo — some na impressão, ver bloco .print-only abaixo */}
+      <div className="space-y-5 animate-fade-up print:hidden">
         <div>
           <h1 className="text-2xl font-bold font-display text-slate-900 dark:text-slate-100">Relatórios</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Construtor dinâmico — monte, salve e exporte relatórios sob medida.</p>
@@ -207,7 +235,7 @@ export default function RelatoriosPage() {
             </Step>
 
             <Step n={5} title="Visualização">
-              <Segmented options={VISUALIZACOES} value={visualizacao} onChange={setVisualizacao} />
+              <Segmented options={VISUALIZACOES} value={visualizacao} onChange={handleVisualizacaoChange} />
             </Step>
           </div>
 
@@ -230,8 +258,8 @@ export default function RelatoriosPage() {
                   <button onClick={() => window.print()} className="btn-secondary" disabled={!result}>
                     <Icon d={icons.download} className="w-4 h-4" /> Exportar PDF
                   </button>
-                  <button onClick={handleExportarExcel} className="btn-primary" disabled={!result}>
-                    <Icon d={icons.download} className="w-4 h-4" /> Exportar Excel
+                  <button onClick={handleExportarCsv} className="btn-primary" disabled={!result}>
+                    <Icon d={icons.download} className="w-4 h-4" /> Exportar CSV
                   </button>
                 </div>
               </div>
@@ -282,6 +310,36 @@ export default function RelatoriosPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Conteúdo exclusivo de impressão (Exportar PDF via window.print) —
+          cabeçalho da empresa + título + filtros aplicados, sem o chrome
+          do app (sidebar/topbar/ações). Nota: navegadores não suportam
+          cabeçalho/rodapé repetido em CSS por página impressa sem uma lib
+          de PDF dedicada — aparecem uma vez, no topo/fim do conteúdo. */}
+      <div className="hidden print:block text-black">
+        <header className="flex items-start justify-between border-b-2 border-black pb-3 mb-4">
+          <div>
+            <p className="font-bold text-base">{nomeEmpresa || 'SISCR'}</p>
+            {empresa?.cnpj && <p className="text-xs">CNPJ {formatCPFCNPJ(empresa.cnpj)}</p>}
+          </div>
+          <p className="text-xs">Emitido em {dataHoraGerado}</p>
+        </header>
+
+        <h1 className="text-xl font-bold mb-1">{tituloGerado}</h1>
+        <p className="text-xs mb-4">
+          Fonte: {fonteInfo?.label ?? fonte} · Período: {PERIODOS.find(p => p.key === periodo)?.label}
+          {colunas.length > 0 && !result?.agrupado && ` · Colunas: ${colunas.map(k => fonteInfo?.colunas[k]?.label ?? k).join(', ')}`}
+          {agrupamento !== 'nenhum' && ` · Agrupado por: ${fonteInfo?.colunas[agrupamento]?.label ?? agrupamento}`}
+          {' · Visualização: '}{VISUALIZACOES.find(v => v.key === visualizacao)?.label}
+        </p>
+
+        <ReportPreview result={result} visualizacao={visualizacao} fonteInfo={fonteInfo} colunas={colunas} />
+
+        <footer className="mt-8 pt-3 border-t border-black text-[10px] flex items-center justify-between">
+          <span>{nomeEmpresa || 'SISCR'}</span>
+          <span>{dataHoraGerado}</span>
+        </footer>
       </div>
     </Layout>
   );

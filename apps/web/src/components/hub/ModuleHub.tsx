@@ -43,25 +43,25 @@ export default function ModuleHub({ moduleKey }: { moduleKey: string }) {
           <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500 mb-3">
             {group.title}
           </p>
-          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))' }}>
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}>
             {group.items.map((item, idx) => (
               <Link
                 key={`${item.to}-${item.label}-${idx}`}
                 to={item.to}
                 onClick={() => trackRecentItem({ label: `${mod.label} — ${item.label}`, to: item.to, icon: mod.icon })}
-                className="group flex items-center gap-3 p-4 rounded-card border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
+                className="group flex items-start gap-3 p-4 rounded-card border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
               >
                 <div className="w-[34px] h-[34px] rounded-lg bg-[rgb(var(--tint-rgb)/0.12)] dark:bg-[rgb(var(--tint-rgb)/0.16)] text-brand-600 dark:text-brand-400 flex items-center justify-center flex-none">
                   <Icon d={icons[mod.icon]} className="w-4 h-4" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 truncate">{item.label}</p>
+                <div className="min-w-0 flex-1 flex items-start justify-between gap-2">
+                  <p className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 leading-snug">{item.label}</p>
+                  {item.badge && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none ${BADGE_CLS[item.badge]}`}>
+                      {item.badge}
+                    </span>
+                  )}
                 </div>
-                {item.badge && (
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-none ${BADGE_CLS[item.badge]}`}>
-                    {item.badge}
-                  </span>
-                )}
               </Link>
             ))}
           </div>

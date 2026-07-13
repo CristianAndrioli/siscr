@@ -34,12 +34,18 @@ export default function ReportPreview({
     const rows = result.linhas as unknown as GroupRow[];
     const hasTotal = rows.some(r => r.total !== undefined && r.total !== null);
 
-    if (visualizacao === 'tabela' || !hasChartSupport(visualizacao)) {
-      return <GroupTable rows={rows} hasTotal={hasTotal} />;
-    }
     if (visualizacao === 'barras') return <BarChart rows={rows} hasTotal={hasTotal} />;
     if (visualizacao === 'linha') return <LineChart rows={rows} hasTotal={hasTotal} />;
     if (visualizacao === 'pizza') return <PieChart rows={rows} hasTotal={hasTotal} />;
+    return <GroupTable rows={rows} hasTotal={hasTotal} />;
+  }
+
+  if (hasChartSupport(visualizacao)) {
+    return (
+      <p className="text-sm text-slate-400 dark:text-slate-500 py-16 text-center">
+        Selecione uma opção em "Agrupar por" (passo 4) para ver esse relatório como gráfico.
+      </p>
+    );
   }
 
   return <RowsTable rows={result.linhas} colunas={colunas} fonteInfo={fonteInfo} />;

@@ -133,3 +133,16 @@
 
 .dark ::-webkit-scrollbar-thumb { background: #334155; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Impressão (ex.: Exportar PDF em Relatórios) — margens da página e
+   fundo branco independente do tema. O resto do chrome do app usa a
+   classe utilitária `print:hidden` do Tailwind nos componentes. */
+@page {
+  margin: 2cm;
+}
+
+@media print {
+  html, body {
+    background: #fff !important;
+  }
+}

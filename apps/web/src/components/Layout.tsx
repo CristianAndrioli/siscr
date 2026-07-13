@@ -170,7 +170,9 @@ export default function Layout({ children }: LayoutProps) {
           title={item.label}
           onClick={() => setSidebarOpen(false)}
           className={`relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-            active ? 'bg-[rgb(var(--tint-rgb)/0.16)] text-[var(--acc-light)]' : 'text-sidebar-text hover:bg-sidebar-hover hover:text-white'
+            active
+              ? 'bg-[rgb(var(--tint-rgb)/0.12)] dark:bg-[rgb(var(--tint-rgb)/0.16)] text-brand-700 dark:text-[var(--acc-light)]'
+              : 'text-slate-500 dark:text-sidebar-text hover:bg-slate-100 dark:hover:bg-sidebar-hover hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <Icon d={icons[item.icon]} className="w-4 h-4" />
@@ -182,7 +184,9 @@ export default function Layout({ children }: LayoutProps) {
         to={item.to}
         onClick={() => setSidebarOpen(false)}
         className={`flex items-center gap-3 px-2.5 py-[7px] rounded-lg text-[13.5px] font-medium transition-colors ${
-          active ? 'bg-[rgb(var(--tint-rgb)/0.16)] text-[var(--acc-light)]' : 'text-sidebar-text hover:bg-sidebar-hover hover:text-white'
+          active
+            ? 'bg-[rgb(var(--tint-rgb)/0.12)] dark:bg-[rgb(var(--tint-rgb)/0.16)] text-brand-700 dark:text-[var(--acc-light)]'
+            : 'text-slate-600 dark:text-sidebar-text hover:bg-slate-100 dark:hover:bg-sidebar-hover hover:text-slate-900 dark:hover:text-white'
         }`}
       >
         <span className="flex-none"><Icon d={icons[item.icon]} className="w-4 h-4" /></span>
@@ -197,14 +201,14 @@ export default function Layout({ children }: LayoutProps) {
   };
 
   const sidebarContent = (
-    <aside className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
+    <aside className="flex flex-col h-full bg-white dark:bg-sidebar border-r border-slate-200 dark:border-sidebar-border transition-colors duration-200">
       {/* Logo */}
-      <div className={`flex items-center gap-3 h-[60px] border-b border-sidebar-divider flex-none ${iconsOnly ? 'justify-center' : 'px-5'}`}>
+      <div className={`flex items-center gap-3 h-[60px] border-b border-slate-100 dark:border-sidebar-divider flex-none ${iconsOnly ? 'justify-center' : 'px-5'}`}>
         <div className="w-[30px] h-[30px] rounded-lg bg-gradient-brand flex items-center justify-center text-white font-display font-extrabold text-xs flex-none">S</div>
         {!iconsOnly && (
           <div className="min-w-0">
-            <div className="font-display font-bold text-white text-sm leading-none">SISCR</div>
-            {tenantSlug && <div className="text-[11px] font-mono text-sidebar-text mt-1 truncate">@{tenantSlug}</div>}
+            <div className="font-display font-bold text-slate-900 dark:text-white text-sm leading-none">SISCR</div>
+            {tenantSlug && <div className="text-[11px] font-mono text-slate-400 dark:text-sidebar-text mt-1 truncate">@{tenantSlug}</div>}
           </div>
         )}
       </div>
@@ -214,7 +218,7 @@ export default function Layout({ children }: LayoutProps) {
         {visibleSections.map(section => (
           <div key={section.title} className={iconsOnly ? 'w-full flex flex-col items-center gap-1' : 'space-y-0.5'}>
             {!iconsOnly && (
-              <p className="px-2.5 mb-1 text-[10px] font-bold text-sidebar-section uppercase tracking-[0.14em]">
+              <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-sidebar-section uppercase tracking-[0.14em]">
                 {section.title}
               </p>
             )}
@@ -224,11 +228,11 @@ export default function Layout({ children }: LayoutProps) {
       </nav>
 
       {/* Footer — tema + usuário + logout */}
-      <div className={`border-t border-sidebar-divider py-3 flex-none space-y-1 ${iconsOnly ? 'flex flex-col items-center px-1.5' : 'px-3'}`}>
+      <div className={`border-t border-slate-100 dark:border-sidebar-divider py-3 flex-none space-y-1 ${iconsOnly ? 'flex flex-col items-center px-1.5' : 'px-3'}`}>
         <button
           onClick={handleToggleTheme}
           title={isDark ? 'Modo claro' : 'Modo escuro'}
-          className={`flex items-center rounded-lg text-sidebar-text hover:bg-sidebar-hover hover:text-white transition-colors ${
+          className={`flex items-center rounded-lg text-slate-500 dark:text-sidebar-text hover:bg-slate-100 dark:hover:bg-sidebar-hover hover:text-slate-900 dark:hover:text-white transition-colors ${
             iconsOnly ? 'w-9 h-9 justify-center' : 'w-full justify-between px-2.5 py-2 text-xs font-medium'
           }`}
         >
@@ -241,22 +245,22 @@ export default function Layout({ children }: LayoutProps) {
             to="/perfil"
             onClick={() => setSidebarOpen(false)}
             title={userName}
-            className={`flex items-center gap-2.5 rounded-lg hover:bg-sidebar-hover transition-colors ${iconsOnly ? 'p-1' : 'flex-1 min-w-0 px-1 py-1'}`}
+            className={`flex items-center gap-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-sidebar-hover transition-colors ${iconsOnly ? 'p-1' : 'flex-1 min-w-0 px-1 py-1'}`}
           >
             <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-none">
               {userInitials}
             </div>
             {!iconsOnly && (
               <div className="min-w-0">
-                <div className="text-xs font-semibold text-white truncate">{userName}</div>
-                <div className="text-[11px] text-sidebar-text truncate">Administrador</div>
+                <div className="text-xs font-semibold text-slate-800 dark:text-white truncate">{userName}</div>
+                <div className="text-[11px] text-slate-400 dark:text-sidebar-text truncate">Administrador</div>
               </div>
             )}
           </Link>
           <button
             onClick={handleLogout}
             title="Sair"
-            className="w-7 h-7 rounded-md flex items-center justify-center text-sidebar-text hover:text-red-400 hover:bg-red-950/40 transition-all flex-none"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-slate-400 dark:text-sidebar-text hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all flex-none"
           >
             <Icon d={icons.logout} className="w-3.5 h-3.5" />
           </button>
@@ -269,16 +273,16 @@ export default function Layout({ children }: LayoutProps) {
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
       <OnboardingEmpresaGate />
 
-      {/* Sidebar desktop — sempre escura, independe do tema claro/escuro do app */}
+      {/* Sidebar desktop */}
       {prefs.sidebarMode !== 'hidden' && (
-        <div className={`hidden lg:flex lg:flex-col flex-none h-screen sticky top-0 overflow-hidden transition-all duration-200 ${iconsOnly ? 'lg:w-14' : 'lg:w-[236px]'}`}>
+        <div className={`hidden lg:flex lg:flex-col flex-none h-screen sticky top-0 overflow-hidden transition-all duration-200 print:hidden ${iconsOnly ? 'lg:w-14' : 'lg:w-[236px]'}`}>
           {sidebarContent}
         </div>
       )}
 
       {/* Sidebar mobile */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
+        <div className="fixed inset-0 z-50 lg:hidden flex print:hidden">
           <div className="w-[236px] flex flex-col shadow-2xl">{sidebarContent}</div>
           <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
         </div>
@@ -287,7 +291,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 h-[60px] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 px-4 lg:px-6 transition-colors duration-200">
+        <header className="sticky top-0 z-30 h-[60px] bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3 px-4 lg:px-6 transition-colors duration-200 print:hidden">
           <button
             className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             onClick={() => setSidebarOpen(true)}
