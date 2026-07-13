@@ -19,6 +19,7 @@ export interface Pedido {
   empresa_id: string;
   filial_id: string;
   cliente_id: string;
+  vendedor_id: string | null;
   numero: number;
   tipo: PedidoTipo;
   status: PedidoStatus;
@@ -50,6 +51,7 @@ export interface PedidoForm {
   empresaId: string;
   filialId: string;
   clienteId: string;
+  vendedorId?: string | null;
   tipo: PedidoTipo;
   observacoes?: string;
   itens: PedidoItemInput[];

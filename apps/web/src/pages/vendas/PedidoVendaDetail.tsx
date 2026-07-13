@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import { produtosService, type Produto } from '../../services/cadastros/produtos';
+import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import {
   vendasService, STATUS_LABEL, PROXIMOS_STATUS,
   type Pedido, type PedidoItemRow, type PedidoItemInput, type PedidoStatus, type PedidoTipo,
@@ -29,6 +30,7 @@ export default function PedidoVendaDetail() {
   const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
   const [filiais, setFiliais] = useState<FilialRow[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [vendedores, setVendedores] = useState<Pessoa[]>([]);
 
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [itensExistentes, setItensExistentes] = useState<PedidoItemRow[]>([]);
@@ -37,6 +39,7 @@ export default function PedidoVendaDetail() {
   const [filialId, setFilialId] = useState('');
   const [clienteId, setClienteId] = useState('');
   const [clienteNome, setClienteNome] = useState('');
+  const [vendedorId, setVendedorId] = useState('');
   const [tipo, setTipo] = useState<PedidoTipo>('pedido');
   const [observacoes, setObservacoes] = useState('');
   const [itens, setItens] = useState<PedidoItemInput[]>([emptyItem()]);
@@ -47,6 +50,7 @@ export default function PedidoVendaDetail() {
   useEffect(() => {
     api.get('/tenant/info/empresas').then(r => setEmpresas(r.data?.empresas ?? [])).catch(() => {});
     api.get('/tenant/info/filiais').then(r => setFiliais(r.data?.filiais ?? [])).catch(() => {});
+    pessoasService.list({ tipoCadastro: 'vendedor', limit: 200 }).then(r => setVendedores(r.pessoas)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -64,6 +68,7 @@ export default function PedidoVendaDetail() {
       setEmpresaId(p.empresa_id);
       setFilialId(p.filial_id);
       setClienteId(p.cliente_id);
+      setVendedorId(p.vendedor_id ?? '');
       setTipo(p.tipo);
       setObservacoes(p.observacoes ?? '');
       setItens(its.map(it => ({ produtoId: it.produto_id, quantidade: it.quantidade, precoUnitario: it.preco_unitario, desconto: it.desconto })));
@@ -104,10 +109,10 @@ export default function PedidoVendaDetail() {
     setSaving(true);
     try {
       if (isNew) {
-        const r = await vendasService.create({ empresaId, filialId, clienteId, tipo, observacoes: observacoes || undefined, itens: itensValidos });
+        const r = await vendasService.create({ empresaId, filialId, clienteId, vendedorId: vendedorId || undefined, tipo, observacoes: observacoes || undefined, itens: itensValidos });
         navigate(`/vendas-crm/pedidos/${r.id}`);
       } else if (id) {
-        await vendasService.update(id, { clienteId, tipo, observacoes: observacoes || null as unknown as string, itens: itensValidos });
+        await vendasService.update(id, { clienteId, vendedorId: vendedorId || null, tipo, observacoes: observacoes || null as unknown as string, itens: itensValidos });
         await carregarPedido();
       }
     } catch (err) {
@@ -203,6 +208,13 @@ export default function PedidoVendaDetail() {
             <select className="input" value={tipo} disabled={!isNew} onChange={e => setTipo(e.target.value as PedidoTipo)}>
               <option value="pedido">Pedido</option>
               <option value="orcamento">Orçamento</option>
+            </select>
+          </div>
+          <div>
+            <label className="input-label">Vendedor</label>
+            <select className="input" value={vendedorId} disabled={!podeEditar} onChange={e => setVendedorId(e.target.value)}>
+              <option value="">Sem vendedor</option>
+              {vendedores.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
             </select>
           </div>
         </div>

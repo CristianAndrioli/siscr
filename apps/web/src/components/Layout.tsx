@@ -19,6 +19,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'vendas-crm': 'Vendas & CRM',
   pedidos: 'Pedidos',
   novo: 'Novo',
+  metas: 'Metas de Vendas',
   compras: 'Compras',
   cadastros: 'Cadastros',
   clientes: 'Clientes',

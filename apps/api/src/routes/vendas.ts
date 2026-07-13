@@ -28,6 +28,7 @@ const pedidoSchema = z.object({
   empresaId: z.string().uuid(),
   filialId: z.string().uuid(),
   clienteId: z.string().uuid(),
+  vendedorId: z.string().uuid().optional(),
   tipo: z.enum(['pedido', 'orcamento']).default('pedido'),
   observacoes: z.string().optional(),
   itens: z.array(itemSchema).min(1),
@@ -47,6 +48,7 @@ const pedidoUpdateSchema = z
     empresaId: z.string().uuid().optional(),
     filialId: z.string().uuid().optional(),
     clienteId: z.string().uuid().optional(),
+    vendedorId: z.string().uuid().nullable().optional(),
     tipo: z.enum(['pedido', 'orcamento']).optional(),
     observacoes: z.string().nullable().optional(),
     itens: z.array(itemSchema).min(1).optional(),
@@ -136,9 +138,9 @@ app.post('/pedidos', zValidator('json', pedidoSchema), async (c) => {
 
   const statements = [
     c.env.DB_SHARED.prepare(`
-      INSERT INTO pedidos_venda (id, tenant_id, empresa_id, filial_id, cliente_id, usuario_id, numero, tipo, status, total, observacoes, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId, data.clienteId,
+      INSERT INTO pedidos_venda (id, tenant_id, empresa_id, filial_id, cliente_id, vendedor_id, usuario_id, numero, tipo, status, total, observacoes, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId, data.clienteId, data.vendedorId ?? null,
         user.userId, numero, data.tipo, 'rascunho', total, data.observacoes ?? null, now, now, uid, uid),
 
     ...data.itens.map((item) =>
@@ -447,7 +449,7 @@ app.patch('/pedidos/:id', zValidator('json', pedidoUpdateSchema), async (c) => {
   const pedido = await c.env.DB_SHARED
     .prepare('SELECT * FROM pedidos_venda WHERE id = ? AND tenant_id = ?')
     .bind(pedidoId, tenant.tenantId)
-    .first<PedidoRow & { observacoes: string | null }>()
+    .first<PedidoRow & { observacoes: string | null; vendedor_id: string | null }>()
 
   if (!pedido) return c.json({ error: 'Pedido não encontrado.' }, 404)
   if (pedido.status !== 'rascunho') {
@@ -457,6 +459,7 @@ app.patch('/pedidos/:id', zValidator('json', pedidoUpdateSchema), async (c) => {
   const empresaId = data.empresaId ?? pedido.empresa_id
   const filialId = data.filialId ?? pedido.filial_id
   const clienteId = data.clienteId ?? pedido.cliente_id
+  const vendedorId = data.vendedorId === undefined ? pedido.vendedor_id : data.vendedorId
   const tipo = data.tipo ?? pedido.tipo
   const observacoes =
     data.observacoes === undefined ? pedido.observacoes : data.observacoes
@@ -501,13 +504,14 @@ app.patch('/pedidos/:id', zValidator('json', pedidoUpdateSchema), async (c) => {
   stmts.push(
     c.env.DB_SHARED.prepare(`
       UPDATE pedidos_venda SET
-        empresa_id = ?, filial_id = ?, cliente_id = ?, tipo = ?, total = ?,
+        empresa_id = ?, filial_id = ?, cliente_id = ?, vendedor_id = ?, tipo = ?, total = ?,
         observacoes = ?, updated_at = ?, updated_by = ?
       WHERE id = ? AND tenant_id = ?
     `).bind(
       empresaId,
       filialId,
       clienteId,
+      vendedorId,
       tipo,
       total,
       observacoes,
