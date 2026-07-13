@@ -110,6 +110,19 @@
            text-brand-700 bg-brand-50 dark:text-brand-300 dark:bg-brand-950
            transition-colors duration-150;
   }
+
+  /* Grid de widgets da Home — 12 colunas no desktop (span exato do
+     handoff), reduzido em telas menores para não espremer KPIs.
+     `--span-*` são definidos inline por widget em AppHome.tsx. */
+  .home-widget {
+    grid-column: span var(--span-mobile, 2) / span var(--span-mobile, 2);
+  }
+  @media (min-width: 640px) {
+    .home-widget { grid-column: span var(--span-tablet, 3) / span var(--span-tablet, 3); }
+  }
+  @media (min-width: 1024px) {
+    .home-widget { grid-column: span var(--span-desktop, 3) / span var(--span-desktop, 3); }
+  }
 }
 
 /* Scrollbar customizada */

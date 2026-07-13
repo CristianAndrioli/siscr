@@ -128,8 +128,9 @@ function AppHome() {
           </div>
         )}
 
-        {/* Grade de widgets — 12 colunas, editável com drag-and-drop */}
-        <div className="grid gap-3.5" style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
+        {/* Grade de widgets — 12 colunas no desktop (reduzido em telas
+            menores via .home-widget em index.css), editável com drag-and-drop */}
+        <div className="grid grid-cols-2 sm:grid-cols-6 lg:grid-cols-12 gap-3.5">
           {order.map(rawKey => {
             const key = rawKey as WidgetKey
             const meta = WIDGET_REGISTRY[key]
@@ -142,8 +143,12 @@ function AppHome() {
                 onDragStart={() => { dragKeyRef.current = key }}
                 onDragOver={e => editMode && e.preventDefault()}
                 onDrop={() => editMode && handleDrop(key)}
-                className={`relative min-w-0 ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                style={{ gridColumn: `span ${span} / span ${span}` }}
+                className={`home-widget relative min-w-0 ${editMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                style={{
+                  '--span-desktop': span,
+                  '--span-tablet': Math.min(6, Math.max(2, Math.ceil(span / 2))),
+                  '--span-mobile': span <= 4 ? 1 : 2,
+                } as React.CSSProperties}
               >
                 {editMode && (
                   <>
