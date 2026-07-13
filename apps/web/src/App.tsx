@@ -70,6 +70,8 @@ import ObrasList from './pages/frota/ObrasList';
 import ObrasDetail from './pages/frota/ObrasDetail';
 import OrdensServicoList from './pages/frota/OrdensServicoList';
 import OrdensServicoDetail from './pages/frota/OrdensServicoDetail';
+import AbastecimentosPage from './pages/frota/AbastecimentosPage';
+import ManutencoesFrotaPage from './pages/frota/ManutencoesFrotaPage';
 import NfEntradaList from './pages/entrada/NfEntradaList';
 import NfEntradaDetail from './pages/entrada/NfEntradaDetail';
 import NfEntradaWizardPage from './pages/entrada/NfEntradaWizard';
@@ -86,6 +88,8 @@ import FluxoCaixaPage from './pages/financeiro/FluxoCaixaPage';
 import { CotacoesFornecedorPage } from './pages/faturamento/Cotacoes';
 import MetasVendasPage from './pages/vendas/MetasVendasPage';
 import InteracoesPage from './pages/vendas/InteracoesPage';
+import InventariosPage from './pages/estoque/InventariosPage';
+import InventarioDetail from './pages/estoque/InventarioDetail';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -247,6 +251,8 @@ function App() {
         <Route path="/estoque/transferencias" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><Transferencias /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/locais" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><LocaisPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/instrucoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><EstoqueInstrucoes /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/estoque/inventario" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><InventariosPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/estoque/inventario/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><InventarioDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* ─── Frota ──────────────────────────────────────────────────── */}
         <Route path="/frota" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ModuleHub moduleKey="frota" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
@@ -256,6 +262,8 @@ function App() {
         <Route path="/frota/obras/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ObrasDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/ordens-servico" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/ordens-servico/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/abastecimentos" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><AbastecimentosPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/manutencoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ManutencoesFrotaPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* Contabilidade */}
         <Route path="/contabilidade/plano-contas" element={<ProtectedRoute><Layout><PlanoContasPage /></Layout></ProtectedRoute>} />

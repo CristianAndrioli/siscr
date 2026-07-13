@@ -137,7 +137,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         title: 'Estrutura',
         items: [
           { label: 'Locais de estoque', to: '/estoque/locais' },
-          { label: 'Inventário', to: '/estoque', badge: 'DEV' },
+          { label: 'Inventário', to: '/estoque/inventario', badge: 'NOVO' },
         ],
       },
     ],
@@ -161,8 +161,8 @@ export const HUB_MODULES: Record<string, HubModule> = {
       {
         title: 'Custos',
         items: [
-          { label: 'Abastecimentos', to: '/frota', badge: 'DEV' },
-          { label: 'Manutenções programadas', to: '/frota', badge: 'DEV' },
+          { label: 'Abastecimentos', to: '/frota/abastecimentos', badge: 'NOVO' },
+          { label: 'Manutenções programadas', to: '/frota/manutencoes', badge: 'NOVO' },
         ],
       },
     ],

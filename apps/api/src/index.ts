@@ -14,6 +14,7 @@ import permissoesRoutes from './routes/permissoes'
 import subscriptionRoutes from './routes/subscriptions'
 import cadastrosRoutes from './routes/cadastros'
 import estoqueRoutes from './routes/estoque'
+import estoqueInventarioRoutes from './routes/estoqueInventario'
 import financeiroRoutes from './routes/financeiro'
 import bancarioRoutes from './routes/bancario'
 import faturamentoRoutes from './routes/faturamento'
@@ -27,6 +28,7 @@ import cronRoutes from './routes/cron'
 import queueRoutes from './routes/queue'
 import logsRoutes from './routes/logs'
 import frotaRoutes from './routes/frota'
+import frotaExtrasRoutes from './routes/frotaExtras'
 import preferencesRoutes from './routes/preferences'
 import contabilidadeRoutes from './routes/contabilidade'
 import conexoesRoutes from './routes/conexoes'
@@ -148,6 +150,7 @@ app.route('/api/tenant/cadastros', cadastrosRoutes)
 app.route('/api/tenant/cadastros', cadastrosFinanceiroRoutes)
 app.route('/api/tenant/cadastros', cadastrosProdutosAuxRoutes)
 app.route('/api/tenant/estoque', estoqueRoutes)
+app.route('/api/tenant/estoque', estoqueInventarioRoutes)
 app.route('/api/tenant/financeiro', financeiroRoutes)
 app.route('/api/tenant/bancario', bancarioRoutes)
 app.route('/api/tenant/faturamento', faturamentoRoutes)
@@ -157,6 +160,7 @@ app.route('/api/tenant/vendas', metasVendasRoutes)
 app.route('/api/tenant/vendas', pessoaInteracoesRoutes)
 app.route('/api/tenant/logs', logsRoutes)
 app.route('/api/tenant/frota', frotaRoutes)
+app.route('/api/tenant/frota', frotaExtrasRoutes)
 app.route('/api/tenant/preferences', preferencesRoutes)
 app.route('/api/tenant/contabilidade', contabilidadeRoutes)
 app.route('/api/tenant/conexoes', conexoesRoutes)
