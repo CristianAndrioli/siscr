@@ -90,6 +90,7 @@ import MetasVendasPage from './pages/vendas/MetasVendasPage';
 import InteracoesPage from './pages/vendas/InteracoesPage';
 import InventariosPage from './pages/estoque/InventariosPage';
 import InventarioDetail from './pages/estoque/InventarioDetail';
+import FunilVendasPage from './pages/vendas/FunilVendasPage';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -191,6 +192,7 @@ function App() {
 
         {/* Vendas & CRM */}
         <Route path="/vendas-crm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="vendas-crm" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/vendas-crm/funil" element={<ProtectedRoute><Layout><FunilVendasPage /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/pedidos" element={<ProtectedRoute><Layout><PedidosVendaList /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/pedidos/:id" element={<ProtectedRoute><Layout><PedidoVendaDetail /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/metas" element={<ProtectedRoute><MetasVendasPage /></ProtectedRoute>} />

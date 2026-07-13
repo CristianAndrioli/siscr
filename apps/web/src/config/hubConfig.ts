@@ -37,7 +37,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
       {
         title: 'Comercial',
         items: [
-          { label: 'Funil de vendas', to: '/vendas-crm', badge: 'DEV' },
+          { label: 'Funil de vendas', to: '/vendas-crm/funil', badge: 'NOVO' },
           { label: 'Pedidos de venda', to: '/vendas-crm/pedidos', badge: 'NOVO' },
           { label: 'Cotações', to: '/faturamento/cotacoes' },
           { label: 'Metas de vendas', to: '/vendas-crm/metas', badge: 'NOVO' },
@@ -335,7 +335,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     title: 'Operação',
     items: [
-      { key: 'vendas-crm', label: 'Vendas & CRM', to: '/vendas-crm', icon: 'megaphone', badge: 'DEV', permissionKey: 'faturamento' },
+      { key: 'vendas-crm', label: 'Vendas & CRM', to: '/vendas-crm', icon: 'megaphone', permissionKey: 'faturamento' },
       { key: 'faturamento', label: 'Faturamento', to: '/faturamento', icon: 'invoice', permissionKey: 'faturamento' },
       { key: 'compras', label: 'Compras', to: '/compras', icon: 'cart', badge: 'DEV', permissionKey: 'faturamento' },
       { key: 'entrada', label: 'Entrada', to: '/entrada', icon: 'truck', permissionKey: 'faturamento' },
