@@ -37,6 +37,13 @@ import ProdutosList from './pages/cadastros/ProdutosList';
 import ProdutosDetail from './pages/cadastros/ProdutosDetail';
 import ServicosList from './pages/cadastros/ServicosList';
 import ServicosDetail from './pages/cadastros/ServicosDetail';
+import GruposProdutosPage from './pages/cadastros/GruposProdutosPage';
+import UnidadesMedidaPage from './pages/cadastros/UnidadesMedidaPage';
+import TabelasPrecoPage from './pages/cadastros/TabelasPrecoPage';
+import CategoriasFinanceirasPage from './pages/cadastros/CategoriasFinanceirasPage';
+import CentrosCustoPage from './pages/cadastros/CentrosCustoPage';
+import FormasPagamentoPage from './pages/cadastros/FormasPagamentoPage';
+import CondicoesPagamentoPage from './pages/cadastros/CondicoesPagamentoPage';
 import ContasReceberList from './pages/financeiro/ContasReceberList';
 import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
@@ -213,6 +220,13 @@ function App() {
         <Route path="/cadastros/produtos/:id" element={<ProtectedRoute><Layout><ProdutosDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/servicos" element={<ProtectedRoute><Layout><ServicosList /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/servicos/:id" element={<ProtectedRoute><Layout><ServicosDetail /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/grupos-produtos" element={<ProtectedRoute><Layout><GruposProdutosPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/unidades-medida" element={<ProtectedRoute><Layout><UnidadesMedidaPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/tabelas-preco" element={<ProtectedRoute><Layout><TabelasPrecoPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/categorias-financeiras" element={<ProtectedRoute><Layout><CategoriasFinanceirasPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/centros-custo" element={<ProtectedRoute><Layout><CentrosCustoPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/formas-pagamento" element={<ProtectedRoute><Layout><FormasPagamentoPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/condicoes-pagamento" element={<ProtectedRoute><Layout><CondicoesPagamentoPage /></Layout></ProtectedRoute>} />
 
         {/* Estoque */}
         <Route path="/estoque" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><ModuleHub moduleKey="estoque" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
