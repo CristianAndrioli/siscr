@@ -91,6 +91,8 @@ import InteracoesPage from './pages/vendas/InteracoesPage';
 import InventariosPage from './pages/estoque/InventariosPage';
 import InventarioDetail from './pages/estoque/InventarioDetail';
 import FunilVendasPage from './pages/vendas/FunilVendasPage';
+import PedidosCompraList from './pages/compras/PedidosCompraList';
+import PedidoCompraDetail from './pages/compras/PedidoCompraDetail';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -201,6 +203,8 @@ function App() {
         {/* Compras */}
         <Route path="/compras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="compras" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/compras/cotacoes" element={<ProtectedRoute><Layout><CotacoesFornecedorPage /></Layout></ProtectedRoute>} />
+        <Route path="/compras/pedidos" element={<ProtectedRoute><Layout><PedidosCompraList /></Layout></ProtectedRoute>} />
+        <Route path="/compras/pedidos/:id" element={<ProtectedRoute><Layout><PedidoCompraDetail /></Layout></ProtectedRoute>} />
 
         {/* Faturamento */}
         <Route path="/faturamento" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="faturamento" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />

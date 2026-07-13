@@ -23,6 +23,7 @@ import vendasRoutes from './routes/vendas'
 import metasVendasRoutes from './routes/metasVendas'
 import pessoaInteracoesRoutes from './routes/pessoaInteracoes'
 import oportunidadesRoutes from './routes/oportunidades'
+import comprasRoutes from './routes/compras'
 import stripeWebhookRoutes from './routes/stripe-webhook'
 import publicLookupRoutes from './routes/publicLookup'
 import cronRoutes from './routes/cron'
@@ -142,6 +143,7 @@ app.use('/api/tenant/bancario', requireTenantModule('financeiro'))
 app.use('/api/tenant/faturamento', requireTenantModule('faturamento'))
 app.use('/api/tenant/entrada', requireTenantModule('faturamento'))
 app.use('/api/tenant/vendas', requireTenantModule('faturamento'))
+app.use('/api/tenant/compras', requireTenantModule('faturamento'))
 app.use('/api/tenant/conexoes', requireTenantModule('configuracoes'))
 
 // ─── Rotas do tenant (autenticadas + tenant identificado) ──────
@@ -160,6 +162,7 @@ app.route('/api/tenant/vendas', vendasRoutes)
 app.route('/api/tenant/vendas', metasVendasRoutes)
 app.route('/api/tenant/vendas', pessoaInteracoesRoutes)
 app.route('/api/tenant/vendas', oportunidadesRoutes)
+app.route('/api/tenant/compras', comprasRoutes)
 app.route('/api/tenant/logs', logsRoutes)
 app.route('/api/tenant/frota', frotaRoutes)
 app.route('/api/tenant/frota', frotaExtrasRoutes)
