@@ -20,6 +20,7 @@ import faturamentoRoutes from './routes/faturamento'
 import entradaRoutes from './routes/entrada'
 import vendasRoutes from './routes/vendas'
 import metasVendasRoutes from './routes/metasVendas'
+import pessoaInteracoesRoutes from './routes/pessoaInteracoes'
 import stripeWebhookRoutes from './routes/stripe-webhook'
 import publicLookupRoutes from './routes/publicLookup'
 import cronRoutes from './routes/cron'
@@ -153,6 +154,7 @@ app.route('/api/tenant/faturamento', faturamentoRoutes)
 app.route('/api/tenant/entrada', entradaRoutes)
 app.route('/api/tenant/vendas', vendasRoutes)
 app.route('/api/tenant/vendas', metasVendasRoutes)
+app.route('/api/tenant/vendas', pessoaInteracoesRoutes)
 app.route('/api/tenant/logs', logsRoutes)
 app.route('/api/tenant/frota', frotaRoutes)
 app.route('/api/tenant/preferences', preferencesRoutes)

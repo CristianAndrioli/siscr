@@ -20,6 +20,7 @@ const ROUTE_LABELS: Record<string, string> = {
   pedidos: 'Pedidos',
   novo: 'Novo',
   metas: 'Metas de Vendas',
+  interacoes: 'Histórico de Interações',
   compras: 'Compras',
   cadastros: 'Cadastros',
   clientes: 'Clientes',

@@ -47,7 +47,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         title: 'Relacionamento',
         items: [
           { label: 'Clientes', to: '/cadastros/clientes' },
-          { label: 'Histórico de interações', to: '/vendas-crm', badge: 'DEV' },
+          { label: 'Histórico de interações', to: '/vendas-crm/interacoes', badge: 'NOVO' },
         ],
       },
     ],
