@@ -80,6 +80,7 @@ import LancamentosPage from './pages/contabilidade/LancamentosPage';
 import BalancetePage from './pages/contabilidade/BalancetePage';
 import DrePage from './pages/contabilidade/DrePage';
 import ExportacoesPage from './pages/contabilidade/ExportacoesPage';
+import RelatoriosPage from './pages/relatorios/RelatoriosPage';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -152,6 +153,7 @@ function App() {
       <Routes>
         <Route path="/" element={<RootRoute />} />
         <Route path="/app" element={<ProtectedRoute><AppHome /></ProtectedRoute>} />
+        <Route path="/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
         <Route path="/plans" element={<Plans />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
