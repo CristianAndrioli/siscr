@@ -8,6 +8,8 @@ export interface RecentItem {
   icon: string
 }
 
+export type HomeVariant = 'A' | 'B' | 'C'
+
 export interface UserPreferences {
   accentColor: string
   sidebarMode: 'full' | 'icons' | 'hidden'
@@ -17,6 +19,17 @@ export interface UserPreferences {
   recentItemsCount: number
   recentItems: RecentItem[]
   visibleModules: string[]
+  /** Home personalizável: variação ativa (Painel/Operacional/Compacto). */
+  homeVariant: HomeVariant
+  /** Ordem/composição de widgets por variação — chave ausente = default da variação. */
+  homeLayouts: Partial<Record<HomeVariant, string[]>>
+}
+
+/** Ordem default dos widgets por variação — ver `components/home/widgetRegistry.ts`. */
+export const DEFAULT_HOME_LAYOUTS: Record<HomeVariant, string[]> = {
+  A: ['saldo', 'receber', 'pagar', 'vendas', 'grafico', 'vencimentos', 'atalhos', 'estoque', 'os'],
+  B: ['atalhos', 'vencimentos', 'os', 'receber', 'pagar', 'saldo', 'grafico'],
+  C: ['saldo', 'receber', 'pagar', 'vendas', 'vencimentos', 'estoque', 'recentes'],
 }
 
 const DEFAULT_PREFS: UserPreferences = {
@@ -28,6 +41,8 @@ const DEFAULT_PREFS: UserPreferences = {
   recentItemsCount: 5,
   recentItems: [],
   visibleModules: [],
+  homeVariant: 'A',
+  homeLayouts: {},
 }
 
 function getLocalKey(): string {

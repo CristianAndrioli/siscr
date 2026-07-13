@@ -4,14 +4,16 @@ import type { Env } from '../index'
 const app = new Hono<{ Bindings: Env }>()
 
 const DEFAULT_PREFS = {
-  accentColor: '#4f46e5',
+  accentColor: '#4e6fdb',
   sidebarMode: 'icons',
   homeLayout: 'grid',
   theme: 'system',
-  density: 'normal',
+  density: 'compact',
   recentItemsCount: 5,
   recentItems: [] as RecentItem[],
   visibleModules: [] as string[],
+  homeVariant: 'A',
+  homeLayouts: {} as Record<string, string[]>,
 }
 
 interface RecentItem {
@@ -41,6 +43,8 @@ app.get('/', async (c) => {
     recentItemsCount: row.recent_items_count ?? DEFAULT_PREFS.recentItemsCount,
     recentItems: safeJson(row.recent_items as string, []),
     visibleModules: safeJson(row.visible_modules as string, []),
+    homeVariant: row.home_variant ?? DEFAULT_PREFS.homeVariant,
+    homeLayouts: safeJson(row.home_layouts as string, DEFAULT_PREFS.homeLayouts),
   })
 })
 
@@ -55,8 +59,8 @@ app.put('/', async (c) => {
     .prepare(`
       INSERT INTO user_preferences
         (user_id, tenant_id, accent_color, sidebar_mode, home_layout, theme, density,
-         recent_items_count, recent_items, visible_modules, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         recent_items_count, recent_items, visible_modules, home_variant, home_layouts, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         accent_color       = excluded.accent_color,
         sidebar_mode       = excluded.sidebar_mode,
@@ -66,6 +70,8 @@ app.put('/', async (c) => {
         recent_items_count = excluded.recent_items_count,
         recent_items       = excluded.recent_items,
         visible_modules    = excluded.visible_modules,
+        home_variant       = excluded.home_variant,
+        home_layouts       = excluded.home_layouts,
         updated_at         = excluded.updated_at
     `)
     .bind(
@@ -79,6 +85,8 @@ app.put('/', async (c) => {
       body.recentItemsCount ?? DEFAULT_PREFS.recentItemsCount,
       JSON.stringify(body.recentItems ?? []),
       JSON.stringify(body.visibleModules ?? []),
+      body.homeVariant ?? DEFAULT_PREFS.homeVariant,
+      JSON.stringify(body.homeLayouts ?? {}),
       now,
     )
     .run()

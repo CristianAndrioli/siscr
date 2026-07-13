@@ -864,6 +864,41 @@ app.get('/dashboard', async (c) => {
   const totalDisponivel = (contasBancarias as Array<{ saldo_atual: number }>)
     .reduce((sum, r) => sum + (r.saldo_atual ?? 0), 0)
 
+  // ─── Widgets da home personalizável ──────────────────────────────
+  const [faturamentoDiario, faturamentoTotais, estoqueCritico, osAbertas] = await Promise.all([
+    c.env.DB_SHARED.prepare(`
+      SELECT date(created_at) as dia, SUM(valor_total) as total
+      FROM notas_fiscais
+      WHERE tenant_id = ? AND status = 'emitida' AND date(created_at) >= date('now', 'start of month')
+      GROUP BY date(created_at) ORDER BY dia
+    `).bind(tenant.tenantId).all(),
+
+    c.env.DB_SHARED.prepare(`
+      SELECT
+        SUM(CASE WHEN date(created_at) >= date('now','start of month') THEN valor_total ELSE 0 END) as mes_atual,
+        SUM(CASE WHEN date(created_at) >= date('now','start of month','-1 month')
+                  AND date(created_at) < date('now','start of month') THEN valor_total ELSE 0 END) as mes_anterior
+      FROM notas_fiscais WHERE tenant_id = ? AND status = 'emitida'
+    `).bind(tenant.tenantId).first(),
+
+    c.env.DB_SHARED.prepare(`
+      SELECT e.produto_id, p.codigo, p.descricao, e.quantidade, p.estoque_minimo
+      FROM estoque e JOIN produtos p ON p.id = e.produto_id
+      WHERE e.tenant_id = ? AND p.estoque_minimo > 0 AND e.quantidade <= p.estoque_minimo
+      ORDER BY (e.quantidade * 1.0 / NULLIF(p.estoque_minimo, 0)) ASC
+      LIMIT 5
+    `).bind(tenant.tenantId).all(),
+
+    c.env.DB_SHARED.prepare(`
+      SELECT os.id, os.status, os.turno_data, m.nome as maquina_nome, ob.nome as obra_nome
+      FROM ordens_servico_frota os
+      LEFT JOIN maquinas m ON m.id = os.maquina_id
+      LEFT JOIN obras ob ON ob.id = os.obra_id
+      WHERE os.tenant_id = ? AND os.status IN ('pendente', 'execucao')
+      ORDER BY os.turno_data DESC LIMIT 5
+    `).bind(tenant.tenantId).all(),
+  ])
+
   return c.json({
     receber,
     pagar,
@@ -871,6 +906,10 @@ app.get('/dashboard', async (c) => {
     proximosVencimentosCP: vencerPagar7.results,
     contas_bancarias: contasBancarias,
     total_disponivel: totalDisponivel,
+    faturamento_diario: faturamentoDiario.results,
+    faturamento_mes: (faturamentoTotais as { mes_atual: number | null; mes_anterior: number | null } | null) ?? { mes_atual: 0, mes_anterior: 0 },
+    estoque_critico: estoqueCritico.results,
+    os_abertas: osAbertas.results,
   })
 })
 

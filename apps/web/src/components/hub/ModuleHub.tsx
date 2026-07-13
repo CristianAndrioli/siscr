@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { icons, Icon } from '../icons';
 import { HUB_MODULES } from '../../config/hubConfig';
+import { useUserPreferences } from '../../hooks/useUserPreferences';
 
 const BADGE_CLS: Record<'NOVO' | 'DEV', string> = {
   NOVO: 'bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300',
@@ -15,6 +16,7 @@ const BADGE_CLS: Record<'NOVO' | 'DEV', string> = {
  */
 export default function ModuleHub({ moduleKey }: { moduleKey: string }) {
   const mod = HUB_MODULES[moduleKey];
+  const { trackRecentItem } = useUserPreferences();
 
   if (!mod) {
     return (
@@ -46,6 +48,7 @@ export default function ModuleHub({ moduleKey }: { moduleKey: string }) {
               <Link
                 key={`${item.to}-${item.label}-${idx}`}
                 to={item.to}
+                onClick={() => trackRecentItem({ label: `${mod.label} — ${item.label}`, to: item.to, icon: mod.icon })}
                 className="group flex items-center gap-3 p-4 rounded-card border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
               >
                 <div className="w-[34px] h-[34px] rounded-lg bg-[rgb(var(--tint-rgb)/0.12)] dark:bg-[rgb(var(--tint-rgb)/0.16)] text-brand-600 dark:text-brand-400 flex items-center justify-center flex-none">
