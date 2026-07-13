@@ -40,6 +40,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'contas-pagar': 'Contas a Pagar',
   'contas-bancarias': 'Contas Bancárias',
   conciliacao: 'Conciliação Bancária',
+  'fluxo-caixa': 'Fluxo de Caixa',
   'regua-cobranca': 'Régua de Cobrança',
   dashboard: 'Dashboard',
   faturamento: 'Faturamento',

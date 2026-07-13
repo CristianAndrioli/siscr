@@ -913,4 +913,75 @@ app.get('/dashboard', async (c) => {
   })
 })
 
+// ─── Fluxo de caixa (projeção) ──────────────────────────────────────
+
+/**
+ * Projeção de saldo: parte do saldo bancário atual e acumula, dia a
+ * dia, as contas a receber/pagar pendentes com vencimento no período.
+ * Títulos já vencidos (vencimento < hoje) contam no dia de hoje — já
+ * eram esperados e não "somem" da projeção.
+ */
+app.get('/fluxo-caixa', async (c) => {
+  const tenant = c.get('tenant')
+  const dias = Math.min(365, Math.max(1, Number(c.req.query('dias') ?? 30)))
+
+  const [saldoBancario, entradas, saidas] = await Promise.all([
+    c.env.DB_SHARED.prepare(`
+      SELECT COALESCE(SUM(
+        COALESCE(cb.saldo_inicial, 0)
+          + COALESCE((SELECT SUM(CASE WHEN mb.tipo = 'credito' THEN mb.valor ELSE 0 END) FROM movimentos_bancarios mb WHERE mb.conta_bancaria_id = cb.id), 0)
+          - COALESCE((SELECT SUM(CASE WHEN mb.tipo = 'debito'  THEN mb.valor ELSE 0 END) FROM movimentos_bancarios mb WHERE mb.conta_bancaria_id = cb.id), 0)
+      ), 0) as total
+      FROM contas_bancarias cb WHERE cb.tenant_id = ? AND cb.ativo = 1
+    `).bind(tenant.tenantId).first<{ total: number }>(),
+
+    c.env.DB_SHARED.prepare(`
+      SELECT vencimento, SUM(valor - COALESCE(valor_pago, 0)) as total
+      FROM contas_receber
+      WHERE tenant_id = ? AND status IN ('pendente', 'parcialmente_pago')
+        AND vencimento <= date('now', '+' || ? || ' days')
+      GROUP BY vencimento
+    `).bind(tenant.tenantId, dias).all<{ vencimento: string; total: number }>(),
+
+    c.env.DB_SHARED.prepare(`
+      SELECT vencimento, SUM(valor) as total
+      FROM contas_pagar
+      WHERE tenant_id = ? AND status = 'pendente'
+        AND vencimento <= date('now', '+' || ? || ' days')
+      GROUP BY vencimento
+    `).bind(tenant.tenantId, dias).all<{ vencimento: string; total: number }>(),
+  ])
+
+  const hoje = new Date().toISOString().slice(0, 10)
+  const porDia = new Map<string, { entradas: number; saidas: number }>()
+  const efetiva = (venc: string) => (venc < hoje ? hoje : venc)
+
+  for (const r of entradas.results ?? []) {
+    const dia = efetiva(r.vencimento)
+    const cur = porDia.get(dia) ?? { entradas: 0, saidas: 0 }
+    cur.entradas += r.total
+    porDia.set(dia, cur)
+  }
+  for (const r of saidas.results ?? []) {
+    const dia = efetiva(r.vencimento)
+    const cur = porDia.get(dia) ?? { entradas: 0, saidas: 0 }
+    cur.saidas += r.total
+    porDia.set(dia, cur)
+  }
+
+  const diasOrdenados = Array.from(porDia.keys()).sort()
+  let acumulado = saldoBancario?.total ?? 0
+  const serie = diasOrdenados.map((dia) => {
+    const { entradas: e, saidas: s } = porDia.get(dia)!
+    acumulado += e - s
+    return { dia, entradas: e, saidas: s, saldo_acumulado: acumulado }
+  })
+
+  return c.json({
+    saldo_inicial: saldoBancario?.total ?? 0,
+    dias,
+    serie,
+  })
+})
+
 export default app

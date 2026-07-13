@@ -82,6 +82,7 @@ import ExportacoesPage from './pages/contabilidade/ExportacoesPage';
 import RelatoriosPage from './pages/relatorios/RelatoriosPage';
 import PedidosVendaList from './pages/vendas/PedidosVendaList';
 import PedidoVendaDetail from './pages/vendas/PedidoVendaDetail';
+import FluxoCaixaPage from './pages/financeiro/FluxoCaixaPage';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -179,6 +180,7 @@ function App() {
         <Route path="/financeiro/contas-bancarias" element={<ProtectedRoute><Layout><ContasBancariasPage /></Layout></ProtectedRoute>} />
         <Route path="/financeiro/contas-bancarias/:id" element={<ProtectedRoute><ContaBancariaDetailPage /></ProtectedRoute>} />
         <Route path="/financeiro/conciliacao/nova" element={<ProtectedRoute><ConciliacaoWizard /></ProtectedRoute>} />
+        <Route path="/financeiro/fluxo-caixa" element={<ProtectedRoute><FluxoCaixaPage /></ProtectedRoute>} />
 
         {/* Vendas & CRM */}
         <Route path="/vendas-crm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="vendas-crm" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />

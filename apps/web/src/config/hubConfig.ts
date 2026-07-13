@@ -180,7 +180,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         items: [
           { label: 'Contas a Receber', to: '/financeiro/contas-receber' },
           { label: 'Contas a Pagar', to: '/financeiro/contas-pagar' },
-          { label: 'Fluxo de caixa', to: '/financeiro', badge: 'DEV' },
+          { label: 'Fluxo de caixa', to: '/financeiro/fluxo-caixa', badge: 'NOVO' },
         ],
       },
       {
