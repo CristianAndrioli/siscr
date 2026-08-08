@@ -505,7 +505,8 @@ app.get('/nf-entradas', async (c) => {
   const { results } = await c.env.DB_SHARED
     .prepare(
       `SELECT n.id, n.chave_acesso, n.emitente_cnpj, n.emitente_nome, n.data_emissao,
-              n.numero, n.serie, n.valor_total, n.status, n.fornecedor_id,
+              n.numero, n.serie, n.valor_total, n.status, n.fornecedor_id, n.origem,
+              n.empresa_id, n.filial_id, n.pedido_compra_id,
               n.created_at, p.nome as fornecedor_nome
        ${where}
        ORDER BY n.data_emissao DESC, n.created_at DESC
@@ -515,6 +516,296 @@ app.get('/nf-entradas', async (c) => {
     .all()
 
   return c.json({ entradas: results, total, page, limit })
+})
+
+const uuidOpcionalEntrada = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z.string().uuid().optional(),
+)
+
+const filialOpcionalEntrada = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().uuid().nullish(),
+)
+
+const itemManualSchema = z.object({
+  produtoId: z.string().uuid(),
+  descricao: z.string().min(1).max(500),
+  quantidade: z.number().positive(),
+  valorUnitario: z.number().min(0),
+  desconto: z.number().min(0).default(0),
+  unidade: z.string().max(6).default('UN'),
+  ncm: z.string().optional(),
+  cfop: z.string().optional(),
+  itemPedidoId: z.string().uuid().nullable().optional(),
+})
+
+const cobrancaManualSchema = z.object({
+  numero: z.string().optional(),
+  vencimento: z.string().min(8),
+  valor: z.number().positive(),
+})
+
+/**
+ * Lançamento manual de nota de compra — espelho do confirmar via XML,
+ * sem R2/assinatura. Relacionamentos: empresa (obrig.), filial (opcional =
+ * matriz), fornecedor, itens→produtos, pedido de compra opcional.
+ */
+const manualCreateSchema = z.object({
+  empresaId: z.string().uuid(),
+  filialId: filialOpcionalEntrada,
+  fornecedorId: z.string().uuid(),
+  numero: z.number().int().positive(),
+  serie: z.string().min(1).max(10).default('1'),
+  dataEmissao: z.string().min(8),
+  naturezaOperacao: z.string().max(120).optional(),
+  desconto: z.number().min(0).default(0),
+  itens: z.array(itemManualSchema).min(1),
+  cobranca: z.array(cobrancaManualSchema).optional(),
+  pedidoCompraId: uuidOpcionalEntrada,
+  gerarEstoque: z.boolean().default(true),
+  gerarContasPagar: z.boolean().default(true),
+})
+
+app.post('/nf-entradas', zValidator('json', manualCreateSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const data = c.req.valid('json')
+  const uid = auditUserId(c)
+  const usuarioMov = (c.get('user') as { userId?: string } | undefined)?.userId ?? null
+  const db = c.env.DB_SHARED
+
+  const empresa = await db
+    .prepare(`SELECT id, cnpj, razao_social FROM empresas WHERE id = ? AND tenant_id = ?`)
+    .bind(data.empresaId, tenant.tenantId)
+    .first<{ id: string; cnpj: string | null; razao_social: string }>()
+  if (!empresa) return c.json({ error: 'Empresa não encontrada.' }, 400)
+  const destCnpj = onlyDigits(empresa.cnpj || '')
+  if (destCnpj.length !== 14) {
+    return c.json({ error: 'Cadastre o CNPJ da empresa antes de lançar nota de entrada.' }, 400)
+  }
+
+  if (data.filialId) {
+    const fil = await db
+      .prepare(`SELECT id FROM filiais WHERE id = ? AND empresa_id = ? AND tenant_id = ?`)
+      .bind(data.filialId, data.empresaId, tenant.tenantId)
+      .first()
+    if (!fil) return c.json({ error: 'Filial não pertence à empresa selecionada.' }, 400)
+  }
+
+  const fornecedor = await db
+    .prepare(
+      `SELECT id, nome, cpf_cnpj FROM pessoas
+       WHERE id = ? AND tenant_id = ? AND tipo_cadastro = 'fornecedor'`,
+    )
+    .bind(data.fornecedorId, tenant.tenantId)
+    .first<{ id: string; nome: string; cpf_cnpj: string | null }>()
+  if (!fornecedor) return c.json({ error: 'Fornecedor não encontrado.' }, 400)
+  const emitCnpj = onlyDigits(fornecedor.cpf_cnpj || '')
+  if (emitCnpj.length < 11) {
+    return c.json({ error: 'Fornecedor sem CPF/CNPJ válido.' }, 400)
+  }
+
+  // Duplicidade documental (mesmo emitente + número + série na empresa).
+  const dup = await db
+    .prepare(
+      `SELECT id FROM nf_entradas
+       WHERE tenant_id = ? AND empresa_id = ? AND emitente_cnpj = ?
+         AND numero = ? AND serie = ?
+       LIMIT 1`,
+    )
+    .bind(tenant.tenantId, data.empresaId, emitCnpj, data.numero, data.serie || '1')
+    .first<{ id: string }>()
+  if (dup) {
+    return c.json({ error: 'Já existe nota de entrada com este número/série para o fornecedor.', id: dup.id }, 409)
+  }
+
+  const itensOut: Record<string, unknown>[] = []
+  let valorProdutos = 0
+  for (const it of data.itens) {
+    const prod = await db
+      .prepare(`SELECT id, descricao, unidade, ncm FROM produtos WHERE id = ? AND tenant_id = ?`)
+      .bind(it.produtoId, tenant.tenantId)
+      .first<{ id: string; descricao: string; unidade: string | null; ncm: string | null }>()
+    if (!prod) return c.json({ error: `Produto ${it.produtoId} não encontrado.` }, 400)
+    const valorTotal = it.quantidade * it.valorUnitario - (it.desconto ?? 0)
+    if (valorTotal < 0) return c.json({ error: `Item “${it.descricao}”: desconto maior que o total.` }, 400)
+    valorProdutos += valorTotal
+    itensOut.push({
+      descricao: it.descricao || prod.descricao,
+      quantidade: it.quantidade,
+      valorUnitario: it.valorUnitario,
+      desconto: it.desconto ?? 0,
+      valorTotal,
+      unidade: it.unidade || prod.unidade || 'UN',
+      ncm: it.ncm || prod.ncm || undefined,
+      cfop: it.cfop || undefined,
+      produto_id: it.produtoId,
+      criado_no_import: false,
+      item_pedido_id: it.itemPedidoId ?? null,
+    })
+  }
+  const valorTotalNota = Math.max(valorProdutos - (data.desconto ?? 0), 0)
+
+  let pedido = null as Awaited<ReturnType<typeof carregarPedidoComItens>>
+  const itemPedidoPorIndice = new Map<number, string>()
+  if (data.pedidoCompraId) {
+    pedido = await carregarPedidoComItens(db, tenant.tenantId, data.pedidoCompraId)
+    if (!pedido) return c.json({ error: 'Pedido de compra não encontrado.' }, 404)
+    if (pedido.fornecedor_id !== data.fornecedorId) {
+      return c.json({ error: `O pedido ${pedido.numero} é de outro fornecedor.` }, 400)
+    }
+    if (!STATUS_PEDIDO_ABERTO.includes(pedido.status as (typeof STATUS_PEDIDO_ABERTO)[number])) {
+      return c.json({ error: `O pedido ${pedido.numero} não pode receber mercadoria.` }, 400)
+    }
+    const porId = new Map(pedido.itens.map((i) => [i.id, i]))
+    const usados = new Set<string>()
+    for (let indice = 0; indice < data.itens.length; indice++) {
+      const it = data.itens[indice]!
+      if (!it.itemPedidoId) continue
+      const alvo = porId.get(it.itemPedidoId)
+      if (!alvo) return c.json({ error: `Item ${indice + 1}: não pertence ao pedido.` }, 400)
+      if (usados.has(alvo.id)) return c.json({ error: `Item ${indice + 1}: item do pedido repetido.` }, 400)
+      if (it.quantidade > alvo.saldo + 0.01) {
+        return c.json(
+          { error: `Item ${indice + 1}: quantidade acima do saldo do pedido (${alvo.saldo}).` },
+          400,
+        )
+      }
+      usados.add(alvo.id)
+      itemPedidoPorIndice.set(indice, alvo.id)
+      itensOut[indice]!.item_pedido_id = alvo.id
+    }
+  }
+
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const chaveManual = `MANUAL-${id.replace(/-/g, '')}`
+  const xmlPath = `manual/${id}`
+  const duplicatas =
+    data.cobranca && data.cobranca.length > 0
+      ? data.cobranca
+      : [{ vencimento: data.dataEmissao.slice(0, 10), valor: valorTotalNota }]
+
+  const neRow = {
+    id,
+    empresa_id: data.empresaId,
+    filial_id: data.filialId ?? null,
+    fornecedor_id: data.fornecedorId,
+    cobranca_json: JSON.stringify(duplicatas),
+    data_emissao: data.dataEmissao.slice(0, 10),
+    valor_total: valorTotalNota,
+    numero: data.numero,
+    serie: data.serie || '1',
+    emitente_nome: fornecedor.nome,
+    emitente_cnpj: emitCnpj,
+    chave_acesso: chaveManual,
+  }
+
+  const stmts: ReturnType<typeof db.prepare>[] = []
+  const contasPagarCriadas: string[] = []
+
+  stmts.push(
+    db
+      .prepare(
+        `INSERT INTO nf_entradas
+        (id, tenant_id, empresa_id, filial_id, chave_acesso, xml_path, emitente_cnpj, emitente_nome,
+         destinatario_cnpj, data_emissao, numero, serie, natureza_operacao, valor_total, valor_produtos,
+         fornecedor_id, pedido_compra_id, itens_json, cobranca_json, assinatura_valida, status, origem,
+         created_at, updated_at, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'lancada', 'manual', ?, ?, ?, ?)`,
+      )
+      .bind(
+        id,
+        tenant.tenantId,
+        data.empresaId,
+        data.filialId ?? null,
+        chaveManual,
+        xmlPath,
+        emitCnpj,
+        fornecedor.nome,
+        destCnpj,
+        data.dataEmissao.slice(0, 10),
+        data.numero,
+        data.serie || '1',
+        data.naturezaOperacao || 'Compra de mercadorias',
+        valorTotalNota,
+        valorProdutos,
+        data.fornecedorId,
+        pedido ? pedido.id : null,
+        JSON.stringify(itensOut),
+        JSON.stringify(duplicatas),
+        now,
+        now,
+        uid,
+        uid,
+      ),
+  )
+
+  if (data.gerarEstoque !== false) {
+    appendStmtEntradaEstoquePorItens(
+      db,
+      stmts,
+      tenant.tenantId,
+      id,
+      itensOut.filter((_, i) => !itemPedidoPorIndice.has(i)),
+      usuarioMov,
+      uid,
+      now,
+    )
+  }
+
+  let recebimentoId: string | null = null
+  let statusPedido: string | null = null
+  if (pedido && itemPedidoPorIndice.size > 0 && data.gerarEstoque !== false) {
+    recebimentoId = crypto.randomUUID()
+    statusPedido = appendStmtRecebimentoDaNfEntrada(db, stmts, {
+      tenantId: tenant.tenantId,
+      recebimentoId,
+      nfEntradaId: id,
+      pedido,
+      itensOut,
+      itemPedidoPorIndice,
+      usuarioMov,
+      uid,
+      now,
+      numeroNota: data.numero,
+    })
+  }
+
+  if (data.gerarContasPagar !== false) {
+    appendStmtContasPagarNfEntrada(
+      db,
+      stmts,
+      contasPagarCriadas,
+      tenant.tenantId,
+      uid,
+      now,
+      neRow,
+      'Fornecedores',
+    )
+  }
+
+  try {
+    await db.batch(stmts)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('Item ')) return c.json({ error: msg }, 400)
+    throw e
+  }
+
+  return c.json(
+    {
+      id,
+      message: 'Nota de entrada lançada manualmente.',
+      origem: 'manual',
+      status: 'lancada',
+      pedido_compra_id: pedido?.id ?? null,
+      pedido_compra_status: statusPedido,
+      recebimento_id: recebimentoId,
+      contas_pagar_criadas: contasPagarCriadas,
+    },
+    201,
+  )
 })
 
 // POST /nf-entradas/preview-xml — análise sem gravar (assistente)
@@ -893,8 +1184,9 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
         `INSERT INTO nf_entradas
         (id, tenant_id, empresa_id, filial_id, chave_acesso, xml_path, emitente_cnpj, emitente_nome,
          destinatario_cnpj, data_emissao, numero, serie, natureza_operacao, valor_total, valor_produtos,
-         fornecedor_id, pedido_compra_id, itens_json, cobranca_json, assinatura_valida, status, created_at, updated_at, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', ?, ?, ?, ?)`,
+         fornecedor_id, pedido_compra_id, itens_json, cobranca_json, assinatura_valida, status, origem,
+         created_at, updated_at, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', 'xml', ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -1167,8 +1459,9 @@ app.post('/nf-entradas/importar-xml', async (c) => {
         `INSERT INTO nf_entradas
         (id, tenant_id, empresa_id, filial_id, chave_acesso, xml_path, emitente_cnpj, emitente_nome,
          destinatario_cnpj, data_emissao, numero, serie, natureza_operacao, valor_total, valor_produtos,
-         fornecedor_id, itens_json, cobranca_json, assinatura_valida, status, created_at, updated_at, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', ?, ?, ?, ?)`,
+         fornecedor_id, itens_json, cobranca_json, assinatura_valida, status, origem,
+         created_at, updated_at, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', 'xml', ?, ?, ?, ?)`,
       )
       .bind(
         id,

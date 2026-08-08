@@ -52,7 +52,7 @@ const ROUTE_LABELS: Record<string, string> = {
   ncm: 'Tabela NCM',
   nfse: 'NFSe',
   entrada: 'Entrada',
-  notas: 'Notas Importadas',
+  notas: 'Notas de Entrada',
   dfe: 'Distribuição DFe',
   nova: 'Nova',
   'nf-e': 'NF-e',

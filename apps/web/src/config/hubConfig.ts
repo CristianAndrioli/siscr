@@ -109,8 +109,8 @@ export const HUB_MODULES: Record<string, HubModule> = {
       {
         title: 'Documentos fiscais',
         items: [
-          { label: 'NF-e de entrada', to: '/entrada/nf-e/nova' },
-          { label: 'Notas importadas', to: '/entrada/notas' },
+          { label: 'Notas de entrada', to: '/entrada/notas' },
+          { label: 'Importar XML', to: '/entrada/nf-e/nova' },
           { label: 'Distribuição DFe', to: '/entrada/dfe' },
         ],
       },

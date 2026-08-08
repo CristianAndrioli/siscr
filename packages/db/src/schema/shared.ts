@@ -319,11 +319,15 @@ export const nfEntradas = sqliteTable('nf_entradas', {
   cobrancaJson: text('cobranca_json'),
   assinaturaValida: integer('assinatura_valida', { mode: 'boolean' }),
   status: text('status').notNull().default('importada'),
+  /** xml | manual — lançamento sem arquivo SEFAZ */
+  origem: text('origem').notNull().default('xml'),
+  pedidoCompraId: text('pedido_compra_id'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at'),
 }, (t) => [
   uniqueIndex('idx_nf_entrada_chave').on(t.tenantId, t.chaveAcesso),
   index('idx_nf_entrada_tenant').on(t.tenantId),
+  index('idx_nf_entrada_origem').on(t.tenantId, t.origem),
 ])
 
 export const contasPagar = sqliteTable('contas_pagar', {

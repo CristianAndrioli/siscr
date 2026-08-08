@@ -10,9 +10,41 @@ export interface NfEntradaListItem {
   serie: string | null;
   valor_total: number;
   status: string;
+  origem?: 'xml' | 'manual' | string;
+  empresa_id?: string | null;
+  filial_id?: string | null;
+  pedido_compra_id?: string | null;
   fornecedor_id: string | null;
   created_at: string;
   fornecedor_nome?: string | null;
+}
+
+export interface NfEntradaManualItemInput {
+  produtoId: string;
+  descricao: string;
+  quantidade: number;
+  valorUnitario: number;
+  desconto?: number;
+  unidade?: string;
+  ncm?: string;
+  cfop?: string;
+  itemPedidoId?: string | null;
+}
+
+export interface NfEntradaManualCreate {
+  empresaId: string;
+  filialId?: string | null;
+  fornecedorId: string;
+  numero: number;
+  serie?: string;
+  dataEmissao: string;
+  naturezaOperacao?: string;
+  desconto?: number;
+  itens: NfEntradaManualItemInput[];
+  cobranca?: { numero?: string; vencimento: string; valor: number }[];
+  pedidoCompraId?: string;
+  gerarEstoque?: boolean;
+  gerarContasPagar?: boolean;
 }
 
 export interface NfEntradaItem {
@@ -147,6 +179,20 @@ export async function listNfEntradas(params?: { empresaId?: string; filialId?: s
     '/tenant/entrada/nf-entradas',
     { params }
   );
+  return data;
+}
+
+export async function criarNfEntradaManual(payload: NfEntradaManualCreate) {
+  const { data } = await api.post<{
+    id: string;
+    message: string;
+    origem: 'manual';
+    status: string;
+    pedido_compra_id: string | null;
+    pedido_compra_status: string | null;
+    recebimento_id: string | null;
+    contas_pagar_criadas: string[];
+  }>('/tenant/entrada/nf-entradas', payload);
   return data;
 }
 

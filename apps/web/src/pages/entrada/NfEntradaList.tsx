@@ -1,139 +1,180 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import * as entradaService from '../../services/entradaService';
 import { fmtBRL, fmtDate } from '../../utils/format';
-import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import BaseListPage from '../../components/common/BaseListPage';
+import SmartGrid, { type SmartColumn } from '../../components/common/SmartGrid';
+import { exportRowsToCsv, smartColumnsToCsv } from '../../utils/exportCsv';
 
 interface EmpresaRow {
   id: string;
   razao_social: string;
 }
 
+const GRID_ID = 'nf-entrada-list';
+
+const ORIGEM_LABEL: Record<string, string> = {
+  xml: 'XML',
+  manual: 'Manual',
+};
+
+const STATUS_CLS: Record<string, string> = {
+  importada: 'bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300',
+  lancada: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300',
+};
+
 export default function NfEntradaList() {
-  const { reportError } = useErrorNotification();
+  const navigate = useNavigate();
   const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
   const [empresaId, setEmpresaId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [entradas, setEntradas] = useState<entradaService.NfEntradaListItem[]>([]);
-  const [total, setTotal] = useState(0);
 
-  const loadMeta = useCallback(async () => {
-    try {
-      const eRes = await api.get('/tenant/info/empresas');
-      const elist = (eRes.data.empresas ?? []) as EmpresaRow[];
-      setEmpresas(elist);
-      setEmpresaId((prev) => prev || elist[0]?.id || '');
-    } catch {
-      reportError('Não foi possível carregar empresas.');
-    }
-  }, [reportError]);
+  useEffect(() => {
+    api
+      .get('/tenant/info/empresas')
+      .then((r) => {
+        const elist = (r.data?.empresas ?? []) as EmpresaRow[];
+        setEmpresas(elist);
+        setEmpresaId((prev) => prev || elist[0]?.id || '');
+      })
+      .catch(() => setError('Não foi possível carregar empresas.'));
+  }, []);
 
-  const loadList = useCallback(async () => {
+  const load = useCallback(async () => {
+    if (!empresaId) return;
     setLoading(true);
+    setError('');
     try {
-      const r = await entradaService.listNfEntradas({ empresaId: empresaId || undefined, limit: 100, page: 0 });
+      const r = await entradaService.listNfEntradas({ empresaId, limit: 200, page: 0 });
       setEntradas(r.entradas ?? []);
-      setTotal(r.total ?? 0);
     } catch {
-      reportError('Erro ao listar notas de entrada.');
+      setError('Erro ao listar notas de entrada.');
     } finally {
       setLoading(false);
     }
-  }, [empresaId, reportError]);
+  }, [empresaId]);
 
   useEffect(() => {
-    loadMeta();
-  }, [loadMeta]);
+    load();
+  }, [load]);
 
-  useEffect(() => {
-    if (empresaId) loadList();
-  }, [empresaId, loadList]);
+  const columns: SmartColumn<entradaService.NfEntradaListItem>[] = [
+    {
+      key: 'numero',
+      label: 'Nº / Série',
+      width: 100,
+      align: 'center',
+      required: true,
+      render: (_v, row) => (
+        <span className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
+          {row.numero ?? '—'}/{row.serie ?? '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'emitente_nome',
+      label: 'Fornecedor',
+      width: 240,
+      required: true,
+      render: (_v, row) => (
+        <div>
+          <div className="font-medium text-slate-800 dark:text-slate-100 truncate">
+            {row.fornecedor_nome || row.emitente_nome || row.emitente_cnpj || '—'}
+          </div>
+          {row.fornecedor_nome && row.emitente_nome && row.fornecedor_nome !== row.emitente_nome ? (
+            <div className="text-[11px] text-slate-400 truncate">{row.emitente_nome}</div>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: 'origem',
+      label: 'Origem',
+      width: 90,
+      render: (v) => (
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+          {ORIGEM_LABEL[String(v || 'xml')] || String(v || 'xml')}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      width: 110,
+      render: (v) => (
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+            STATUS_CLS[String(v)] || 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+          }`}
+        >
+          {String(v || '—')}
+        </span>
+      ),
+    },
+    {
+      key: 'data_emissao',
+      label: 'Emissão',
+      width: 110,
+      render: (v) => (v ? fmtDate(String(v)) : '—'),
+    },
+    {
+      key: 'valor_total',
+      label: 'Valor',
+      width: 130,
+      align: 'right',
+      render: (v) => (
+        <span className="font-mono text-slate-700 dark:text-slate-200">{fmtBRL(Number(v))}</span>
+      ),
+    },
+  ];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Notas importadas</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">
-            NF-e de compra já gravadas no sistema. Para nova importação use o assistente.
-          </p>
-        </div>
-        <Link
-          to="/entrada/nf-e/nova"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold shadow-sm"
+    <BaseListPage
+      title="Notas de entrada"
+      description="NF-e de compra — importação XML ou lançamento manual"
+      onExport={() => exportRowsToCsv('nf-entrada', smartColumnsToCsv(columns), entradas)}
+    >
+      <div className="flex flex-wrap gap-2 items-center">
+        <select
+          value={empresaId}
+          onChange={(e) => setEmpresaId(e.target.value)}
+          className="input w-auto"
         >
-          Nova importação assistida
-        </Link>
+          {empresas.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.razao_social}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn-secondary text-sm"
+          onClick={() => navigate('/entrada/nf-e/nova')}
+        >
+          Importar XML
+        </button>
       </div>
 
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 flex flex-wrap items-center gap-3">
-        <label className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-2">
-          Filtrar por empresa:
-          <select
-            value={empresaId}
-            onChange={(e) => setEmpresaId(e.target.value)}
-            className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-sm bg-white dark:bg-slate-950"
-          >
-            {empresas.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.razao_social}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="text-xs text-slate-400">{total} registro(s)</span>
-      </div>
-
-      {loading ? (
-        <p className="text-slate-500 text-sm">Carregando…</p>
-      ) : entradas.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-slate-500">
-          <p className="mb-4">Nenhuma NF-e de entrada ainda.</p>
-          <Link to="/entrada/nf-e/nova" className="text-brand-600 font-medium hover:underline">
-            Abrir assistente de importação
-          </Link>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase text-slate-500">
-              <tr>
-                <th className="px-4 py-2">Emissão</th>
-                <th className="px-4 py-2">Fornecedor</th>
-                <th className="px-4 py-2">Nº / Série</th>
-                <th className="px-4 py-2 text-right">Valor</th>
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {entradas.map((n) => (
-                <tr key={n.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
-                  <td className="px-4 py-2 whitespace-nowrap">{n.data_emissao ? fmtDate(n.data_emissao) : '—'}</td>
-                  <td className="px-4 py-2">
-                    <div className="font-medium text-slate-800 dark:text-slate-100">{n.emitente_nome || n.emitente_cnpj}</div>
-                    <div className="text-xs text-slate-500">
-                      {n.fornecedor_nome ? `Cadastro: ${n.fornecedor_nome}` : 'Fornecedor não vinculado'}
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    {n.numero ?? '—'} / {n.serie ?? '—'}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">{fmtBRL(n.valor_total)}</td>
-                  <td className="px-4 py-2 text-right">
-                    <Link
-                      to={`/entrada/notas/${n.id}`}
-                      className="text-brand-600 dark:text-brand-400 hover:underline font-medium"
-                    >
-                      Abrir
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+          {error}
         </div>
       )}
-    </div>
+
+      <SmartGrid<entradaService.NfEntradaListItem>
+        gridId={GRID_ID}
+        data={entradas}
+        columns={columns}
+        defaultSort={{ key: 'data_emissao', dir: 'desc' }}
+        loading={loading}
+        emptyMessage="Nenhuma nota de entrada. Importe um XML ou lance manualmente."
+        onRowClick={(n) => navigate(`/entrada/notas/${n.id}`)}
+        onCreate={() => navigate('/entrada/notas/novo')}
+        createLabel="+ Lançamento manual"
+      />
+    </BaseListPage>
   );
 }

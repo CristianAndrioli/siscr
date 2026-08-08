@@ -78,12 +78,12 @@ function transicaoPermitida(de: string, para: string): boolean {
 app.get('/pedidos', async (c) => {
   const tenant = c.get('tenant')
   const q = c.req.query()
-  const { empresaId, filialId, status } = q
+  const { empresaId, filialId, status, fornecedorId } = q
   const exportFmt = q.export
 
   let query = `
     SELECT pc.id, pc.numero, pc.status, pc.total, pc.created_at,
-           p.nome as fornecedor
+           pc.fornecedor_id, p.nome as fornecedor
     FROM pedidos_compra pc
     JOIN pessoas p ON p.id = pc.fornecedor_id
     WHERE pc.tenant_id = ?
@@ -92,6 +92,7 @@ app.get('/pedidos', async (c) => {
 
   if (empresaId) { query += ' AND pc.empresa_id = ?'; params.push(empresaId) }
   if (filialId) { query += ' AND pc.filial_id = ?'; params.push(filialId) }
+  if (fornecedorId) { query += ' AND pc.fornecedor_id = ?'; params.push(fornecedorId) }
   if (status) { query += ' AND pc.status = ?'; params.push(status) }
 
   query += ' ORDER BY pc.created_at DESC LIMIT 500'

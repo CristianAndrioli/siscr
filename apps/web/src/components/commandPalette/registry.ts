@@ -129,10 +129,18 @@ export const COMMAND_PALETTE_ITEMS: CommandPaletteItem[] = [
   },
   {
     id: 'ent-notas',
-    title: 'Notas de entrada importadas',
+    title: 'Notas de entrada',
     path: '/entrada/notas',
-    keywords: ['nf entrada', 'xml importado', 'compra'],
+    keywords: ['nf entrada', 'xml importado', 'compra', 'lançamento manual'],
     module: 'faturamento',
+  },
+  {
+    id: 'ent-manual',
+    title: 'Lançar nota de entrada (manual)',
+    path: '/entrada/notas/novo',
+    keywords: ['nota compra manual', 'lançar entrada', 'sem xml'],
+    module: 'faturamento',
+    action: 'change',
   },
   {
     id: 'ent-dfe',

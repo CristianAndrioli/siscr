@@ -9,6 +9,7 @@ export interface PedidoCompraListItem {
   total: number;
   created_at: string;
   fornecedor: string;
+  fornecedor_id?: string;
 }
 
 export interface PedidoCompra {
@@ -87,7 +88,12 @@ export const PROXIMOS_STATUS: Record<PedidoCompraStatus, PedidoCompraStatus[]> =
 };
 
 export const comprasService = {
-  list: async (params: { status?: PedidoCompraStatus } = {}): Promise<PedidoCompraListItem[]> => {
+  list: async (params: {
+    status?: PedidoCompraStatus;
+    empresaId?: string;
+    filialId?: string;
+    fornecedorId?: string;
+  } = {}): Promise<PedidoCompraListItem[]> => {
     const r = await api.get('/tenant/compras/pedidos', { params });
     return r.data.pedidos ?? [];
   },

@@ -221,6 +221,7 @@ function App() {
         <Route path="/entrada" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="entrada" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/nf-e/nova" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="change"><NfEntradaWizardPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/notas" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NfEntradaList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/entrada/notas/novo" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="change"><NfEntradaDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/notas/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NfEntradaDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/entrada/dfe" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><DfePage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 

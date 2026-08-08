@@ -785,6 +785,9 @@ app.get('/exportar/contador', async (c) => {
     .prepare(`
       SELECT chave_acesso, xml_path FROM nf_entradas
       WHERE tenant_id = ?
+        AND xml_path IS NOT NULL
+        AND xml_path NOT LIKE 'manual/%'
+        AND COALESCE(origem, 'xml') = 'xml'
         AND substr(COALESCE(data_emissao, created_at), 1, 10) >= ?
         AND substr(COALESCE(data_emissao, created_at), 1, 10) <= ?
         ${empFilter}
