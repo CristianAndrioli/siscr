@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { prettyJSON } from 'hono/pretty-json'
+import { HTTPException } from 'hono/http-exception'
 
 import { tenantMiddleware } from './middleware/tenant'
 import { authMiddleware } from './middleware/auth'
@@ -179,7 +180,28 @@ app.route('/__queue', queueRoutes)
 app.notFound((c) => c.json({ error: 'Rota não encontrada' }, 404))
 
 app.onError((err, c) => {
+  // Respostas de erro deliberadas (validação, 4xx) não são falhas do servidor:
+  // preservar status e corpo originais em vez de virarem 500 genérico.
+  if (err instanceof HTTPException) {
+    return err.getResponse()
+  }
+
   console.error('Erro não tratado:', err)
+
+  // Fora de produção o detalhe vai na resposta: sem isso, todo defeito em
+  // staging chega ao cliente como "Erro interno do servidor" e só é
+  // diagnosticável com `wrangler tail`.
+  if (c.env.ENVIRONMENT !== 'production') {
+    return c.json(
+      {
+        error: 'Erro interno do servidor',
+        detalhe: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack?.split('\n').slice(0, 5).join('\n') : undefined,
+      },
+      500,
+    )
+  }
+
   return c.json({ error: 'Erro interno do servidor' }, 500)
 })
 
