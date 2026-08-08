@@ -3,15 +3,6 @@ import { useUserPreferences } from '../../hooks/useUserPreferences'
 import type { UserPreferences } from '../../hooks/useUserPreferences'
 import { useTheme } from '../../hooks/useTheme'
 
-const ACCENT_COLORS: { hex: string; label: string }[] = [
-  { hex: '#4e6fdb', label: 'Azul (padrão)' },
-  { hex: '#17a673', label: 'Verde' },
-  { hex: '#c2542f', label: 'Terracota' },
-  { hex: '#8b5cf6', label: 'Violeta' },
-  { hex: '#ec4899', label: 'Rosa' },
-  { hex: '#64748b', label: 'Ardósia' },
-]
-
 const ALL_MODULES = [
   { key: 'financeiro', label: 'Financeiro' },
   { key: 'faturamento', label: 'Faturamento' },
@@ -111,34 +102,6 @@ export function PersonalizacaoPage() {
           />
         </Section>
 
-        {/* Cor de destaque */}
-        <Section title="Cor de destaque">
-          <div className="flex flex-wrap gap-3">
-            {ACCENT_COLORS.map(c => (
-              <button
-                key={c.hex}
-                onClick={() => updatePrefs({ accentColor: c.hex })}
-                title={c.label}
-                className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
-                  prefs.accentColor === c.hex
-                    ? 'border-slate-700 dark:border-slate-200 scale-110'
-                    : 'border-transparent'
-                }`}
-                style={{ backgroundColor: c.hex }}
-              >
-                {prefs.accentColor === c.hex && (
-                  <svg className="w-4 h-4 text-white mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-3">
-            Cor atual: <span className="font-mono">{prefs.accentColor}</span>
-          </p>
-        </Section>
-
         {/* Layout do Home */}
         <Section title="Layout do Home">
           <OptionGroup
@@ -149,35 +112,6 @@ export function PersonalizacaoPage() {
               { value: 'list', label: '≡ Lista', desc: 'Módulos em lista vertical' },
             ]}
           />
-        </Section>
-
-        {/* Modo da sidebar */}
-        <Section title="Barra lateral">
-          <OptionGroup
-            value={prefs.sidebarMode}
-            onChange={(v) => updatePrefs({ sidebarMode: v })}
-            options={[
-              { value: 'full', label: 'Completa', desc: 'Exibe ícones e labels' },
-              { value: 'icons', label: 'Ícones', desc: 'Somente ícones com tooltip' },
-              { value: 'hidden', label: 'Oculta', desc: 'Sem sidebar no desktop' },
-            ]}
-          />
-        </Section>
-
-        {/* Densidade */}
-        <Section title="Densidade">
-          <OptionGroup
-            value={prefs.density}
-            onChange={(v) => updatePrefs({ density: v })}
-            options={[
-              { value: 'compact', label: 'Compacto' },
-              { value: 'normal', label: 'Normal' },
-              { value: 'comfortable', label: 'Confortável' },
-            ]}
-          />
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-3">
-            A densidade afeta o espaçamento interno das tabelas e formulários.
-          </p>
         </Section>
 
         {/* Itens recentes */}

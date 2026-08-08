@@ -103,7 +103,7 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { hasModuleAccess } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
-  const { prefs, updatePrefs } = useUserPreferences();
+  const { updatePrefs } = useUserPreferences();
 
   const handleToggleTheme = () => {
     const next = isDark ? 'light' : 'dark';
@@ -167,26 +167,8 @@ export default function Layout({ children }: LayoutProps) {
     }))
     .filter(section => section.items.length > 0);
 
-  const iconsOnly = prefs.sidebarMode === 'icons';
-
   const NavLink = ({ item }: { item: SidebarNavItem }) => {
     const active = isActive(item.to);
-    if (iconsOnly) {
-      return (
-        <Link
-          to={item.to}
-          title={item.label}
-          onClick={() => setSidebarOpen(false)}
-          className={`relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-            active
-              ? 'bg-[rgb(var(--tint-rgb)/0.12)] dark:bg-[rgb(var(--tint-rgb)/0.16)] text-brand-700 dark:text-[var(--acc-light)]'
-              : 'text-slate-500 dark:text-sidebar-text hover:bg-slate-100 dark:hover:bg-sidebar-hover hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Icon d={icons[item.icon]} className="w-4 h-4" />
-        </Link>
-      );
-    }
     return (
       <Link
         to={item.to}
@@ -211,59 +193,51 @@ export default function Layout({ children }: LayoutProps) {
   const sidebarContent = (
     <aside className="flex flex-col h-full bg-white dark:bg-sidebar border-r border-slate-200 dark:border-sidebar-border transition-colors duration-200">
       {/* Logo */}
-      <div className={`flex items-center gap-3 h-[60px] border-b border-slate-100 dark:border-sidebar-divider flex-none ${iconsOnly ? 'justify-center' : 'px-5'}`}>
+      <div className="flex items-center gap-3 h-[60px] px-5 border-b border-slate-100 dark:border-sidebar-divider flex-none">
         <div className="w-[30px] h-[30px] rounded-lg bg-gradient-brand flex items-center justify-center text-white font-display font-extrabold text-xs flex-none">S</div>
-        {!iconsOnly && (
-          <div className="min-w-0">
-            <div className="font-display font-bold text-slate-900 dark:text-white text-sm leading-none">SISCR</div>
-            {tenantSlug && <div className="text-[11px] font-mono text-slate-400 dark:text-sidebar-text mt-1 truncate">@{tenantSlug}</div>}
-          </div>
-        )}
+        <div className="min-w-0">
+          <div className="font-display font-bold text-slate-900 dark:text-white text-sm leading-none">SISCR</div>
+          {tenantSlug && <div className="text-[11px] font-mono text-slate-400 dark:text-sidebar-text mt-1 truncate">@{tenantSlug}</div>}
+        </div>
       </div>
 
       {/* Nav por seções */}
-      <nav className={`flex-1 overflow-y-auto py-4 space-y-5 ${iconsOnly ? 'flex flex-col items-center px-1.5' : 'px-3'}`}>
+      <nav className="flex-1 overflow-y-auto py-4 space-y-5 px-3">
         {visibleSections.map(section => (
-          <div key={section.title} className={iconsOnly ? 'w-full flex flex-col items-center gap-1' : 'space-y-0.5'}>
-            {!iconsOnly && (
-              <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-sidebar-section uppercase tracking-[0.14em]">
-                {section.title}
-              </p>
-            )}
+          <div key={section.title} className="space-y-0.5">
+            <p className="px-2.5 mb-1 text-[10px] font-bold text-slate-400 dark:text-sidebar-section uppercase tracking-[0.14em]">
+              {section.title}
+            </p>
             {section.items.map(item => <NavLink key={item.key} item={item} />)}
           </div>
         ))}
       </nav>
 
       {/* Footer — tema + usuário + logout */}
-      <div className={`border-t border-slate-100 dark:border-sidebar-divider py-3 flex-none space-y-1 ${iconsOnly ? 'flex flex-col items-center px-1.5' : 'px-3'}`}>
+      <div className="border-t border-slate-100 dark:border-sidebar-divider py-3 px-3 flex-none space-y-1">
         <button
           onClick={handleToggleTheme}
           title={isDark ? 'Modo claro' : 'Modo escuro'}
-          className={`flex items-center rounded-lg text-slate-500 dark:text-sidebar-text hover:bg-slate-100 dark:hover:bg-sidebar-hover hover:text-slate-900 dark:hover:text-white transition-colors ${
-            iconsOnly ? 'w-9 h-9 justify-center' : 'w-full justify-between px-2.5 py-2 text-xs font-medium'
-          }`}
+          className="flex items-center w-full justify-between px-2.5 py-2 text-xs font-medium rounded-lg text-slate-500 dark:text-sidebar-text hover:bg-slate-100 dark:hover:bg-sidebar-hover hover:text-slate-900 dark:hover:text-white transition-colors"
         >
-          {!iconsOnly && <span>{isDark ? 'Modo Escuro' : 'Modo Claro'}</span>}
+          <span>{isDark ? 'Modo Escuro' : 'Modo Claro'}</span>
           <Icon d={isDark ? icons.sun : icons.moon} className="w-4 h-4" />
         </button>
 
-        <div className={`flex items-center gap-2.5 ${iconsOnly ? 'flex-col' : 'px-1 py-1'}`}>
+        <div className="flex items-center gap-2.5 px-1 py-1">
           <Link
             to="/perfil"
             onClick={() => setSidebarOpen(false)}
             title={userName}
-            className={`flex items-center gap-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-sidebar-hover transition-colors ${iconsOnly ? 'p-1' : 'flex-1 min-w-0 px-1 py-1'}`}
+            className="flex items-center gap-2.5 flex-1 min-w-0 px-1 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-sidebar-hover transition-colors"
           >
             <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-white text-xs font-bold flex-none">
               {userInitials}
             </div>
-            {!iconsOnly && (
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-slate-800 dark:text-white truncate">{userName}</div>
-                <div className="text-[11px] text-slate-400 dark:text-sidebar-text truncate">Administrador</div>
-              </div>
-            )}
+            <div className="min-w-0">
+              <div className="text-xs font-semibold text-slate-800 dark:text-white truncate">{userName}</div>
+              <div className="text-[11px] text-slate-400 dark:text-sidebar-text truncate">Administrador</div>
+            </div>
           </Link>
           <button
             onClick={handleLogout}
@@ -282,11 +256,9 @@ export default function Layout({ children }: LayoutProps) {
       <OnboardingEmpresaGate />
 
       {/* Sidebar desktop */}
-      {prefs.sidebarMode !== 'hidden' && (
-        <div className={`hidden lg:flex lg:flex-col flex-none h-screen sticky top-0 overflow-hidden transition-all duration-200 print:hidden ${iconsOnly ? 'lg:w-14' : 'lg:w-[236px]'}`}>
-          {sidebarContent}
-        </div>
-      )}
+      <div className="hidden lg:flex lg:flex-col lg:w-[236px] flex-none h-screen sticky top-0 overflow-hidden print:hidden">
+        {sidebarContent}
+      </div>
 
       {/* Sidebar mobile */}
       {sidebarOpen && (

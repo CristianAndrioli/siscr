@@ -4,17 +4,23 @@ import type { Env } from '../index'
 const app = new Hono<{ Bindings: Env }>()
 
 const DEFAULT_PREFS = {
-  accentColor: '#4e6fdb',
-  sidebarMode: 'icons',
   homeLayout: 'grid',
   theme: 'system',
-  density: 'compact',
   recentItemsCount: 5,
   recentItems: [] as RecentItem[],
   visibleModules: [] as string[],
   homeVariant: 'A',
   homeLayouts: {} as Record<string, string[]>,
 }
+
+/**
+ * Colunas de preferências desativadas: as opções de cor de destaque, modo da
+ * barra lateral e densidade saíram da tela de Personalização, mas as colunas
+ * são NOT NULL no schema, então o upsert grava valores fixos.
+ */
+const RETIRED_ACCENT_COLOR = '#4e6fdb'
+const RETIRED_SIDEBAR_MODE = 'full'
+const RETIRED_DENSITY = 'normal'
 
 interface RecentItem {
   label: string
@@ -35,11 +41,8 @@ app.get('/', async (c) => {
   }
 
   return c.json({
-    accentColor: row.accent_color ?? DEFAULT_PREFS.accentColor,
-    sidebarMode: row.sidebar_mode ?? DEFAULT_PREFS.sidebarMode,
     homeLayout: row.home_layout ?? DEFAULT_PREFS.homeLayout,
     theme: row.theme ?? DEFAULT_PREFS.theme,
-    density: row.density ?? DEFAULT_PREFS.density,
     recentItemsCount: row.recent_items_count ?? DEFAULT_PREFS.recentItemsCount,
     recentItems: safeJson(row.recent_items as string, []),
     visibleModules: safeJson(row.visible_modules as string, []),
@@ -77,11 +80,11 @@ app.put('/', async (c) => {
     .bind(
       user.userId,
       user.tenantId,
-      body.accentColor ?? DEFAULT_PREFS.accentColor,
-      body.sidebarMode ?? DEFAULT_PREFS.sidebarMode,
+      RETIRED_ACCENT_COLOR,
+      RETIRED_SIDEBAR_MODE,
       body.homeLayout ?? DEFAULT_PREFS.homeLayout,
       body.theme ?? DEFAULT_PREFS.theme,
-      body.density ?? DEFAULT_PREFS.density,
+      RETIRED_DENSITY,
       body.recentItemsCount ?? DEFAULT_PREFS.recentItemsCount,
       JSON.stringify(body.recentItems ?? []),
       JSON.stringify(body.visibleModules ?? []),

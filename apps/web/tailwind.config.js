@@ -13,10 +13,8 @@ export default {
         mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       colors: {
-        // Acento configurável pelo tenant (Personalização) — cada step vira uma
-        // custom property em :root, atualizada em runtime por `applyAccentColor()`
-        // (ver useUserPreferences.ts + utils/colorScale.ts). O valor padrão em
-        // :root cobre o primeiro paint antes do React montar.
+        // Acento da marca — cada step é uma custom property definida em
+        // :root (ver src/index.css).
         brand: {
           50:  'rgb(var(--brand-50) / <alpha-value>)',
           100: 'rgb(var(--brand-100) / <alpha-value>)',

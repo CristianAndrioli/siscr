@@ -10,22 +10,24 @@
   html { scroll-behavior: smooth; }
 
   :root {
-    /* Fallback do acento (índigo) até `useUserPreferences` aplicar a cor
-       escolhida pelo usuário — ver utils/colorScale.ts. */
-    --brand-50: 238 242 255;
-    --brand-100: 224 231 255;
-    --brand-200: 199 210 254;
-    --brand-300: 165 180 252;
-    --brand-400: 129 140 248;
-    --brand-500: 99 102 241;
-    --brand-600: 79 70 229;
-    --brand-700: 67 56 202;
-    --brand-800: 55 48 163;
-    --brand-900: 49 46 129;
-    --brand-950: 30 27 75;
-    --tint-rgb: 79 70 229;
-    --acc-light: #a5b4fc;
-    --acc-deep: #302b81;
+    /* Escala do acento da marca (#4e6fdb) consumida pelas classes
+       `bg-brand-*`/`text-brand-*` via `rgb(var(--brand-600) / <alpha-value>)`
+       no tailwind.config.js. Os tokens `--tint-rgb`/`--acc-light`/`--acc-deep`
+       são usados em ícones de hub, item ativo da sidebar e gradiente do avatar. */
+    --brand-50: 242 245 252;
+    --brand-100: 230 234 250;
+    --brand-200: 200 210 244;
+    --brand-300: 158 176 235;
+    --brand-400: 111 138 226;
+    --brand-500: 64 100 216;
+    --brand-600: 39 74 191;
+    --brand-700: 32 61 157;
+    --brand-800: 26 50 127;
+    --brand-900: 21 40 102;
+    --brand-950: 13 25 64;
+    --tint-rgb: 78 111 219;
+    --acc-light: #8aabff;
+    --acc-deep: #2f4383;
   }
 
   body {

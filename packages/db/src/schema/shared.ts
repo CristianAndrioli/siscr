@@ -351,11 +351,13 @@ export const contasPagar = sqliteTable('contas_pagar', {
 export const userPreferences = sqliteTable('user_preferences', {
   userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
   tenantId: text('tenant_id').notNull(),
+  // accent_color, sidebar_mode e density são colunas legadas: as opções saíram
+  // da tela de Personalização e a API grava valores fixos nelas (são NOT NULL).
   accentColor: text('accent_color').notNull().default('#4f46e5'),
-  sidebarMode: text('sidebar_mode').notNull().default('icons'), // full | icons | hidden
+  sidebarMode: text('sidebar_mode').notNull().default('icons'),
   homeLayout: text('home_layout').notNull().default('grid'),    // grid | list
   theme: text('theme').notNull().default('system'),             // light | dark | system
-  density: text('density').notNull().default('normal'),         // compact | normal | comfortable
+  density: text('density').notNull().default('normal'),
   recentItemsCount: integer('recent_items_count').notNull().default(5),
   recentItems: text('recent_items').notNull().default('[]'),    // JSON array of {label,to,icon}
   visibleModules: text('visible_modules').notNull().default('[]'), // JSON array of module keys

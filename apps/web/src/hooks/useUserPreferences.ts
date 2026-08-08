@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../services/api'
-import { generateScale, rgbTriple, deriveAccentTokens, SCALE_STEPS } from '../utils/colorScale'
 
 export interface RecentItem {
   label: string
@@ -11,11 +10,8 @@ export interface RecentItem {
 export type HomeVariant = 'A' | 'B' | 'C'
 
 export interface UserPreferences {
-  accentColor: string
-  sidebarMode: 'full' | 'icons' | 'hidden'
   homeLayout: 'grid' | 'list'
   theme: 'light' | 'dark' | 'system'
-  density: 'compact' | 'normal' | 'comfortable'
   recentItemsCount: number
   recentItems: RecentItem[]
   visibleModules: string[]
@@ -33,11 +29,8 @@ export const DEFAULT_HOME_LAYOUTS: Record<HomeVariant, string[]> = {
 }
 
 const DEFAULT_PREFS: UserPreferences = {
-  accentColor: '#4e6fdb',
-  sidebarMode: 'icons',
   homeLayout: 'grid',
   theme: 'system',
-  density: 'compact',
   recentItemsCount: 5,
   recentItems: [],
   visibleModules: [],
@@ -59,11 +52,13 @@ function getLocalKey(): string {
  * sobrescrever um default válido — protege contra respostas antigas da
  * API (ou cache local) salvas antes de uma coluna nova ganhar valor
  * (ex.: `home_layouts` NULL em preferências criadas antes da migration
- * que a adicionou vira `null` na resposta, não `{}`).
+ * que a adicionou vira `null` na resposta, não `{}`). Chaves fora de
+ * `DEFAULT_PREFS` são descartadas, o que limpa preferências desativadas
+ * que ainda estejam no cache local.
  */
 function withDefaults(partial: Partial<UserPreferences>): UserPreferences {
   const merged = { ...DEFAULT_PREFS }
-  for (const key of Object.keys(partial) as (keyof UserPreferences)[]) {
+  for (const key of Object.keys(DEFAULT_PREFS) as (keyof UserPreferences)[]) {
     const value = partial[key]
     if (value !== null && value !== undefined) {
       (merged as Record<string, unknown>)[key] = value
@@ -88,25 +83,6 @@ function saveLocal(prefs: UserPreferences) {
   } catch { /* noop */ }
 }
 
-/**
- * Aplica a cor de destaque escolhida pelo usuário como custom properties no
- * :root — a escala `--brand-50..950` (consumida pelas classes `bg-brand-*`
- * via `rgb(var(--brand-600) / <alpha-value>)` no tailwind.config.js) e os
- * tokens derivados `--tint-rgb`/`--acc-light`/`--acc-deep` usados em ícones
- * de hub, item ativo da sidebar e gradiente do avatar.
- */
-function applyAccentColor(color: string) {
-  const root = document.documentElement.style
-  const scale = generateScale(color)
-  for (const step of SCALE_STEPS) {
-    root.setProperty(`--brand-${step}`, rgbTriple(scale[step]))
-  }
-  const { baseRgb, accLightHex, accDeepHex } = deriveAccentTokens(color)
-  root.setProperty('--tint-rgb', baseRgb)
-  root.setProperty('--acc-light', accLightHex)
-  root.setProperty('--acc-deep', accDeepHex)
-}
-
 /** Aplica o tema (dark/light/system) no documento e sincroniza com useTheme */
 function applyThemePref(theme: string) {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -125,30 +101,22 @@ export function useUserPreferences() {
   const [loading, setLoading] = useState(true)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Load from API on mount — aplica tema e cor de destaque
+  // Load from API on mount — aplica tema
   useEffect(() => {
     api.get('/tenant/preferences')
       .then(res => {
         const merged = withDefaults(res.data)
         setPrefs(merged)
         saveLocal(merged)
-        applyAccentColor(merged.accentColor)
         applyThemePref(merged.theme)
       })
       .catch(() => {
         // Fallback to local — ainda aplica preferências salvas
-        const local = readLocal()
-        applyAccentColor(local.accentColor)
-        applyThemePref(local.theme)
+        applyThemePref(readLocal().theme)
       })
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Re-aplica cor e tema sempre que mudarem
-  useEffect(() => {
-    applyAccentColor(prefs.accentColor)
-  }, [prefs.accentColor])
 
   useEffect(() => {
     applyThemePref(prefs.theme)
