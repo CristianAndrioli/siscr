@@ -12,7 +12,10 @@
  *
  * SEGURANÇA
  * -----------------------------------------------------------------
- * - Iterações: 600.000 (OWASP 2023 para PBKDF2-SHA256).
+ * - Iterações: 100.000 — teto imposto pelo runtime do Workers (ver
+ *   `CURRENT_ITERATIONS`). Fica abaixo das 600.000 recomendadas pela OWASP
+ *   para PBKDF2-SHA256; endurecer além disso exige trocar de plataforma de
+ *   hash (ex.: serviço externo), não subir esta constante.
  * - Comparação de hash: timing-safe via `constantTimeEqual`.
  * - Rehash automático: `needsRehash(stored)` retorna true para formatos
  *   legados ou iterações abaixo do alvo atual. O caller deve chamar
@@ -33,8 +36,16 @@
  * como thin-wrappers para compatibilidade com chamadas antigas.
  */
 
-/** Alvo atual de iterações para PBKDF2-SHA256. */
-const CURRENT_ITERATIONS = 600_000
+/**
+ * Alvo atual de iterações para PBKDF2-SHA256.
+ *
+ * NÃO AUMENTE. O runtime do Cloudflare Workers rejeita PBKDF2 acima de
+ * 100.000 iterações com `NotSupportedError: Pbkdf2 failed: iteration counts
+ * above 100000 are not supported`. O `workerd` local não aplica esse limite,
+ * então valores maiores passam em desenvolvimento e quebram todo hash e
+ * verificação de senha em produção.
+ */
+const CURRENT_ITERATIONS = 100_000
 
 /** Prefixo do formato canônico. */
 const ALGO_PREFIX = 'pbkdf2'
