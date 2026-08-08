@@ -95,13 +95,16 @@ function itemCotacaoParaNf(i: CotacaoItem & Record<string, unknown>): NFItem {
 
 export function NfeNovaWizardPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const cotacaoIdParam = searchParams.get('cotacaoId');
   const { reportError } = useErrorNotification();
   const [step, setStep] = useState(0);
   const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
   const [filiais, setFiliais] = useState<FilialRow[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [cotacoesAprovadas, setCotacoesAprovadas] = useState<
+    { id: string; numero: string; cliente?: string; valor_total: number; empresa_id?: string }[]
+  >([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -152,12 +155,35 @@ export function NfeNovaWizardPage() {
     loadMeta();
   }, [loadMeta]);
 
+  /** Lista só aprovadas de venda — usado no seletor da tela de NF-e (#28). */
+  useEffect(() => {
+    let cancelled = false;
+    cotacoesService
+      .list({ tipo: 'venda', status: 'aprovada', limit: 100 })
+      .then((r) => {
+        if (!cancelled) setCotacoesAprovadas(r.cotacoes);
+      })
+      .catch(() => {
+        if (!cancelled) setCotacoesAprovadas([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   /**
-   * Cotação aprovada → NF-e: o assistente abre já com cliente e itens.
-   * Empresa/filial continuam no passo 0 (a cotação não carrega esses campos).
+   * Cotação aprovada → NF-e: o assistente abre já com cliente, itens e escopo.
+   * Deep-link `?cotacaoId=` (botão Faturar na cotação) e seletor da própria tela.
    */
   useEffect(() => {
-    if (!cotacaoIdParam || cotacaoCarregada.current === cotacaoIdParam) return;
+    if (!cotacaoIdParam) {
+      if (cotacaoCarregada.current) {
+        cotacaoCarregada.current = null;
+        setCotacaoOrigem(null);
+      }
+      return;
+    }
+    if (cotacaoCarregada.current === cotacaoIdParam) return;
     let cancelled = false;
     ;(async () => {
       try {
@@ -165,14 +191,20 @@ export function NfeNovaWizardPage() {
         if (cancelled) return;
         if (c.tipo && c.tipo !== 'venda') {
           setError('Só é possível faturar cotação de venda.');
+          cotacaoCarregada.current = cotacaoIdParam;
           return;
         }
         if (c.status !== 'aprovada') {
-          setError(`A cotação ${c.numero} precisa estar aprovada para faturar (status atual: ${c.status}).`);
+          setError(
+            `A cotação ${c.numero} precisa estar aprovada para importar (status atual: ${c.status}).`,
+          );
+          cotacaoCarregada.current = cotacaoIdParam;
+          return;
         }
         const itensNf = (c.itens ?? [])
           .map((i) => itemCotacaoParaNf(i as CotacaoItem & Record<string, unknown>))
           .filter((i) => i.descricao.trim());
+        setError('');
         setDestinatarioId(c.pessoa_id ?? '');
         setDestinatarioNome(c.cliente ?? '');
         if (c.empresa_id) setEmpresaId(c.empresa_id);
@@ -195,6 +227,26 @@ export function NfeNovaWizardPage() {
       cancelled = true;
     };
   }, [cotacaoIdParam]);
+
+  const selecionarCotacao = (id: string) => {
+    if (!id) {
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    setSearchParams({ cotacaoId: id }, { replace: true });
+  };
+
+  const cotacoesParaSelect = useMemo(() => {
+    let list = empresaId
+      ? cotacoesAprovadas.filter((c) => !c.empresa_id || c.empresa_id === empresaId)
+      : cotacoesAprovadas;
+    // Mantém a opção selecionada mesmo se o filtro de empresa mudou.
+    if (cotacaoIdParam && !list.some((c) => c.id === cotacaoIdParam)) {
+      const extra = cotacoesAprovadas.find((c) => c.id === cotacaoIdParam);
+      if (extra) list = [extra, ...list];
+    }
+    return list;
+  }, [cotacoesAprovadas, empresaId, cotacaoIdParam]);
 
   useEffect(() => {
     if (!empresaId) return;
@@ -392,11 +444,36 @@ export function NfeNovaWizardPage() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 space-y-2">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          Importar cotação aprovada
+        </label>
+        <select
+          id="importar-cotacao-aprovada"
+          className="input w-full"
+          value={cotacaoIdParam || ''}
+          onChange={(e) => selecionarCotacao(e.target.value)}
+          autoFocus={searchParams.get('importarCotacao') === '1' && !cotacaoIdParam}
+        >
+          <option value="">Sem cotação — preencher manualmente</option>
+          {cotacoesParaSelect.map((c) => (
+            <option key={c.id} value={c.id}>
+              #{c.numero} — {c.cliente || 'Sem cliente'} — {fmtBRL(c.valor_total)}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Só listamos cotações de venda com status <strong>Aprovada</strong>
+          {empresaId ? ' da empresa selecionada' : ''}. O botão Faturar na lista de cotações continua
+          funcionando igual.
+        </p>
+      </div>
+
       {cotacaoOrigem && (
         <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/30 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100">
           Montada a partir da cotação{' '}
           <Link
-            to="/faturamento/cotacoes"
+            to={`/faturamento/cotacoes/${cotacaoOrigem.id}`}
             className="font-semibold underline underline-offset-2"
           >
             {cotacaoOrigem.numero}

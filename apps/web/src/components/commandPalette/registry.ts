@@ -106,6 +106,14 @@ export const COMMAND_PALETTE_ITEMS: CommandPaletteItem[] = [
     action: 'change',
   },
   {
+    id: 'fat-nf-import-cotacao',
+    title: 'Importar cotação aprovada na NF-e',
+    path: '/faturamento/nf-venda/nova?importarCotacao=1',
+    keywords: ['importar cotação', 'faturar orçamento', 'cotação aprovada'],
+    module: 'faturamento',
+    action: 'change',
+  },
+  {
     id: 'fat-nfse',
     title: 'NFS-e',
     path: '/faturamento/nfse',
