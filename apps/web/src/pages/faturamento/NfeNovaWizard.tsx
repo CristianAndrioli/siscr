@@ -453,7 +453,6 @@ export function NfeNovaWizardPage() {
           className="input w-full"
           value={cotacaoIdParam || ''}
           onChange={(e) => selecionarCotacao(e.target.value)}
-          autoFocus={searchParams.get('importarCotacao') === '1' && !cotacaoIdParam}
         >
           <option value="">Sem cotação — preencher manualmente</option>
           {cotacoesParaSelect.map((c) => (
@@ -463,9 +462,8 @@ export function NfeNovaWizardPage() {
           ))}
         </select>
         <p className="text-xs text-slate-500 dark:text-slate-400">
-          Só listamos cotações de venda com status <strong>Aprovada</strong>
-          {empresaId ? ' da empresa selecionada' : ''}. O botão Faturar na lista de cotações continua
-          funcionando igual.
+          Opcional. Só listamos cotações de venda com status <strong>Aprovada</strong>
+          {empresaId ? ' da empresa selecionada' : ''}.
         </p>
       </div>
 

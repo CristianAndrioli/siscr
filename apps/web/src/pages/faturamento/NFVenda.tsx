@@ -346,12 +346,6 @@ export function NFVendaPage() {
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
             Nova NF-e (assistente)
           </Link>
-          <Link
-            to="/faturamento/nf-venda/nova?importarCotacao=1"
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          >
-            Importar cotação
-          </Link>
           <button
             type="button"
             onClick={openNew}
