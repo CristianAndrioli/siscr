@@ -45,7 +45,9 @@ const emptyItem = (): ItemForm => ({
 export default function NfEntradaDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const isNew = id === 'novo';
+  // Rota dedicada `/entrada/notas/novo` não tem `:id` — sem isso o form
+  // nunca monta e a tela fica em "Carregando…".
+  const isNew = !id || id === 'novo';
   const { reportError } = useErrorNotification();
 
   const [loading, setLoading] = useState(!isNew);
@@ -92,7 +94,10 @@ export default function NfEntradaDetail() {
   }, [isNew]);
 
   const load = useCallback(async () => {
-    if (isNew || !id) return;
+    if (isNew || !id) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const d = await entradaService.getNfEntrada(id);
