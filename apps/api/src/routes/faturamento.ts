@@ -189,6 +189,11 @@ const nfSchema = z.object({
   itens: z.array(nfItemSchema).default([]),
 })
 
+/** Total de um item: `qtd × valor unitário − desconto`. */
+function calcItemTotal(item: { quantidade: number; valorUnitario: number; desconto: number }): number {
+  return item.quantidade * item.valorUnitario - (item.desconto ?? 0)
+}
+
 app.post('/notas', zValidator('json', nfSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json')
@@ -269,7 +274,7 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     numero = (last?.numero ?? 0) + 1
   }
 
-  const valorProdutos = calcTotal(data.itens)
+  const valorProdutos = data.itens.reduce((s, i) => s + calcItemTotal(i), 0)
   const valorTotal = valorProdutos - (data.desconto ?? 0)
   const valorIss = data.aliquotaIss ? valorTotal * (data.aliquotaIss / 100) : null
   const modeloNf = data.modelo ?? 55
@@ -317,7 +322,7 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
   ]
 
   for (const item of data.itens) {
-    const itemTotal = item.quantidade * item.valorUnitario - (item.desconto ?? 0)
+    const itemTotal = calcItemTotal(item)
     stmts.push(
       c.env.DB_SHARED.prepare(`
         INSERT INTO nota_fiscal_itens
