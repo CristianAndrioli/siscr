@@ -110,6 +110,18 @@ export default function NfEntradaDetail() {
             {data.data_emissao ? fmtDate(String(data.data_emissao)) : '—'}
           </p>
           <p className="text-xs text-slate-400 font-mono mt-1 break-all">Chave {chave}</p>
+          {data.pedido_compra_id ? (
+            <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">
+              Pedido de compra{' '}
+              <Link
+                to={`/compras/pedidos/${String(data.pedido_compra_id)}`}
+                className="text-brand-600 dark:text-brand-400 hover:underline font-medium"
+              >
+                nº {String(data.pedido_compra_numero ?? '—')}
+              </Link>
+              {data.pedido_compra_status ? ` · ${String(data.pedido_compra_status).replace('_', ' ')}` : ''}
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
           <div className="text-2xl font-bold text-slate-900 dark:text-white">{fmtBRL(Number(data.valor_total))}</div>

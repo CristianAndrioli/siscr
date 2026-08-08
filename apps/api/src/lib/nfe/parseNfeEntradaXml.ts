@@ -14,6 +14,13 @@ export type NfeEntradaItem = {
   cfop?: string
   ncm?: string
   unidade?: string
+  /**
+   * `prod/xPed` — número do pedido de compra informado pelo fornecedor.
+   * É o campo que permite casar a nota com o pedido sem intervenção manual.
+   */
+  xPed?: string
+  /** `prod/nItemPed` — item do pedido de compra correspondente a este item da nota. */
+  nItemPed?: number
 }
 
 export type NfeEntradaDuplicata = {
@@ -229,6 +236,8 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
     const CFOP = text(firstByLocalFrom(prod, 'CFOP'))
     const NCM = text(firstByLocalFrom(prod, 'NCM'))
     const uCom = text(firstByLocalFrom(prod, 'uCom'))
+    const xPedRaw = text(firstByLocalFrom(prod, 'xPed'))
+    const nItemPedRaw = parseInt(text(firstByLocalFrom(prod, 'nItemPed')), 10)
     const vu = vUnCom > 0 ? vUnCom : qCom > 0 ? vProdItem / qCom : 0
     itens.push({
       nItem,
@@ -241,6 +250,8 @@ export function parseNfeEntradaXml(xmlString: string): NfeEntradaParsed {
       cfop: CFOP || undefined,
       ncm: NCM || undefined,
       unidade: uCom || undefined,
+      xPed: xPedRaw ? xPedRaw.slice(0, 15) : undefined,
+      nItemPed: Number.isFinite(nItemPedRaw) && nItemPedRaw > 0 ? nItemPedRaw : undefined,
     })
   }
 

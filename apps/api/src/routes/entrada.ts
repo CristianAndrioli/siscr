@@ -14,6 +14,15 @@ import {
 } from '../lib/fiscal-import'
 import type { NfeEntradaItem, NfeEntradaParsed } from '../lib/nfe/parseNfeEntradaXml'
 import { normalizarCnpj, parseNfeEntradaXml } from '../lib/nfe/parseNfeEntradaXml'
+import type { PedidoCompraComItens } from '../lib/compras/pedidoCompraMatch'
+import {
+  STATUS_PEDIDO_ABERTO,
+  apurarDivergencias,
+  carregarPedidoComItens,
+  casarItens,
+  numeroPedidoDoXml,
+  sugerirPedidoParaNota,
+} from '../lib/compras/pedidoCompraMatch'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import { nextCodigo } from '../lib/nextCodigo'
 
@@ -343,6 +352,131 @@ function appendStmtEntradaEstoquePorItens(
   }
 }
 
+/**
+ * Registra o recebimento do pedido de compra a partir da NF-e de entrada.
+ *
+ * Faz o que o recebimento manual faz — baixa o saldo, movimenta estoque e
+ * recalcula o status do pedido — mas guardando de qual nota veio, para que o
+ * pedido e o documento fiscal fiquem rastreáveis um a partir do outro.
+ * Retorna o novo status do pedido.
+ */
+function appendStmtRecebimentoDaNfEntrada(
+  db: D1Database,
+  stmts: ReturnType<D1Database['prepare']>[],
+  args: {
+    tenantId: string
+    recebimentoId: string
+    nfEntradaId: string
+    pedido: PedidoCompraComItens
+    itensOut: Record<string, unknown>[]
+    itemPedidoPorIndice: Map<number, string>
+    usuarioMov: string | null
+    uid: string | null
+    now: string
+    numeroNota: number
+  },
+): string {
+  const { tenantId, recebimentoId, nfEntradaId, pedido, itensOut, itemPedidoPorIndice, usuarioMov, uid, now } = args
+
+  stmts.push(
+    db
+      .prepare(
+        `INSERT INTO recebimentos_compra
+        (id, tenant_id, pedido_id, location, observacoes, created_at, created_by, nf_entrada_id)
+       VALUES (?, ?, ?, 'GERAL', ?, ?, ?, ?)`,
+      )
+      .bind(
+        recebimentoId,
+        tenantId,
+        pedido.id,
+        `Recebimento gerado pela NF-e de entrada nº ${args.numeroNota}.`,
+        now,
+        uid,
+        nfEntradaId,
+      ),
+  )
+
+  const recebidoAgoraPorItem = new Map<string, number>()
+
+  for (const [indice, itemPedidoId] of itemPedidoPorIndice) {
+    const row = itensOut[indice]
+    if (!row) continue
+    const produtoId = typeof row.produto_id === 'string' ? row.produto_id : ''
+    const qtd = Number(row.quantidade) || 0
+    if (!produtoId || qtd <= 0) continue
+
+    recebidoAgoraPorItem.set(itemPedidoId, (recebidoAgoraPorItem.get(itemPedidoId) ?? 0) + qtd)
+
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO recebimento_itens (id, tenant_id, recebimento_id, item_pedido_id, quantidade, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(crypto.randomUUID(), tenantId, recebimentoId, itemPedidoId, qtd, now),
+    )
+
+    stmts.push(
+      db
+        .prepare(
+          `UPDATE itens_pedido_compra SET quantidade_recebida = quantidade_recebida + ?, updated_at = ?, updated_by = ?
+         WHERE id = ? AND tenant_id = ?`,
+        )
+        .bind(qtd, now, uid, itemPedidoId, tenantId),
+    )
+
+    const desc = String(row.descricao ?? 'Item').slice(0, 120)
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO movimentacoes_estoque
+          (id, tenant_id, produto_id, tipo, quantidade, location, motivo, referencia_id, usuario_id, created_at, created_by, updated_by, updated_at)
+         VALUES (?, ?, ?, 'entrada', ?, 'GERAL', ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          crypto.randomUUID(),
+          tenantId,
+          produtoId,
+          qtd,
+          `Recebimento do pedido ${pedido.numero} via NF-e — ${desc}`,
+          nfEntradaId,
+          usuarioMov,
+          now,
+          uid,
+          uid,
+          now,
+        ),
+    )
+
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO estoque (id, tenant_id, produto_id, location, quantidade, updated_at, created_at, created_by, updated_by)
+         VALUES (?, ?, ?, 'GERAL', ?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, produto_id, location) DO UPDATE SET
+           quantidade = quantidade + ?,
+           updated_at = ?,
+           updated_by = ?`,
+        )
+        .bind(crypto.randomUUID(), tenantId, produtoId, qtd, now, now, uid, uid, qtd, now, uid),
+    )
+  }
+
+  const tudoRecebido = pedido.itens.every((item) => {
+    const total = item.quantidade_recebida + (recebidoAgoraPorItem.get(item.id) ?? 0)
+    return total >= item.quantidade - 0.01
+  })
+  const novoStatus = tudoRecebido ? 'recebido' : 'recebido_parcial'
+
+  stmts.push(
+    db
+      .prepare(`UPDATE pedidos_compra SET status = ?, updated_at = ?, updated_by = ? WHERE id = ? AND tenant_id = ?`)
+      .bind(novoStatus, now, uid, pedido.id, tenantId),
+  )
+
+  return novoStatus
+}
+
 // GET /nf-entradas
 app.get('/nf-entradas', async (c) => {
   const tenant = c.get('tenant')
@@ -446,6 +580,16 @@ app.post('/nf-entradas/preview-xml', async (c) => {
   const nfceSemDest = parsed.destinatarioAusente && parsed.modelo === 65
   const importKind = classificarNfeEntradaKind(parsed)
 
+  const { pedido, origem, abertos } = await sugerirPedidoParaNota(
+    c.env.DB_SHARED,
+    tenant.tenantId,
+    fornecedorId,
+    parsed.itens,
+  )
+  const produtoIds = sugestoes.map((s) => s.produtoId)
+  const vinculosPedido = pedido ? casarItens(pedido, parsed.itens, produtoIds) : []
+  const divergencias = pedido ? apurarDivergencias(pedido, parsed.itens, vinculosPedido) : []
+
   return c.json({
     parsed,
     sugestoes,
@@ -457,13 +601,68 @@ app.post('/nf-entradas/preview-xml', async (c) => {
     import_kind: importKind,
     modelo_fiscal: parsed.modelo,
     fiscal_xml_family: 'nfe_icms',
+    numero_pedido_xml: numeroPedidoDoXml(parsed.itens),
+    pedido_sugerido: pedido,
+    pedido_origem: origem,
+    pedidos_abertos: abertos,
+    vinculos_pedido: vinculosPedido,
+    divergencias,
   })
+})
+
+const avaliarVinculoSchema = z.object({
+  pedidoCompraId: z.string().uuid(),
+  itens: z
+    .array(
+      z.object({
+        descricao: z.string(),
+        quantidade: z.number(),
+        valorUnitario: z.number(),
+        nItemPed: z.number().int().positive().optional(),
+        produtoId: z.string().uuid().nullable().optional(),
+      }),
+    )
+    .min(1),
+  /** Escolhas do usuário que vencem o casamento automático. */
+  overrides: z
+    .array(z.object({ indice: z.number().int().min(0), itemPedidoId: z.string().uuid().nullable() }))
+    .optional(),
+})
+
+/**
+ * Recalcula o casamento e as divergências quando o usuário troca o pedido no
+ * assistente. Mantém a regra do lado da API para não duplicar a lógica no front.
+ */
+app.post('/nf-entradas/avaliar-vinculo', zValidator('json', avaliarVinculoSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const { pedidoCompraId, itens, overrides } = c.req.valid('json')
+
+  const pedido = await carregarPedidoComItens(c.env.DB_SHARED, tenant.tenantId, pedidoCompraId)
+  if (!pedido) return c.json({ error: 'Pedido de compra não encontrado.' }, 404)
+
+  const itensNota: NfeEntradaItem[] = itens.map((it, idx) => ({
+    nItem: idx + 1,
+    descricao: it.descricao,
+    quantidade: it.quantidade,
+    valorUnitario: it.valorUnitario,
+    valorTotal: it.quantidade * it.valorUnitario,
+    nItemPed: it.nItemPed,
+  }))
+  const produtoIds = itens.map((it) => it.produtoId ?? null)
+  const mapaOverrides = overrides?.length ? new Map(overrides.map((o) => [o.indice, o.itemPedidoId])) : undefined
+
+  const vinculos = casarItens(pedido, itensNota, produtoIds, mapaOverrides)
+  const divergencias = apurarDivergencias(pedido, itensNota, vinculos)
+
+  return c.json({ pedido, vinculos_pedido: vinculos, divergencias })
 })
 
 const vinculoConfirmSchema = z.object({
   indice: z.number().int().min(0),
   produtoId: z.string().uuid().optional(),
   criar: z.boolean().optional(),
+  /** Item do pedido de compra que este item da nota atende. */
+  itemPedidoId: z.string().uuid().nullable().optional(),
 })
 
 const confirmImportSchema = z.object({
@@ -471,6 +670,8 @@ const confirmImportSchema = z.object({
   empresaId: z.string().uuid(),
   filialId: z.string().uuid().nullable().optional(),
   vinculos: z.array(vinculoConfirmSchema).min(1),
+  /** Quando informado, a nota gera o recebimento deste pedido. */
+  pedidoCompraId: z.string().uuid().nullable().optional(),
   /** Obrigatório quando o XML é NFC-e (65) sem grupo `dest`. */
   confirmarDestinoEmpresa: z.boolean().optional(),
 })
@@ -481,7 +682,7 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
   if (!c.env.R2_STORAGE) {
     return c.json({ error: 'Armazenamento R2 não configurado.' }, 503)
   }
-  const { xmlBase64, empresaId, filialId, confirmarDestinoEmpresa } = c.req.valid('json')
+  const { xmlBase64, empresaId, filialId, confirmarDestinoEmpresa, pedidoCompraId } = c.req.valid('json')
   const vinculosIn = c.req.valid('json').vinculos
   const uid = auditUserId(c)
 
@@ -605,6 +806,60 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
   )
   const fornecedorId = fornecedorRes.id
 
+  // ─── Vínculo com pedido de compra ───────────────────────────────
+  // Cada item entra no estoque por um caminho só: os vinculados ao pedido pelo
+  // recebimento, os demais pela própria nota. É o que evita a entrada em dobro.
+  let pedido = null as Awaited<ReturnType<typeof carregarPedidoComItens>>
+  const itemPedidoPorIndice = new Map<number, string>()
+
+  if (pedidoCompraId) {
+    pedido = await carregarPedidoComItens(c.env.DB_SHARED, tenant.tenantId, pedidoCompraId)
+    if (!pedido) {
+      return c.json({ error: 'Pedido de compra não encontrado.' }, 404)
+    }
+    if (pedido.fornecedor_id !== fornecedorId) {
+      return c.json(
+        { error: `O pedido ${pedido.numero} é de outro fornecedor. O emitente da nota precisa ser o mesmo do pedido.` },
+        400,
+      )
+    }
+    if (!STATUS_PEDIDO_ABERTO.includes(pedido.status as (typeof STATUS_PEDIDO_ABERTO)[number])) {
+      return c.json(
+        { error: `O pedido ${pedido.numero} está como "${pedido.status}" e não pode receber mercadoria.` },
+        400,
+      )
+    }
+
+    const itensPedidoPorId = new Map(pedido.itens.map((i) => [i.id, i]))
+    const usados = new Set<string>()
+    for (const v of vinculosIn) {
+      if (!v.itemPedidoId) continue
+      const alvo = itensPedidoPorId.get(v.itemPedidoId)
+      if (!alvo) {
+        return c.json({ error: `Item ${v.indice}: item informado não pertence ao pedido ${pedido.numero}.` }, 400)
+      }
+      if (usados.has(alvo.id)) {
+        return c.json({ error: `Item ${v.indice}: o mesmo item do pedido foi vinculado a duas linhas da nota.` }, 400)
+      }
+      const qtd = parsed.itens[v.indice]?.quantidade ?? 0
+      if (qtd > alvo.saldo + 0.01) {
+        return c.json(
+          {
+            error: `Item ${v.indice}: a nota traz ${qtd} e o pedido tem saldo de ${alvo.saldo}. Desvincule o item ou ajuste o pedido.`,
+          },
+          400,
+        )
+      }
+      usados.add(alvo.id)
+      itemPedidoPorIndice.set(v.indice, alvo.id)
+    }
+
+    for (const [indice, itemPedidoId] of itemPedidoPorIndice) {
+      const row = itensOut[indice]
+      if (row) row.item_pedido_id = itemPedidoId
+    }
+  }
+
   const id = crypto.randomUUID()
   const now = new Date().toISOString()
   const xmlPath = `tenants/${tenant.tenantId}/nfe_entrada/${parsed.chaveAcesso}.xml`
@@ -638,8 +893,8 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
         `INSERT INTO nf_entradas
         (id, tenant_id, empresa_id, filial_id, chave_acesso, xml_path, emitente_cnpj, emitente_nome,
          destinatario_cnpj, data_emissao, numero, serie, natureza_operacao, valor_total, valor_produtos,
-         fornecedor_id, itens_json, cobranca_json, assinatura_valida, status, created_at, updated_at, created_by, updated_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', ?, ?, ?, ?)`,
+         fornecedor_id, pedido_compra_id, itens_json, cobranca_json, assinatura_valida, status, created_at, updated_at, created_by, updated_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'importada', ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -658,6 +913,7 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
         parsed.valorTotal,
         parsed.valorProdutos,
         fornecedorId,
+        pedido ? pedido.id : null,
         JSON.stringify(itensOut),
         JSON.stringify(parsed.duplicatas),
         assinaturaValida ? 1 : 0,
@@ -668,16 +924,35 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
       ),
   )
 
+  // Estoque dos itens que não deram baixa em pedido — os demais entram pelo recebimento.
   appendStmtEntradaEstoquePorItens(
     c.env.DB_SHARED,
     stmts,
     tenant.tenantId,
     id,
-    itensOut,
+    itensOut.filter((_, i) => !itemPedidoPorIndice.has(i)),
     usuarioMov,
     uid,
     now,
   )
+
+  let recebimentoId: string | null = null
+  let statusPedido: string | null = null
+  if (pedido && itemPedidoPorIndice.size > 0) {
+    recebimentoId = crypto.randomUUID()
+    statusPedido = appendStmtRecebimentoDaNfEntrada(c.env.DB_SHARED, stmts, {
+      tenantId: tenant.tenantId,
+      recebimentoId,
+      nfEntradaId: id,
+      pedido,
+      itensOut,
+      itemPedidoPorIndice,
+      usuarioMov,
+      uid,
+      now,
+      numeroNota: parsed.numero,
+    })
+  }
 
   appendStmtContasPagarNfEntrada(
     c.env.DB_SHARED,
@@ -695,7 +970,9 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
   return c.json(
     {
       id,
-      message: 'NF-e importada com vínculo de produtos.',
+      message: pedido
+        ? `NF-e importada e vinculada ao pedido de compra ${pedido.numero}.`
+        : 'NF-e importada com vínculo de produtos.',
       import_kind: classificarNfeEntradaKind(parsed),
       modelo_fiscal: parsed.modelo,
       fornecedor_vinculado: true,
@@ -707,6 +984,11 @@ app.post('/nf-entradas/confirmar', zValidator('json', confirmImportSchema), asyn
         const q = Number(it.quantidade) || 0
         return Boolean(pid && q > 0)
       }).length,
+      pedido_compra_id: pedido ? pedido.id : null,
+      pedido_compra_numero: pedido ? pedido.numero : null,
+      pedido_compra_status: statusPedido,
+      recebimento_id: recebimentoId,
+      itens_baixados_no_pedido: itemPedidoPorIndice.size,
     },
     201,
   )
@@ -718,9 +1000,11 @@ app.get('/nf-entradas/:id', async (c) => {
   const id = c.req.param('id')
   const row = await c.env.DB_SHARED
     .prepare(
-      `SELECT n.*, p.nome as fornecedor_nome, p.cpf_cnpj as fornecedor_doc
+      `SELECT n.*, p.nome as fornecedor_nome, p.cpf_cnpj as fornecedor_doc,
+              pc.numero as pedido_compra_numero, pc.status as pedido_compra_status
        FROM nf_entradas n
        LEFT JOIN pessoas p ON p.id = n.fornecedor_id
+       LEFT JOIN pedidos_compra pc ON pc.id = n.pedido_compra_id
        WHERE n.id = ? AND n.tenant_id = ?`,
     )
     .bind(id, tenant.tenantId)

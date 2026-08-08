@@ -262,7 +262,13 @@ app.get('/pedidos/:id/recebimentos', async (c) => {
   const pedidoId = c.req.param('id')
 
   const { results } = await c.env.DB_SHARED
-    .prepare('SELECT * FROM recebimentos_compra WHERE pedido_id = ? AND tenant_id = ? ORDER BY created_at DESC')
+    .prepare(
+      `SELECT r.*, n.numero as nf_numero, n.serie as nf_serie, n.chave_acesso as nf_chave
+       FROM recebimentos_compra r
+       LEFT JOIN nf_entradas n ON n.id = r.nf_entrada_id
+       WHERE r.pedido_id = ? AND r.tenant_id = ?
+       ORDER BY r.created_at DESC`,
+    )
     .bind(pedidoId, tenant.tenantId)
     .all()
 

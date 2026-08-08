@@ -27,23 +27,95 @@ export interface NfEntradaItem {
   unidade?: string;
   produto_id?: string;
   criado_no_import?: boolean;
+  /** Número do pedido de compra informado pelo fornecedor no XML. */
+  xPed?: string;
+  /** Item do pedido de compra correspondente, informado no XML. */
+  nItemPed?: number;
+  /** Item do pedido de compra que este item baixou. */
+  item_pedido_id?: string;
+}
+
+export interface ItemPedidoCompraSaldo {
+  id: string;
+  seq: number;
+  produto_id: string;
+  produto_codigo: string | null;
+  produto_descricao: string | null;
+  quantidade: number;
+  quantidade_recebida: number;
+  saldo: number;
+  preco_unitario: number;
+}
+
+export interface PedidoCompraResumo {
+  id: string;
+  numero: number;
+  status: string;
+  total: number;
+  fornecedor_id: string;
+  created_at: string;
+}
+
+export type PedidoCompraComItens = PedidoCompraResumo & { itens: ItemPedidoCompraSaldo[] };
+
+/** Como cada item da nota foi casado com o pedido. */
+export interface VinculoItemPedido {
+  indice: number;
+  itemPedidoId: string | null;
+  origem: 'nItemPed' | 'produto' | 'manual' | 'none';
+}
+
+export interface DivergenciaVinculo {
+  indice: number;
+  tipo: 'quantidade_acima_saldo' | 'quantidade_parcial' | 'preco' | 'sem_correspondencia';
+  /** Quando true, a importação não passa enquanto o item estiver vinculado assim. */
+  bloqueia: boolean;
+  mensagem: string;
+}
+
+export interface NfEntradaPreview {
+  parsed: unknown;
+  sugestoes: { indice: number; produtoId: string | null; motivo: string; rotulo?: string }[];
+  assinatura_valida: boolean;
+  fornecedor_id: string | null;
+  fornecedor_sera_cadastrado?: boolean;
+  nfce_sem_dest?: boolean;
+  import_kind?: 'nfe' | 'nfce';
+  modelo_fiscal?: number;
+  fiscal_xml_family?: string;
+  numero_pedido_xml: number | null;
+  pedido_sugerido: PedidoCompraComItens | null;
+  pedido_origem: 'xped' | 'unico_aberto' | null;
+  pedidos_abertos: PedidoCompraResumo[];
+  vinculos_pedido: VinculoItemPedido[];
+  divergencias: DivergenciaVinculo[];
 }
 
 export async function previewNfEntradaXml(file: File, empresaId: string) {
   const form = new FormData();
   form.append('file', file);
   form.append('empresaId', empresaId);
+  const { data } = await api.post<NfEntradaPreview>('/tenant/entrada/nf-entradas/preview-xml', form);
+  return data;
+}
+
+/** Recalcula casamento e divergências quando o usuário troca o pedido no assistente. */
+export async function avaliarVinculoPedido(payload: {
+  pedidoCompraId: string;
+  itens: {
+    descricao: string;
+    quantidade: number;
+    valorUnitario: number;
+    nItemPed?: number;
+    produtoId?: string | null;
+  }[];
+  overrides?: { indice: number; itemPedidoId: string | null }[];
+}) {
   const { data } = await api.post<{
-    parsed: unknown;
-    sugestoes: { indice: number; produtoId: string | null; motivo: string; rotulo?: string }[];
-    assinatura_valida: boolean;
-    fornecedor_id: string | null;
-    fornecedor_sera_cadastrado?: boolean;
-    nfce_sem_dest?: boolean;
-    import_kind?: 'nfe' | 'nfce';
-    modelo_fiscal?: number;
-    fiscal_xml_family?: string;
-  }>('/tenant/entrada/nf-entradas/preview-xml', form);
+    pedido: PedidoCompraComItens;
+    vinculos_pedido: VinculoItemPedido[];
+    divergencias: DivergenciaVinculo[];
+  }>('/tenant/entrada/nf-entradas/avaliar-vinculo', payload);
   return data;
 }
 
@@ -51,14 +123,22 @@ export async function confirmarNfEntradaImport(payload: {
   xmlBase64: string;
   empresaId: string;
   filialId?: string | null;
-  vinculos: { indice: number; produtoId?: string; criar?: boolean }[];
+  vinculos: { indice: number; produtoId?: string; criar?: boolean; itemPedidoId?: string | null }[];
+  /** Quando informado, a nota gera o recebimento deste pedido de compra. */
+  pedidoCompraId?: string | null;
   /** Obrigatório quando o preview indica NFC-e sem grupo dest no XML. */
   confirmarDestinoEmpresa?: boolean;
 }) {
-  const { data } = await api.post<{ id: string; message: string; fornecedor_vinculado: boolean; assinatura_valida: boolean }>(
-    '/tenant/entrada/nf-entradas/confirmar',
-    payload
-  );
+  const { data } = await api.post<{
+    id: string;
+    message: string;
+    fornecedor_vinculado: boolean;
+    assinatura_valida: boolean;
+    pedido_compra_id: string | null;
+    pedido_compra_numero: number | null;
+    pedido_compra_status: string | null;
+    itens_baixados_no_pedido: number;
+  }>('/tenant/entrada/nf-entradas/confirmar', payload);
   return data;
 }
 

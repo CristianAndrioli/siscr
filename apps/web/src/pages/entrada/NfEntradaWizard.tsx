@@ -9,7 +9,8 @@ const STEPS = [
   { id: 0, title: 'Arquivo', subtitle: 'XML da NF-e e empresa destinatária' },
   { id: 1, title: 'Fiscal', subtitle: 'Emitente, totais e validação' },
   { id: 2, title: 'Produtos', subtitle: 'Vincule cada item ao cadastro ou crie automaticamente' },
-  { id: 3, title: 'Conferência', subtitle: 'Revise e confirme a importação' },
+  { id: 3, title: 'Pedido de compra', subtitle: 'Baixa do saldo e conferência de divergências' },
+  { id: 4, title: 'Conferência', subtitle: 'Revise e confirme a importação' },
 ] as const;
 
 interface EmpresaRow {
@@ -42,6 +43,10 @@ interface ItemXml {
   cfop?: string;
   ncm?: string;
   unidade?: string;
+  /** Número do pedido de compra informado pelo fornecedor no XML. */
+  xPed?: string;
+  /** Item do pedido de compra correspondente, informado no XML. */
+  nItemPed?: number;
 }
 
 interface SugestaoRow {
@@ -93,12 +98,25 @@ export default function NfEntradaWizardPage() {
     fornecedor_id: string | null;
     fornecedor_sera_cadastrado?: boolean;
     nfce_sem_dest?: boolean;
+    numero_pedido_xml?: number | null;
+    pedido_sugerido?: entradaService.PedidoCompraComItens | null;
+    pedido_origem?: 'xped' | 'unico_aberto' | null;
+    pedidos_abertos?: entradaService.PedidoCompraResumo[];
   } | null>(null);
   /** Confirmação explícita para NFC-e sem CNPJ do destinatário no XML (issue #13 / cupom). */
   const [confirmarDestinoNfce, setConfirmarDestinoNfce] = useState(false);
   /** Por item: valor do select = id do produto ou CRIAR */
   const [vinculoSelect, setVinculoSelect] = useState<Record<number, string>>({});
   const [error, setError] = useState('');
+
+  /** Pedido de compra que a nota vai baixar ('' = importar sem vínculo). */
+  const [pedidoId, setPedidoId] = useState('');
+  const [pedido, setPedido] = useState<entradaService.PedidoCompraComItens | null>(null);
+  const [vinculosPedido, setVinculosPedido] = useState<entradaService.VinculoItemPedido[]>([]);
+  const [divergencias, setDivergencias] = useState<entradaService.DivergenciaVinculo[]>([]);
+  const [avaliandoPedido, setAvaliandoPedido] = useState(false);
+  /** Só os itens que o usuário mexeu — os demais seguem o casamento automático. */
+  const [overridesPedido, setOverridesPedido] = useState<Record<number, string | null>>({});
 
   const loadMeta = useCallback(async () => {
     try {
@@ -153,6 +171,10 @@ export default function NfEntradaWizardPage() {
         sel[s.indice] = s.produtoId ?? CRIAR;
       }
       setVinculoSelect(sel);
+      setPedidoId(data.pedido_sugerido?.id ?? '');
+      setPedido(data.pedido_sugerido ?? null);
+      setVinculosPedido(data.vinculos_pedido ?? []);
+      setDivergencias(data.divergencias ?? []);
       setStep(1);
     } catch (e: unknown) {
       const ax = e as { response?: { data?: { error?: string } } };
@@ -170,14 +192,88 @@ export default function NfEntradaWizardPage() {
     });
   }, [preview, vinculoSelect]);
 
+  const itemPedidoDoIndice = useCallback(
+    (i: number) => vinculosPedido.find((v) => v.indice === i)?.itemPedidoId ?? null,
+    [vinculosPedido],
+  );
+
   const montarVinculosConfirm = () => {
     if (!preview) return [];
     return preview.parsed.itens.map((_, i) => {
       const v = vinculoSelect[i]!;
-      if (v === CRIAR) return { indice: i, criar: true as const };
-      return { indice: i, produtoId: v };
+      const itemPedidoId = pedidoId ? itemPedidoDoIndice(i) : null;
+      if (v === CRIAR) return { indice: i, criar: true as const, itemPedidoId };
+      return { indice: i, produtoId: v, itemPedidoId };
     });
   };
+
+  /**
+   * Recalcula o casamento na API. Manter a regra num lugar só evita que a tela e
+   * o servidor discordem sobre o que é divergência.
+   */
+  const reavaliarPedido = useCallback(
+    async (alvoPedidoId: string, overrides: Record<number, string | null>) => {
+      if (!preview || !alvoPedidoId) {
+        setPedido(null);
+        setVinculosPedido([]);
+        setDivergencias([]);
+        return;
+      }
+      setAvaliandoPedido(true);
+      try {
+        const r = await entradaService.avaliarVinculoPedido({
+          pedidoCompraId: alvoPedidoId,
+          itens: preview.parsed.itens.map((it, i) => {
+            const sel = vinculoSelect[i];
+            return {
+              descricao: it.descricao,
+              quantidade: it.quantidade,
+              valorUnitario: it.valorUnitario,
+              nItemPed: it.nItemPed,
+              produtoId: sel && sel !== CRIAR ? sel : null,
+            };
+          }),
+          overrides: Object.entries(overrides).map(([indice, itemPedidoId]) => ({
+            indice: Number(indice),
+            itemPedidoId,
+          })),
+        });
+        setPedido(r.pedido);
+        setVinculosPedido(r.vinculos_pedido);
+        setDivergencias(r.divergencias);
+      } catch (e: unknown) {
+        const ax = e as { response?: { data?: { error?: string } } };
+        reportError(ax.response?.data?.error || 'Não foi possível avaliar o pedido de compra.');
+      } finally {
+        setAvaliandoPedido(false);
+      }
+    },
+    [preview, vinculoSelect, reportError],
+  );
+
+  const handleTrocarPedido = (novoId: string) => {
+    setPedidoId(novoId);
+    setOverridesPedido({});
+    void reavaliarPedido(novoId, {});
+  };
+
+  const handleTrocarItemPedido = (indice: number, itemPedidoId: string | null) => {
+    const proximos = { ...overridesPedido, [indice]: itemPedidoId };
+    setOverridesPedido(proximos);
+    void reavaliarPedido(pedidoId, proximos);
+  };
+
+  const divergenciasPorIndice = useMemo(() => {
+    const mapa = new Map<number, entradaService.DivergenciaVinculo[]>();
+    for (const d of divergencias) {
+      const atual = mapa.get(d.indice) ?? [];
+      atual.push(d);
+      mapa.set(d.indice, atual);
+    }
+    return mapa;
+  }, [divergencias]);
+
+  const temBloqueio = useMemo(() => divergencias.some((d) => d.bloqueia), [divergencias]);
 
   const handleConfirm = async () => {
     if (!preview || !file || !empresaId) return;
@@ -196,6 +292,7 @@ export default function NfEntradaWizardPage() {
         empresaId,
         filialId: filialId || null,
         vinculos: montarVinculosConfirm(),
+        pedidoCompraId: pedidoId || null,
         confirmarDestinoEmpresa: preview.nfce_sem_dest ? confirmarDestinoNfce : undefined,
       });
       navigate(`/entrada/notas/${res.id}`);
@@ -211,6 +308,7 @@ export default function NfEntradaWizardPage() {
     if (step === 0) return Boolean(file && empresaId);
     if (step === 1) return Boolean(preview);
     if (step === 2) return vinculosValidos;
+    if (step === 3) return !avaliandoPedido && !temBloqueio;
     return true;
   };
 
@@ -455,6 +553,143 @@ export default function NfEntradaWizardPage() {
 
         {step === 3 && preview && (
           <>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Pedido de compra</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Quando o fornecedor preenche a tag <strong>xPed</strong> no XML, o pedido é localizado sozinho. Sem ela, o
+              sistema procura os pedidos em aberto deste fornecedor. Ao vincular, a nota dá baixa no saldo do pedido e a
+              mercadoria entra em estoque uma única vez, pelo recebimento.
+            </p>
+
+            {preview.numero_pedido_xml ? (
+              <p className="text-sm text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                O XML informa o pedido <strong>nº {preview.numero_pedido_xml}</strong> na tag xPed.
+                {preview.pedido_origem === 'xped'
+                  ? ' Pedido localizado e vinculado automaticamente.'
+                  : ' Nenhum pedido em aberto com esse número foi encontrado para o fornecedor.'}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                O fornecedor não informou o número do pedido no XML. Selecione manualmente se esta nota atende a algum
+                pedido.
+              </p>
+            )}
+
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Pedido a baixar</span>
+              <select
+                value={pedidoId}
+                onChange={(e) => handleTrocarPedido(e.target.value)}
+                disabled={avaliandoPedido}
+                className="mt-1 w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 disabled:opacity-60"
+              >
+                <option value="">Importar sem vincular a pedido</option>
+                {(preview.pedidos_abertos ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    Pedido {p.numero} — {fmtBRL(p.total)} ({p.status === 'recebido_parcial' ? 'parcial' : 'confirmado'})
+                  </option>
+                ))}
+              </select>
+              {!preview.fornecedor_id && (
+                <span className="text-xs text-amber-700 dark:text-amber-300 mt-1 block">
+                  O fornecedor ainda não está cadastrado, então não há pedidos em aberto para listar.
+                </span>
+              )}
+            </label>
+
+            {pedidoId && pedido && (
+              <>
+                {temBloqueio && (
+                  <div className="text-sm text-red-800 dark:text-red-200 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">
+                    Há divergência que impede a importação com este vínculo. Desvincule o item apontado abaixo ou ajuste o
+                    pedido antes de continuar.
+                  </div>
+                )}
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">#</th>
+                        <th className="px-3 py-2">Item da nota</th>
+                        <th className="px-3 py-2 min-w-[220px]">Item do pedido {pedido.numero}</th>
+                        <th className="px-3 py-2">Situação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {preview.parsed.itens.map((it, idx) => {
+                        const vinculado = itemPedidoDoIndice(idx);
+                        const itemPedido = pedido.itens.find((i) => i.id === vinculado);
+                        const avisos = divergenciasPorIndice.get(idx) ?? [];
+                        const origem = vinculosPedido.find((v) => v.indice === idx)?.origem;
+                        return (
+                          <tr key={idx}>
+                            <td className="px-3 py-2 align-top">{it.nItem}</td>
+                            <td className="px-3 py-2 align-top">
+                              <div className="font-medium text-slate-800 dark:text-slate-100">{it.descricao}</div>
+                              <div className="text-xs text-slate-500">
+                                Qtd {it.quantidade} · {fmtBRL(it.valorUnitario)} un
+                                {it.nItemPed ? ` · item ${it.nItemPed} do pedido (XML)` : ''}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              <select
+                                value={vinculado ?? ''}
+                                disabled={avaliandoPedido}
+                                onChange={(e) => handleTrocarItemPedido(idx, e.target.value || null)}
+                                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 disabled:opacity-60"
+                              >
+                                <option value="">Não baixar do pedido</option>
+                                {pedido.itens.map((ip) => (
+                                  <option key={ip.id} value={ip.id}>
+                                    {ip.seq}. {(ip.produto_descricao ?? 'Produto').slice(0, 34)} — saldo {ip.saldo}
+                                  </option>
+                                ))}
+                              </select>
+                              {itemPedido && (
+                                <div className="text-xs text-slate-500 mt-1">
+                                  Pedido: {itemPedido.saldo} pendente(s) a {fmtBRL(itemPedido.preco_unitario)} un
+                                  {origem === 'nItemPed' ? ' · casado pelo XML' : ''}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top text-xs">
+                              {avisos.length === 0 ? (
+                                vinculado ? (
+                                  <span className="text-emerald-600 font-medium">Confere com o pedido</span>
+                                ) : (
+                                  <span className="text-slate-500">Entra só em estoque</span>
+                                )
+                              ) : (
+                                <ul className="space-y-1">
+                                  {avisos.map((d, i) => (
+                                    <li
+                                      key={i}
+                                      className={
+                                        d.bloqueia
+                                          ? 'text-red-700 dark:text-red-300 font-medium'
+                                          : 'text-amber-700 dark:text-amber-300'
+                                      }
+                                    >
+                                      {d.mensagem}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {avaliandoPedido && <p className="text-xs text-slate-500">Recalculando divergências…</p>}
+              </>
+            )}
+          </>
+        )}
+
+        {step === 4 && preview && (
+          <>
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Conferência</h2>
             <ul className="text-sm space-y-2 text-slate-600 dark:text-slate-400">
               <li>
@@ -463,6 +698,20 @@ export default function NfEntradaWizardPage() {
                 cadastrados.
               </li>
               <li>• Total da nota: {fmtBRL(preview.parsed.valorTotal)}</li>
+              {pedidoId && pedido ? (
+                <li>
+                  • Baixa no pedido <strong>{pedido.numero}</strong>:{' '}
+                  {preview.parsed.itens.filter((_, i) => itemPedidoDoIndice(i)).length} de {preview.parsed.itens.length}{' '}
+                  item(ns). O estoque desses itens entra pelo recebimento do pedido, sem duplicar.
+                </li>
+              ) : (
+                <li>• Sem vínculo com pedido de compra — os itens entram direto em estoque.</li>
+              )}
+              {divergencias.length > 0 && (
+                <li className="text-amber-700 dark:text-amber-300">
+                  • {divergencias.length} divergência(s) em relação ao pedido serão registradas assim mesmo.
+                </li>
+              )}
             </ul>
             {preview.nfce_sem_dest && (
               <label className="flex items-start gap-3 mt-4 p-4 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 cursor-pointer">
