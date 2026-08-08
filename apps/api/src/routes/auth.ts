@@ -390,18 +390,37 @@ app.get('/verify-email', async (c) => {
   const priceId = STRIPE_PRICE_IDS[data.plan]
   if (!priceId) return c.json({ error: 'Plano inválido.' }, 400)
 
-  const pendingKey = `pending_signup:${data.tenantSlug}`
-  await c.env.KV_TENANT_CACHE.put(pendingKey, JSON.stringify(data), { expirationTtl: 3600 })
+  const resolvedPaid = await resolveTenantSlug(c.env.DB_SHARED, data.tenantNome, data.tenantSlug)
+  if ('error' in resolvedPaid) return c.json({ error: resolvedPaid.error }, 400)
+  const finalSlug = resolvedPaid.slug
+
+  const emailNorm = data.email.trim().toLowerCase()
+
+  // O KV recebe apenas o hash — o webhook grava direto em `users.password_hash`
+  // e valida este payload com `pendingSignupSchema`, que exige `passwordHash`.
+  const pendingKey = `pending_signup:${finalSlug}`
+  await c.env.KV_TENANT_CACHE.put(
+    pendingKey,
+    JSON.stringify({
+      nome: data.nome,
+      email: emailNorm,
+      passwordHash: await PasswordHasher.hash(data.password),
+      tenantNome: data.tenantNome,
+      tenantSlug: finalSlug,
+      plan: data.plan,
+    }),
+    { expirationTtl: 3600 },
+  )
 
   const frontendUrl = c.env.FRONTEND_URL
   const params = new URLSearchParams({
     mode: 'subscription',
     'line_items[0][price]': priceId,
     'line_items[0][quantity]': '1',
-    customer_email: data.email,
-    success_url: `${frontendUrl}/checkout/success?tenant=${encodeURIComponent(data.tenantSlug)}`,
+    customer_email: emailNorm,
+    success_url: `${frontendUrl}/checkout/success?tenant=${encodeURIComponent(finalSlug)}`,
     cancel_url: `${frontendUrl}/checkout/cancel`,
-    'metadata[tenantSlug]': data.tenantSlug,
+    'metadata[tenantSlug]': finalSlug,
     'metadata[plan]': data.plan,
     allow_promotion_codes: 'true',
   })

@@ -204,8 +204,11 @@ async function handleCheckoutCompleted(
 
   const parsed = pendingSignupSchema.safeParse(JSON.parse(pendingRaw))
   if (!parsed.success) {
+    // Lança para o Stripe marcar a entrega como falha e reentregar: um payload
+    // fora do contrato é bug de quem gravou o KV, não estado normal, e engolir
+    // isso em silêncio deixa o cliente pagante sem conta e sem alerta.
     console.error('[stripe-webhook] pending_signup inválido:', parsed.error.flatten())
-    return
+    throw new Error(`pending_signup fora do contrato para ${tenantSlug}`)
   }
   const pending = parsed.data
 
