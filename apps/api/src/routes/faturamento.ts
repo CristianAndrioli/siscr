@@ -53,9 +53,21 @@ app.get('/cotacoes/:id', async (c) => {
   return c.json({ cotacao: { ...(found.header as object), itens: found.itens } })
 })
 
+/** UUID opcional: string vazia / null vira `undefined` (evita 400 do Zod). */
+const uuidOpcional = z.preprocess(
+  (v) => (v === '' || v === null ? undefined : v),
+  z.string().uuid().optional(),
+)
+
+/** Filial opcional: string vazia vira `null` (matriz). */
+const filialOpcional = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().uuid().nullish(),
+)
+
 const itemSchema = z.object({
-  produtoId: z.string().uuid().optional(),
-  servicoId: z.string().uuid().optional(),
+  produtoId: uuidOpcional,
+  servicoId: uuidOpcional,
   descricao: z.string().min(1),
   quantidade: z.number().positive(),
   valorUnitario: z.number().min(0),
@@ -65,17 +77,11 @@ const itemSchema = z.object({
 
 const cotacaoStatusEnum = z.enum(['rascunho', 'enviada', 'aprovada', 'recusada', 'expirada'])
 
-/** Filial opcional: string vazia vira `null` (matriz). */
-const filialOpcional = z.preprocess(
-  (v) => (v === '' ? null : v),
-  z.string().uuid().nullish(),
-)
-
 const cotacaoSchema = z.object({
   tipo: z.enum(['venda', 'compra']).default('venda'),
   empresaId: z.string().uuid(),
   filialId: filialOpcional,
-  pessoaId: z.string().uuid().optional(),
+  pessoaId: uuidOpcional,
   validade: z.string().optional(),
   observacoes: z.string().optional(),
   desconto: z.number().min(0).default(0),

@@ -7,6 +7,7 @@ import ErrorToastStack from './components/common/ErrorToast';
 import ErrorLogsPage from './pages/configuracoes/ErrorLogsPage';
 import Login from './pages/Login';
 import CotacoesPage from './pages/faturamento/Cotacoes';
+import CotacaoDetail from './pages/faturamento/CotacaoDetail';
 import NFVendaPage from './pages/faturamento/NFVenda';
 import NfeNovaWizardPage from './pages/faturamento/NfeNovaWizard';
 import NFSePage from './pages/faturamento/NFSe';
@@ -203,12 +204,14 @@ function App() {
         {/* Compras */}
         <Route path="/compras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="compras" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/compras/cotacoes" element={<ProtectedRoute><Layout><CotacoesFornecedorPage /></Layout></ProtectedRoute>} />
+        <Route path="/compras/cotacoes/:id" element={<ProtectedRoute><Layout><CotacaoDetail /></Layout></ProtectedRoute>} />
         <Route path="/compras/pedidos" element={<ProtectedRoute><Layout><PedidosCompraList /></Layout></ProtectedRoute>} />
         <Route path="/compras/pedidos/:id" element={<ProtectedRoute><Layout><PedidoCompraDetail /></Layout></ProtectedRoute>} />
 
         {/* Faturamento */}
         <Route path="/faturamento" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="faturamento" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/faturamento/cotacoes" element={<ProtectedRoute><Layout><CotacoesPage /></Layout></ProtectedRoute>} />
+        <Route path="/faturamento/cotacoes/:id" element={<ProtectedRoute><Layout><CotacaoDetail /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nf-venda" element={<ProtectedRoute><Layout><NFVendaPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nf-venda/nova" element={<ProtectedRoute><Layout><NfeNovaWizardPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/ncm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NcmConfigPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />

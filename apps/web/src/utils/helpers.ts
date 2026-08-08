@@ -98,6 +98,16 @@ export function formatApiError(error: unknown, fallback = 'Erro ao processar req
       if (typeof record.detail === 'string') return record.detail;
       if (typeof record.message === 'string') return record.message;
 
+      // @hono/zod-validator: `{ success: false, error: { issues: [...] } }`
+      const zodErr = record.error;
+      if (zodErr && typeof zodErr === 'object') {
+        const issues = (zodErr as { issues?: { message?: string; path?: unknown[] }[] }).issues;
+        if (Array.isArray(issues) && issues[0]?.message) {
+          const path = Array.isArray(issues[0].path) ? issues[0].path.join('.') : '';
+          return path ? `${path}: ${issues[0].message}` : String(issues[0].message);
+        }
+      }
+
       const nonField = record.non_field_errors;
       if (Array.isArray(nonField) && nonField.length > 0) {
         return String(nonField[0]);
@@ -106,7 +116,8 @@ export function formatApiError(error: unknown, fallback = 'Erro ao processar req
       // Erros de campo (ex.: Zod flatten ou DRF): pega o primeiro disponível.
       const fieldErrors = Object.values(record).flat();
       if (Array.isArray(fieldErrors) && fieldErrors.length > 0 && fieldErrors[0]) {
-        return String(fieldErrors[0]);
+        const first = fieldErrors[0];
+        if (typeof first === 'string') return first;
       }
     }
 

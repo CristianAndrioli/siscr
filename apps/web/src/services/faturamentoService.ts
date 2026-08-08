@@ -114,6 +114,18 @@ export interface NotaFiscal {
 
 const BASE = '/tenant/faturamento';
 
+function mapCotacaoItemPayload(i: CotacaoItem) {
+  return {
+    ...(i.produtoId ? { produtoId: i.produtoId } : {}),
+    ...(i.servicoId ? { servicoId: i.servicoId } : {}),
+    descricao: i.descricao,
+    quantidade: i.quantidade,
+    valorUnitario: i.valorUnitario,
+    desconto: i.desconto ?? 0,
+    unidade: i.unidade ?? 'UN',
+  };
+}
+
 export type CotacaoResumoStatus = {
   status: string;
   quantidade: number;
@@ -166,15 +178,7 @@ export const cotacoesService = {
       observacoes: data.observacoes,
       desconto: data.desconto ?? 0,
       status: data.status,
-      itens: (data.itens ?? []).map(i => ({
-        produtoId: i.produtoId,
-        servicoId: i.servicoId,
-        descricao: i.descricao,
-        quantidade: i.quantidade,
-        valorUnitario: i.valorUnitario,
-        desconto: i.desconto ?? 0,
-        unidade: i.unidade ?? 'UN',
-      })),
+      itens: (data.itens ?? []).map(mapCotacaoItemPayload),
     });
     return res.data;
   },
@@ -187,15 +191,7 @@ export const cotacoesService = {
       observacoes: data.observacoes,
       desconto: data.desconto,
       status: data.status,
-      itens: data.itens?.map(i => ({
-        produtoId: i.produtoId,
-        servicoId: i.servicoId,
-        descricao: i.descricao,
-        quantidade: i.quantidade,
-        valorUnitario: i.valorUnitario,
-        desconto: i.desconto ?? 0,
-        unidade: i.unidade ?? 'UN',
-      })),
+      itens: data.itens?.map(mapCotacaoItemPayload),
     });
   },
   /** Altera o status de várias cotações sem abrir cada uma. */

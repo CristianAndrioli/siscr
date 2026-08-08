@@ -3,16 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   cotacoesService,
   type Cotacao,
-  type CotacaoItem,
   type CotacaoResumoStatus,
   type CotacaoStatus,
   type CotacaoTipo,
 } from '../../services/faturamentoService';
-import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
 import { fmtBRL } from '../../utils/format';
 import { formatApiError } from '../../utils/helpers';
-import CurrencyInput from '../../components/common/CurrencyInput';
+import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const fmtDate = (s?: string) => (s ? new Date(s).toLocaleDateString('pt-BR') : '—');
 
@@ -33,46 +31,9 @@ const STATUS_LABEL: Record<CotacaoStatus, string> = {
 
 const PAGE_SIZE = 50;
 
-interface Produto {
-  id: string;
-  descricao: string;
-  codigo: string;
-  unidade: string;
-  preco_venda: number;
-}
-
 interface EmpresaRow {
   id: string;
   razao_social: string;
-}
-
-interface FilialRow {
-  id: string;
-  nome: string;
-  empresa_id: string;
-}
-
-const emptyItem = (): CotacaoItem => ({
-  descricao: '',
-  quantidade: 1,
-  valorUnitario: 0,
-  desconto: 0,
-  unidade: 'UN',
-});
-
-/** Normaliza item vindo do D1 (snake_case) para o shape do formulário. */
-function normalizeItem(i: CotacaoItem & Record<string, unknown>): CotacaoItem {
-  return {
-    id: i.id,
-    produtoId: i.produtoId ?? (i.produto_id as string | undefined),
-    servicoId: i.servicoId ?? (i.servico_id as string | undefined),
-    descricao: i.descricao ?? '',
-    quantidade: Number(i.quantidade) || 0,
-    valorUnitario: Number(i.valorUnitario ?? i.valor_unitario) || 0,
-    desconto: Number(i.desconto) || 0,
-    valor_total: i.valor_total,
-    unidade: i.unidade ?? 'UN',
-  };
 }
 
 interface CotacoesPageProps {
@@ -80,11 +41,12 @@ interface CotacoesPageProps {
   titulo: string;
   descricao: string;
   pessoaLabel: string;
-  tipoCadastroPessoa: 'cliente' | 'fornecedor';
+  basePath: string;
 }
 
-function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPessoa }: CotacoesPageProps) {
+function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, basePath }: CotacoesPageProps) {
   const navigate = useNavigate();
+  const { reportError } = useErrorNotification();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -94,30 +56,12 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   const [busca, setBusca] = useState('');
   const [buscaDebounced, setBuscaDebounced] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
+  const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
+  const [empresaFiltro, setEmpresaFiltro] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<CotacaoStatus | ''>('');
   const [bulkBusy, setBulkBusy] = useState(false);
-
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [modalError, setModalError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
-  const [filiais, setFiliais] = useState<FilialRow[]>([]);
-  const [empresaFiltro, setEmpresaFiltro] = useState('');
-  const [pessoaId, setPessoaId] = useState('');
-  const [pessoaNome, setPessoaNome] = useState('');
-  const [empresaId, setEmpresaId] = useState('');
-  const [filialId, setFilialId] = useState('');
-  const [form, setForm] = useState({
-    validade: '',
-    observacoes: '',
-    desconto: 0,
-    status: 'rascunho' as CotacaoStatus,
-    itens: [emptyItem()],
-  });
 
   useEffect(() => {
     const t = setTimeout(() => setBuscaDebounced(busca.trim()), 300);
@@ -132,15 +76,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   useEffect(() => {
     api
       .get('/tenant/info/empresas')
-      .then((r) => {
-        const list = (r.data.empresas ?? []) as EmpresaRow[];
-        setEmpresas(list);
-        if (!empresaId && list[0]) setEmpresaId(list[0].id);
-      })
-      .catch(() => {});
-    api
-      .get('/tenant/info/filiais')
-      .then((r) => setFiliais((r.data.filiais ?? []) as FilialRow[]))
+      .then((r) => setEmpresas((r.data.empresas ?? []) as EmpresaRow[]))
       .catch(() => {});
   }, []);
 
@@ -159,32 +95,18 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
       setCotacoes(data.cotacoes);
       setTotal(data.total);
       setResumo(data.resumo);
-    } catch {
-      setError('Erro ao carregar cotações.');
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao carregar cotações.');
+      reportError(msg, err, 'Cotação');
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [tipo, statusFiltro, buscaDebounced, empresaFiltro, page]);
+  }, [tipo, statusFiltro, buscaDebounced, empresaFiltro, page, reportError]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
-
-  useEffect(() => {
-    if (showModal && produtos.length === 0) {
-      api
-        .get('/tenant/cadastros/produtos', {
-          params: { limit: 200, page: 0, ...(empresaId ? { empresaId } : {}) },
-        })
-        .then((r) => setProdutos(r.data.produtos ?? []))
-        .catch(() => {});
-    }
-  }, [showModal, produtos.length, empresaId]);
-
-  const filiaisDaEmpresa = useMemo(
-    () => filiais.filter((f) => f.empresa_id === empresaId),
-    [filiais, empresaId],
-  );
 
   const qtdPorStatus = useMemo(() => {
     const map: Record<string, number> = {};
@@ -204,11 +126,11 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const allPageSelected = cotacoes.length > 0 && cotacoes.every((c) => selectedIds.has(c.id));
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (cid: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(cid)) next.delete(cid);
+      else next.add(cid);
       return next;
     });
   };
@@ -238,124 +160,29 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
       setSelectedIds(new Set());
       setBulkStatus('');
       await load();
-    } catch (err: unknown) {
-      setError(formatApiError(err, 'Erro ao alterar status em massa.'));
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao alterar status em massa.');
+      reportError(msg, err, 'Cotação');
+      setError(msg);
     } finally {
       setBulkBusy(false);
     }
   };
 
-  const handleQuickStatus = async (id: string, status: CotacaoStatus) => {
+  const handleQuickStatus = async (cid: string, novoStatus: CotacaoStatus) => {
     try {
-      await cotacoesService.updateStatusBatch([id], status);
-      setCotacoes((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
+      await cotacoesService.updateStatusBatch([cid], novoStatus);
+      setCotacoes((prev) => prev.map((c) => (c.id === cid ? { ...c, status: novoStatus } : c)));
       await load();
-    } catch (err: unknown) {
-      setError(formatApiError(err, 'Erro ao alterar status.'));
+    } catch (err) {
+      const msg = formatApiError(err, 'Erro ao alterar status.');
+      reportError(msg, err, 'Cotação');
+      setError(msg);
     }
   };
 
-  const openNew = () => {
-    setForm({ validade: '', observacoes: '', desconto: 0, status: 'rascunho', itens: [emptyItem()] });
-    setPessoaId('');
-    setPessoaNome('');
-    setEmpresaId(empresas[0]?.id ?? '');
-    setFilialId('');
-    setEditingId(null);
-    setModalError('');
-    setShowModal(true);
-  };
-
-  const openEdit = async (id: string) => {
-    try {
-      const c = await cotacoesService.get(id);
-      setForm({
-        validade: c.validade ?? '',
-        observacoes: c.observacoes ?? '',
-        desconto: c.desconto,
-        status: c.status,
-        itens:
-          c.itens && c.itens.length > 0
-            ? c.itens.map((i) => normalizeItem(i as CotacaoItem & Record<string, unknown>))
-            : [emptyItem()],
-      });
-      setPessoaId(c.pessoa_id ?? '');
-      setPessoaNome(c.cliente ?? '');
-      setEmpresaId(c.empresa_id ?? empresas[0]?.id ?? '');
-      setFilialId(c.filial_id ?? '');
-      setEditingId(id);
-      setModalError('');
-      setShowModal(true);
-    } catch {
-      setError('Erro ao carregar cotação.');
-    }
-  };
-
-  const handleSave = async () => {
-    const validItens = form.itens.filter((i) => i.descricao.trim());
-    if (validItens.length === 0) {
-      setModalError('Adicione pelo menos um item.');
-      return;
-    }
-    if (!empresaId) {
-      setModalError('Selecione a empresa.');
-      return;
-    }
-    setSaving(true);
-    setModalError('');
-    try {
-      const payload = {
-        tipo,
-        empresa_id: empresaId,
-        filial_id: filialId || null,
-        pessoa_id: pessoaId || undefined,
-        validade: form.validade || undefined,
-        observacoes: form.observacoes || undefined,
-        desconto: form.desconto,
-        status: form.status,
-        itens: validItens,
-      };
-      if (editingId) await cotacoesService.update(editingId, payload as Parameters<typeof cotacoesService.update>[1]);
-      else await cotacoesService.create(payload as Parameters<typeof cotacoesService.create>[0]);
-      setShowModal(false);
-      load();
-    } catch (err: unknown) {
-      setModalError(formatApiError(err, 'Erro ao salvar cotação.'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const faturar = (c: Cotacao) => {
-    navigate(`/faturamento/nf-venda/nova?cotacaoId=${c.id}`);
-  };
-
-  const calcItemTotal = (item: CotacaoItem) => item.quantidade * item.valorUnitario - (item.desconto ?? 0);
-  const subtotal = form.itens.reduce((s, i) => s + calcItemTotal(i), 0);
-  const totalFinal = subtotal - form.desconto;
-
-  const setItem = (idx: number, field: keyof CotacaoItem, value: string | number) =>
-    setForm((f) => ({ ...f, itens: f.itens.map((it, i) => (i === idx ? { ...it, [field]: value } : it)) }));
-
-  const fillItemFromProduto = (idx: number, prodId: string) => {
-    const p = produtos.find((x) => x.id === prodId);
-    if (p) {
-      setForm((f) => ({
-        ...f,
-        itens: f.itens.map((it, i) =>
-          i === idx
-            ? {
-                ...it,
-                produtoId: p.id,
-                descricao: p.descricao,
-                valorUnitario: p.preco_venda ?? 0,
-                unidade: p.unidade ?? 'UN',
-              }
-            : it,
-        ),
-      }));
-    }
-  };
+  const openDetail = (cid: string) => navigate(`${basePath}/${cid}`);
+  const openNew = () => navigate(`${basePath}/nova`);
 
   return (
     <div className="space-y-6">
@@ -365,6 +192,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{descricao}</p>
         </div>
         <button
+          type="button"
           onClick={openNew}
           className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
         >
@@ -388,7 +216,9 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
             key={label}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4"
           >
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+              {label}
+            </p>
             <p className={`text-xl font-bold mt-1 text-slate-800 dark:text-slate-100 ${cls}`}>{val}</p>
           </div>
         ))}
@@ -410,7 +240,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
         <select
           value={empresaFiltro}
           onChange={(e) => setEmpresaFiltro(e.target.value)}
-          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">Todas as empresas</option>
           {empresas.map((e) => (
@@ -422,7 +252,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
         <select
           value={statusFiltro}
           onChange={(e) => setStatusFiltro(e.target.value)}
-          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100"
         >
           <option value="">Todos os status</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => (
@@ -501,23 +331,22 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
                       className="rounded border-slate-300"
                     />
                   </th>
-                  {['Número', pessoaLabel, 'Empresa', 'Validade', 'Total', 'Status', 'Criado em', ''].map((h) => (
-                    <th
-                      key={h || 'acoes'}
-                      className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {['Número', pessoaLabel, 'Empresa', 'Validade', 'Total', 'Status', 'Criado em', ''].map(
+                    (h) => (
+                      <th
+                        key={h || 'acoes'}
+                        className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {cotacoes.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                  >
-                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-3 py-3">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(c.id)}
@@ -528,13 +357,13 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
                     </td>
                     <td
                       className="px-4 py-3 font-mono text-xs font-bold text-brand-600 dark:text-brand-400 cursor-pointer"
-                      onClick={() => openEdit(c.id)}
+                      onClick={() => openDetail(c.id)}
                     >
                       {c.numero}
                     </td>
                     <td
                       className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100 cursor-pointer"
-                      onClick={() => openEdit(c.id)}
+                      onClick={() => openDetail(c.id)}
                     >
                       {c.cliente || (
                         <span className="text-slate-400 italic">Sem {pessoaLabel.toLowerCase()}</span>
@@ -552,7 +381,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
                     <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 tabular-nums">
                       {fmtBRL(c.valor_total)}
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3">
                       <select
                         value={c.status}
                         onChange={(e) => handleQuickStatus(c.id, e.target.value as CotacaoStatus)}
@@ -569,24 +398,23 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
                     <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">
                       {fmtDate(c.created_at)}
                     </td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2 justify-end">
                         {tipo === 'venda' && c.status === 'aprovada' && (
                           <button
                             type="button"
-                            onClick={() => faturar(c)}
+                            onClick={() => navigate(`/faturamento/nf-venda/nova?cotacaoId=${c.id}`)}
                             className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
-                            title="Abrir emissão de NF-e com os dados desta cotação"
                           >
                             Faturar
                           </button>
                         )}
                         <button
                           type="button"
-                          onClick={() => openEdit(c.id)}
+                          onClick={() => openDetail(c.id)}
                           className="text-xs text-slate-500 hover:underline font-medium"
                         >
-                          Editar
+                          Abrir
                         </button>
                         <button
                           type="button"
@@ -631,278 +459,6 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
         )}
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-5 p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                {editingId ? 'Editar Cotação' : 'Nova Cotação'}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">
-                {modalError}
-              </div>
-            )}
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Empresa
-                </label>
-                <select
-                  value={empresaId}
-                  onChange={(e) => {
-                    setEmpresaId(e.target.value);
-                    setFilialId('');
-                    setProdutos([]);
-                  }}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  {empresas.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.razao_social}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Filial <span className="font-normal text-slate-400">(opcional)</span>
-                </label>
-                <select
-                  value={filialId}
-                  onChange={(e) => setFilialId(e.target.value)}
-                  disabled={!empresaId}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
-                >
-                  <option value="">Matriz</option>
-                  {filiaisDaEmpresa.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nome}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">Sem filial, a cotação é da matriz.</p>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  {pessoaLabel}
-                </label>
-                <PessoaBusca
-                  value={pessoaId}
-                  displayValue={pessoaNome}
-                  onChange={(id, nome) => {
-                    setPessoaId(id);
-                    setPessoaNome(nome);
-                  }}
-                  tipoCadastro={tipoCadastroPessoa}
-                  placeholder={`Buscar ${pessoaLabel.toLowerCase()} por nome ou CPF/CNPJ...`}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Validade
-                </label>
-                <input
-                  type="date"
-                  value={form.validade}
-                  onChange={(e) => setForm((f) => ({ ...f, validade: e.target.value }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Status
-                </label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as CotacaoStatus }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  {Object.entries(STATUS_LABEL).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Itens</h3>
-                <button
-                  onClick={() => setForm((f) => ({ ...f, itens: [...f.itens, emptyItem()] }))}
-                  className="text-xs text-brand-600 dark:text-brand-400 font-medium hover:underline"
-                >
-                  + Adicionar item
-                </button>
-              </div>
-              <div className="space-y-2">
-                {form.itens.map((item, idx) => (
-                  <div key={idx} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 space-y-2">
-                    <div className="flex gap-2">
-                      <select
-                        onChange={(e) => fillItemFromProduto(idx, e.target.value)}
-                        value={item.produtoId ?? ''}
-                        className="border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-[150px]"
-                      >
-                        <option value="">Selec. produto...</option>
-                        {produtos.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.codigo} — {p.descricao}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={item.descricao}
-                        onChange={(e) => setItem(idx, 'descricao', e.target.value)}
-                        placeholder="Descrição do item *"
-                        className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                      />
-                      {form.itens.length > 1 && (
-                        <button
-                          onClick={() =>
-                            setForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== idx) }))
-                          }
-                          className="text-red-400 hover:text-red-600 shrink-0"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Qtd.</label>
-                        <input
-                          type="number"
-                          min="0.001"
-                          step="0.001"
-                          value={item.quantidade}
-                          onChange={(e) => setItem(idx, 'quantidade', parseFloat(e.target.value) || 0)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Unid.</label>
-                        <input
-                          value={item.unidade}
-                          onChange={(e) => setItem(idx, 'unidade', e.target.value.toUpperCase())}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">
-                          Vlr. Unit.
-                        </label>
-                        <CurrencyInput
-                          value={item.valorUnitario}
-                          onChange={(v) => setItem(idx, 'valorUnitario', v)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">
-                          Desc. item
-                        </label>
-                        <CurrencyInput
-                          value={item.desconto}
-                          onChange={(v) => setItem(idx, 'desconto', v)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
-                        />
-                      </div>
-                    </div>
-                    <div className="text-right text-xs font-bold text-slate-600 dark:text-slate-300">
-                      Subtotal item: {fmtBRL(calcItemTotal(item))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4 items-start">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Observações
-                </label>
-                <textarea
-                  value={form.observacoes}
-                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
-                  rows={3}
-                  placeholder="Condições comerciais, prazo de entrega..."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-                />
-              </div>
-              <div className="flex flex-col gap-2 text-sm pt-1">
-                <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                  <span>Subtotal:</span>
-                  <span>{fmtBRL(subtotal)}</span>
-                </div>
-                <div className="flex justify-between items-center gap-2">
-                  <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Desconto geral:</span>
-                  <CurrencyInput
-                    value={form.desconto}
-                    onChange={(v) => setForm((f) => ({ ...f, desconto: v }))}
-                    className="w-28 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
-                  />
-                </div>
-                <div className="flex justify-between font-bold text-base border-t border-slate-200 dark:border-slate-700 pt-2 text-slate-800 dark:text-slate-100">
-                  <span>Total:</span>
-                  <span className="text-brand-600 dark:text-brand-400">{fmtBRL(totalFinal)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 pt-2">
-              {tipo === 'venda' && editingId && form.status === 'aprovada' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    navigate(`/faturamento/nf-venda/nova?cotacaoId=${editingId}`);
-                  }}
-                  className="px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
-                >
-                  Faturar NF-e
-                </button>
-              )}
-              <div className="flex-1" />
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Salvando...' : 'Salvar Cotação'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 w-full max-w-sm space-y-4">
@@ -910,18 +466,27 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
             <p className="text-sm text-slate-500 dark:text-slate-400">Esta ação não pode ser desfeita.</p>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                className="flex-1 px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={async () => {
-                  await cotacoesService.delete(deleteConfirm!);
-                  setDeleteConfirm(null);
-                  load();
+                  try {
+                    await cotacoesService.delete(deleteConfirm!);
+                    setDeleteConfirm(null);
+                    await load();
+                  } catch (err) {
+                    const msg = formatApiError(err, 'Erro ao excluir cotação.');
+                    reportError(msg, err, 'Cotação');
+                    setError(msg);
+                    setDeleteConfirm(null);
+                  }
                 }}
-                className="flex-1 px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+                className="flex-1 px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg"
               >
                 Excluir
               </button>
@@ -940,7 +505,7 @@ export function CotacoesPage() {
       titulo="Cotações"
       descricao="Propostas comerciais para clientes — controle de status e faturamento"
       pessoaLabel="Cliente"
-      tipoCadastroPessoa="cliente"
+      basePath="/faturamento/cotacoes"
     />
   );
 }
@@ -952,7 +517,7 @@ export function CotacoesFornecedorPage() {
       titulo="Cotações de Fornecedores"
       descricao="Pedido de cotação (RFQ) para fornecedores"
       pessoaLabel="Fornecedor"
-      tipoCadastroPessoa="fornecedor"
+      basePath="/compras/cotacoes"
     />
   );
 }
