@@ -1,3 +1,4 @@
+import { filialOuMatriz } from '../../lib/escopoEmpresa'
 import {
   CotacaoRepository,
   type CotacaoInsertRow,
@@ -57,10 +58,16 @@ export class CotacaoService {
 
     const valorTotal = CotacaoService.calcTotal(itens) - (input.desconto ?? 0)
 
+    if (!input.empresaId) {
+      throw new Error('Informe a empresa da cotação.')
+    }
+
     const row: CotacaoInsertRow = {
       id,
       numero,
       tipo: input.tipo ?? 'venda',
+      empresaId: input.empresaId,
+      filialId: filialOuMatriz(input.filialId),
       pessoaId: input.pessoaId ?? null,
       validade: input.validade ?? null,
       observacoes: input.observacoes ?? null,
@@ -93,6 +100,8 @@ export class CotacaoService {
       : null
 
     const patch: CotacaoUpdatePatch = {
+      empresaId: input.empresaId,
+      filialId: input.filialId === undefined ? undefined : filialOuMatriz(input.filialId),
       pessoaId: input.pessoaId,
       validade: input.validade,
       observacoes: input.observacoes,
@@ -133,6 +142,8 @@ export type CotacaoItemInput = {
 
 export type CotacaoCreateInput = {
   tipo?: CotacaoTipo
+  empresaId: string
+  filialId?: string | null
   pessoaId?: string
   validade?: string
   observacoes?: string
@@ -142,6 +153,8 @@ export type CotacaoCreateInput = {
 }
 
 export type CotacaoUpdateInput = {
+  empresaId?: string
+  filialId?: string | null
   pessoaId?: string | null
   validade?: string | null
   observacoes?: string | null

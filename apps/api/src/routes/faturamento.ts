@@ -27,7 +27,7 @@ const app = new Hono<{ Bindings: Env }>()
 
 app.get('/cotacoes', async (c) => {
   const tenant = c.get('tenant')
-  const { status, busca, tipo } = c.req.query()
+  const { status, busca, tipo, empresaId, filialId } = c.req.query()
   const { limit, page, offset } = parseListPagination(c)
   const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
   // Sem `tipo` na query, mantém o comportamento histórico da tela de
@@ -36,6 +36,9 @@ app.get('/cotacoes', async (c) => {
     status,
     busca,
     tipo: (tipo as 'venda' | 'compra') || 'venda',
+    empresaId: empresaId || undefined,
+    // `filialId=` (vazio) = filtrar só matriz; omitido = todas.
+    filialId: filialId === undefined ? undefined : filialId === '' ? null : filialId,
     limit,
     offset,
   })
@@ -62,8 +65,16 @@ const itemSchema = z.object({
 
 const cotacaoStatusEnum = z.enum(['rascunho', 'enviada', 'aprovada', 'recusada', 'expirada'])
 
+/** Filial opcional: string vazia vira `null` (matriz). */
+const filialOpcional = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().uuid().nullish(),
+)
+
 const cotacaoSchema = z.object({
   tipo: z.enum(['venda', 'compra']).default('venda'),
+  empresaId: z.string().uuid(),
+  filialId: filialOpcional,
   pessoaId: z.string().uuid().optional(),
   validade: z.string().optional(),
   observacoes: z.string().optional(),
@@ -94,8 +105,13 @@ app.post('/cotacoes', zValidator('json', cotacaoSchema), async (c) => {
   const tenant = c.get('tenant')
   const data = c.req.valid('json') as CotacaoCreateInput
   const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
-  const { id, numero } = await svc.create(data, auditUserId(c))
-  return c.json({ id, numero, message: 'Cotação criada.' }, 201)
+  try {
+    const { id, numero } = await svc.create(data, auditUserId(c))
+    return c.json({ id, numero, message: 'Cotação criada.' }, 201)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return c.json({ error: msg }, 400)
+  }
 })
 
 app.put('/cotacoes/:id', zValidator('json', cotacaoSchema.partial()), async (c) => {

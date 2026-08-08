@@ -175,6 +175,8 @@ export function NfeNovaWizardPage() {
           .filter((i) => i.descricao.trim());
         setDestinatarioId(c.pessoa_id ?? '');
         setDestinatarioNome(c.cliente ?? '');
+        if (c.empresa_id) setEmpresaId(c.empresa_id);
+        setFilialId(c.filial_id ?? '');
         setForm((f) => ({
           ...f,
           desconto: Number(c.desconto) || 0,
@@ -399,7 +401,8 @@ export function NfeNovaWizardPage() {
           >
             {cotacaoOrigem.numero}
           </Link>
-          . Cliente e itens já vieram preenchidos — confira o emitente e complete a emissão.
+          . Empresa, filial (ou matriz), cliente e itens já vieram preenchidos — confira e complete a
+          emissão.
         </div>
       )}
 

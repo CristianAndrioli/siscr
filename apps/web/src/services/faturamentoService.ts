@@ -21,6 +21,12 @@ export interface Cotacao {
   id: string;
   numero: string;
   tipo?: CotacaoTipo;
+  /** Obrigatório — isolamento por empresa dentro do tenant. */
+  empresa_id?: string;
+  /** `null` = matriz. */
+  filial_id?: string | null;
+  empresa_nome?: string | null;
+  filial_nome?: string | null;
   pessoa_id?: string;
   cliente?: string;
   validade?: string;
@@ -127,10 +133,17 @@ export const cotacoesService = {
     status?: string;
     busca?: string;
     tipo?: CotacaoTipo;
+    empresaId?: string;
+    filialId?: string | null;
     page?: number;
     limit?: number;
   }): Promise<CotacaoListResponse> => {
-    const res = await api.get(`${BASE}/cotacoes`, { params });
+    const res = await api.get(`${BASE}/cotacoes`, {
+      params: {
+        ...params,
+        filialId: params?.filialId === null ? '' : params?.filialId,
+      },
+    });
     return {
       cotacoes: res.data.cotacoes ?? [],
       total: Number(res.data.total ?? 0),
@@ -146,6 +159,8 @@ export const cotacoesService = {
   create: async (data: Omit<Cotacao, 'id' | 'numero' | 'created_at'> & { itens: CotacaoItem[] }): Promise<{ id: string; numero: string }> => {
     const res = await api.post(`${BASE}/cotacoes`, {
       tipo: data.tipo ?? 'venda',
+      empresaId: data.empresa_id,
+      filialId: data.filial_id || null,
       pessoaId: data.pessoa_id || undefined, // never send empty string
       validade: data.validade,
       observacoes: data.observacoes,
@@ -165,6 +180,8 @@ export const cotacoesService = {
   },
   update: async (id: string, data: Partial<Cotacao> & { itens?: CotacaoItem[] }): Promise<void> => {
     await api.put(`${BASE}/cotacoes/${id}`, {
+      empresaId: data.empresa_id || undefined,
+      filialId: data.filial_id === undefined ? undefined : data.filial_id || null,
       pessoaId: data.pessoa_id || undefined,
       validade: data.validade,
       observacoes: data.observacoes,

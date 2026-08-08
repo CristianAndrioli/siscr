@@ -37,6 +37,12 @@ import type { D1Database } from '@cloudflare/workers-types'
  * 4) Aspecto multi-tenant: a convenção é que o construtor já recebe o
  *    `tenantId` do contexto autenticado. O caller NUNCA deve passar um
  *    tenantId derivado do body da requisição.
+ *
+ * 5) Escopo empresa/filial: tabelas operacionais também carregam
+ *    `empresa_id` (obrigatório) e `filial_id` (opcional = matriz).
+ *    Ver `lib/escopoEmpresa.ts`. Filtre listagens por empresa quando
+ *    o caller informar; nunca misture dados de empresas distintas sem
+ *    intenção explícita.
  */
 export abstract class BaseTenantRepository {
   constructor(

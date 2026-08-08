@@ -29,6 +29,10 @@ export type CotacaoInsertRow = {
   id: string
   numero: string
   tipo: CotacaoTipo
+  /** Obrigatório — isolamento por empresa dentro do tenant. */
+  empresaId: string
+  /** `null` = matriz. */
+  filialId: string | null
   pessoaId: string | null
   validade: string | null
   observacoes: string | null
@@ -40,6 +44,8 @@ export type CotacaoInsertRow = {
 }
 
 export type CotacaoUpdatePatch = {
+  empresaId?: string
+  filialId?: string | null
   pessoaId?: string | null
   validade?: string | null
   observacoes?: string | null
@@ -49,6 +55,8 @@ export type CotacaoUpdatePatch = {
 }
 
 const COTACAO_COLUMN_MAP: Record<keyof CotacaoUpdatePatch, string> = {
+  empresaId: 'empresa_id',
+  filialId: 'filial_id',
   pessoaId: 'pessoa_id',
   validade: 'validade',
   observacoes: 'observacoes',
@@ -61,6 +69,8 @@ export type CotacaoListFilters = {
   status?: string
   busca?: string
   tipo?: CotacaoTipo
+  empresaId?: string
+  filialId?: string | null
   limit?: number
   offset?: number
 }
@@ -82,6 +92,13 @@ export class CotacaoRepository extends BaseTenantRepository {
     const params: unknown[] = [this.tenantId]
     if (filters.status) { where.push('co.status = ?'); params.push(filters.status) }
     if (filters.tipo) { where.push('co.tipo = ?'); params.push(filters.tipo) }
+    if (filters.empresaId) { where.push('co.empresa_id = ?'); params.push(filters.empresaId) }
+    if (filters.filialId === null) {
+      where.push('co.filial_id IS NULL')
+    } else if (filters.filialId) {
+      where.push('co.filial_id = ?')
+      params.push(filters.filialId)
+    }
     if (filters.busca) {
       where.push('(p.nome LIKE ? OR co.numero LIKE ?)')
       const like = `%${filters.busca}%`
@@ -104,9 +121,12 @@ export class CotacaoRepository extends BaseTenantRepository {
     const { results } = await this.db
       .prepare(
         `SELECT co.id, co.numero, co.tipo, co.status, co.validade, co.valor_total, co.created_at,
-                co.pessoa_id, p.nome as cliente
+                co.pessoa_id, co.empresa_id, co.filial_id, p.nome as cliente,
+                e.razao_social as empresa_nome, f.nome as filial_nome
          FROM cotacoes co
          LEFT JOIN pessoas p ON p.id = co.pessoa_id AND p.tenant_id = co.tenant_id
+         LEFT JOIN empresas e ON e.id = co.empresa_id AND e.tenant_id = co.tenant_id
+         LEFT JOIN filiais f ON f.id = co.filial_id AND f.tenant_id = co.tenant_id
          WHERE ${whereSql}
          ORDER BY co.created_at DESC
          LIMIT ? OFFSET ?`,
@@ -114,12 +134,16 @@ export class CotacaoRepository extends BaseTenantRepository {
       .bind(...params, limit, offset)
       .all()
 
-    // Resumo do tipo (sem status/busca) — alimenta os cards da lista.
+    // Resumo do tipo/empresa (sem status/busca) — alimenta os cards da lista.
     const resumoParams: unknown[] = [this.tenantId]
     let resumoWhere = 'tenant_id = ?'
     if (filters.tipo) {
       resumoWhere += ' AND tipo = ?'
       resumoParams.push(filters.tipo)
+    }
+    if (filters.empresaId) {
+      resumoWhere += ' AND empresa_id = ?'
+      resumoParams.push(filters.empresaId)
     }
     const { results: resumoRows } = await this.db
       .prepare(
@@ -269,11 +293,12 @@ export class CotacaoRepository extends BaseTenantRepository {
   private insertHeaderStmt(row: CotacaoInsertRow): D1PreparedStatement {
     return this.db
       .prepare(
-        `INSERT INTO cotacoes (id, tenant_id, numero, tipo, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO cotacoes (id, tenant_id, numero, tipo, empresa_id, filial_id, pessoa_id, validade, observacoes, desconto, valor_total, status, created_at, updated_at, created_by, updated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         row.id, this.tenantId, row.numero, row.tipo,
+        row.empresaId, row.filialId,
         row.pessoaId, row.validade, row.observacoes,
         row.desconto, row.valorTotal, row.status,
         row.createdAt, row.createdAt, row.auditUserId, row.auditUserId,

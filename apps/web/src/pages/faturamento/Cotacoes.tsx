@@ -41,6 +41,17 @@ interface Produto {
   preco_venda: number;
 }
 
+interface EmpresaRow {
+  id: string;
+  razao_social: string;
+}
+
+interface FilialRow {
+  id: string;
+  nome: string;
+  empresa_id: string;
+}
+
 const emptyItem = (): CotacaoItem => ({
   descricao: '',
   quantidade: 1,
@@ -93,8 +104,13 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   const [modalError, setModalError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
+  const [filiais, setFiliais] = useState<FilialRow[]>([]);
+  const [empresaFiltro, setEmpresaFiltro] = useState('');
   const [pessoaId, setPessoaId] = useState('');
   const [pessoaNome, setPessoaNome] = useState('');
+  const [empresaId, setEmpresaId] = useState('');
+  const [filialId, setFilialId] = useState('');
   const [form, setForm] = useState({
     validade: '',
     observacoes: '',
@@ -111,7 +127,22 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   useEffect(() => {
     setPage(0);
     setSelectedIds(new Set());
-  }, [buscaDebounced, statusFiltro, tipo]);
+  }, [buscaDebounced, statusFiltro, tipo, empresaFiltro]);
+
+  useEffect(() => {
+    api
+      .get('/tenant/info/empresas')
+      .then((r) => {
+        const list = (r.data.empresas ?? []) as EmpresaRow[];
+        setEmpresas(list);
+        if (!empresaId && list[0]) setEmpresaId(list[0].id);
+      })
+      .catch(() => {});
+    api
+      .get('/tenant/info/filiais')
+      .then((r) => setFiliais((r.data.filiais ?? []) as FilialRow[]))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +152,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
         tipo,
         status: statusFiltro || undefined,
         busca: buscaDebounced || undefined,
+        empresaId: empresaFiltro || undefined,
         page,
         limit: PAGE_SIZE,
       });
@@ -132,7 +164,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
     } finally {
       setLoading(false);
     }
-  }, [tipo, statusFiltro, buscaDebounced, page]);
+  }, [tipo, statusFiltro, buscaDebounced, empresaFiltro, page]);
 
   useEffect(() => {
     load();
@@ -141,11 +173,18 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   useEffect(() => {
     if (showModal && produtos.length === 0) {
       api
-        .get('/tenant/cadastros/produtos', { params: { limit: 200, page: 0 } })
+        .get('/tenant/cadastros/produtos', {
+          params: { limit: 200, page: 0, ...(empresaId ? { empresaId } : {}) },
+        })
         .then((r) => setProdutos(r.data.produtos ?? []))
         .catch(() => {});
     }
-  }, [showModal, produtos.length]);
+  }, [showModal, produtos.length, empresaId]);
+
+  const filiaisDaEmpresa = useMemo(
+    () => filiais.filter((f) => f.empresa_id === empresaId),
+    [filiais, empresaId],
+  );
 
   const qtdPorStatus = useMemo(() => {
     const map: Record<string, number> = {};
@@ -220,6 +259,8 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
     setForm({ validade: '', observacoes: '', desconto: 0, status: 'rascunho', itens: [emptyItem()] });
     setPessoaId('');
     setPessoaNome('');
+    setEmpresaId(empresas[0]?.id ?? '');
+    setFilialId('');
     setEditingId(null);
     setModalError('');
     setShowModal(true);
@@ -240,6 +281,8 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
       });
       setPessoaId(c.pessoa_id ?? '');
       setPessoaNome(c.cliente ?? '');
+      setEmpresaId(c.empresa_id ?? empresas[0]?.id ?? '');
+      setFilialId(c.filial_id ?? '');
       setEditingId(id);
       setModalError('');
       setShowModal(true);
@@ -254,11 +297,17 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
       setModalError('Adicione pelo menos um item.');
       return;
     }
+    if (!empresaId) {
+      setModalError('Selecione a empresa.');
+      return;
+    }
     setSaving(true);
     setModalError('');
     try {
       const payload = {
         tipo,
+        empresa_id: empresaId,
+        filial_id: filialId || null,
         pessoa_id: pessoaId || undefined,
         validade: form.validade || undefined,
         observacoes: form.observacoes || undefined,
@@ -359,6 +408,18 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
           className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
         <select
+          value={empresaFiltro}
+          onChange={(e) => setEmpresaFiltro(e.target.value)}
+          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
+          <option value="">Todas as empresas</option>
+          {empresas.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.razao_social}
+            </option>
+          ))}
+        </select>
+        <select
           value={statusFiltro}
           onChange={(e) => setStatusFiltro(e.target.value)}
           className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
@@ -440,7 +501,7 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
                       className="rounded border-slate-300"
                     />
                   </th>
-                  {['Número', pessoaLabel, 'Validade', 'Total', 'Status', 'Criado em', ''].map((h) => (
+                  {['Número', pessoaLabel, 'Empresa', 'Validade', 'Total', 'Status', 'Criado em', ''].map((h) => (
                     <th
                       key={h || 'acoes'}
                       className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
@@ -478,6 +539,12 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
                       {c.cliente || (
                         <span className="text-slate-400 italic">Sem {pessoaLabel.toLowerCase()}</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="font-medium text-slate-700 dark:text-slate-200">
+                        {c.empresa_nome || '—'}
+                      </div>
+                      <div>{c.filial_nome || 'Matriz'}</div>
                     </td>
                     <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">
                       {fmtDate(c.validade)}
@@ -588,6 +655,45 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
             )}
 
             <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Empresa
+                </label>
+                <select
+                  value={empresaId}
+                  onChange={(e) => {
+                    setEmpresaId(e.target.value);
+                    setFilialId('');
+                    setProdutos([]);
+                  }}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  {empresas.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.razao_social}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Filial <span className="font-normal text-slate-400">(opcional)</span>
+                </label>
+                <select
+                  value={filialId}
+                  onChange={(e) => setFilialId(e.target.value)}
+                  disabled={!empresaId}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
+                >
+                  <option value="">Matriz</option>
+                  {filiaisDaEmpresa.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">Sem filial, a cotação é da matriz.</p>
+              </div>
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   {pessoaLabel}
