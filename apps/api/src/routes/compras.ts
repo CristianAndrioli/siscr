@@ -27,9 +27,15 @@ const itemSchema = z.object({
   precoUnitario: z.number().positive(),
 })
 
+/** Sem filial o pedido é da matriz — string vazia vira `undefined`. */
+const filialOpcional = z.preprocess(
+  (v) => (v === '' ? undefined : v),
+  z.string().uuid().nullish(),
+)
+
 const pedidoSchema = z.object({
   empresaId: z.string().uuid(),
-  filialId: z.string().uuid(),
+  filialId: filialOpcional,
   fornecedorId: z.string().uuid(),
   observacoes: z.string().optional(),
   itens: z.array(itemSchema).min(1),
@@ -38,7 +44,7 @@ const pedidoSchema = z.object({
 const pedidoUpdateSchema = z
   .object({
     empresaId: z.string().uuid().optional(),
-    filialId: z.string().uuid().optional(),
+    filialId: filialOpcional,
     fornecedorId: z.string().uuid().optional(),
     observacoes: z.string().nullable().optional(),
     itens: z.array(itemSchema).min(1).optional(),
@@ -49,7 +55,7 @@ type PedidoCompraRow = {
   id: string
   tenant_id: string
   empresa_id: string
-  filial_id: string
+  filial_id: string | null
   fornecedor_id: string
   numero: number
   status: string
@@ -124,7 +130,7 @@ app.post('/pedidos', zValidator('json', pedidoSchema), async (c) => {
     c.env.DB_SHARED.prepare(`
       INSERT INTO pedidos_compra (id, tenant_id, empresa_id, filial_id, fornecedor_id, usuario_id, numero, status, total, observacoes, created_at, updated_at, created_by, updated_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'rascunho', ?, ?, ?, ?, ?, ?)
-    `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId, data.fornecedorId,
+    `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId ?? null, data.fornecedorId,
         user.userId, numero, total, data.observacoes ?? null, now, now, uid, uid),
 
     ...data.itens.map((item) =>
@@ -184,7 +190,7 @@ app.patch('/pedidos/:id', zValidator('json', pedidoUpdateSchema), async (c) => {
   }
 
   const empresaId = data.empresaId ?? pedido.empresa_id
-  const filialId = data.filialId ?? pedido.filial_id
+  const filialId = data.filialId === undefined ? pedido.filial_id : (data.filialId ?? null)
   const fornecedorId = data.fornecedorId ?? pedido.fornecedor_id
   const observacoes = data.observacoes === undefined ? pedido.observacoes : data.observacoes
 

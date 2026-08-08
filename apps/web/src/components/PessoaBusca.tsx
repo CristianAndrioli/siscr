@@ -17,15 +17,21 @@ interface Props {
   className?: string;
 }
 
+/** Quantas pessoas listar quando o campo é aberto sem nenhum termo digitado. */
+const LIMITE_LISTA_INICIAL = 20;
+
 /**
  * Campo de busca de pessoa com autocomplete.
  * Abordagem padrão ERP: digita nome ou CPF/CNPJ, lista aparece embaixo.
+ * Ao clicar no campo vazio a lista já abre com os primeiros cadastros,
+ * para que o campo não pareça inerte quando o usuário ainda não sabe o nome.
  */
 export function PessoaBusca({ value, displayValue, onChange, tipoCadastro, placeholder = 'Buscar por nome ou CPF/CNPJ...', className = '' }: Props) {
   const [query, setQuery] = useState(displayValue ?? '');
   const [resultados, setResultados] = useState<PessoaResult[]>([]);
   const [aberto, setAberto] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [buscou, setBuscou] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -45,24 +51,27 @@ export function PessoaBusca({ value, displayValue, onChange, tipoCadastro, place
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const buscar = (q: string) => {
-    if (!q.trim()) { setResultados([]); setAberto(false); return; }
+  const buscar = (q: string, { imediato = false }: { imediato?: boolean } = {}) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
+    const executar = async () => {
       setLoading(true);
       try {
-        const params: Record<string, string> = { busca: q };
+        const params: Record<string, string> = {};
+        if (q.trim()) params.busca = q;
+        else params.limit = String(LIMITE_LISTA_INICIAL);
         if (tipoCadastro) params.tipoCadastro = tipoCadastro;
         const res = await api.get('/tenant/cadastros/pessoas', { params });
-        const lista: PessoaResult[] = res.data.pessoas ?? [];
-        setResultados(lista);
-        setAberto(lista.length > 0);
+        setResultados(res.data.pessoas ?? []);
       } catch {
         setResultados([]);
       } finally {
+        setBuscou(true);
         setLoading(false);
+        setAberto(true);
       }
-    }, 300);
+    };
+    if (imediato) void executar();
+    else debounceRef.current = setTimeout(executar, 300);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +79,11 @@ export function PessoaBusca({ value, displayValue, onChange, tipoCadastro, place
     // Limpa seleção atual ao digitar
     if (value) onChange('', '');
     buscar(e.target.value);
+  };
+
+  const handleFocus = () => {
+    if (resultados.length > 0) setAberto(true);
+    else buscar(query, { imediato: true });
   };
 
   const selecionar = (p: PessoaResult) => {
@@ -82,9 +96,12 @@ export function PessoaBusca({ value, displayValue, onChange, tipoCadastro, place
   const limpar = () => {
     setQuery('');
     setResultados([]);
+    setBuscou(false);
     setAberto(false);
     onChange('', '');
   };
+
+  const rotulo = tipoCadastro ?? 'cadastro';
 
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
@@ -92,7 +109,7 @@ export function PessoaBusca({ value, displayValue, onChange, tipoCadastro, place
         <input
           value={query}
           onChange={handleChange}
-          onFocus={() => { if (resultados.length > 0) setAberto(true); else if (query.trim()) buscar(query); }}
+          onFocus={handleFocus}
           placeholder={placeholder}
           className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 pr-8 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-slate-400"
         />
@@ -112,6 +129,16 @@ export function PessoaBusca({ value, displayValue, onChange, tipoCadastro, place
           </span>
         )}
       </div>
+
+      {aberto && buscou && resultados.length === 0 && !loading && (
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl px-4 py-3">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {query.trim()
+              ? `Nenhum ${rotulo} encontrado para “${query.trim()}”.`
+              : `Nenhum ${rotulo} cadastrado ainda.`}
+          </p>
+        </div>
+      )}
 
       {aberto && resultados.length > 0 && (
         <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">

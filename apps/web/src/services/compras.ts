@@ -15,7 +15,8 @@ export interface PedidoCompra {
   id: string;
   tenant_id: string;
   empresa_id: string;
-  filial_id: string;
+  /** Nulo quando o pedido é da matriz. */
+  filial_id: string | null;
   fornecedor_id: string;
   numero: number;
   status: PedidoCompraStatus;
@@ -44,7 +45,8 @@ export interface ItemPedidoCompraInput {
 
 export interface PedidoCompraForm {
   empresaId: string;
-  filialId: string;
+  /** Omitido quando o pedido é da matriz. */
+  filialId?: string;
   fornecedorId: string;
   observacoes?: string;
   itens: ItemPedidoCompraInput[];

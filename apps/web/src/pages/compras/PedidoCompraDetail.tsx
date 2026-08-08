@@ -67,7 +67,7 @@ export default function PedidoCompraDetail() {
       setPedido(p);
       setItensExistentes(its);
       setEmpresaId(p.empresa_id);
-      setFilialId(p.filial_id);
+      setFilialId(p.filial_id ?? '');
       setFornecedorId(p.fornecedor_id);
       setObservacoes(p.observacoes ?? '');
       setItens(its.map(it => ({ produtoId: it.produto_id, quantidade: it.quantidade, precoUnitario: it.preco_unitario })));
@@ -110,12 +110,12 @@ export default function PedidoCompraDetail() {
 
   const handleSalvar = async () => {
     setError('');
-    if (!empresaId || !filialId || !fornecedorId) { setError('Selecione empresa, filial e fornecedor.'); return; }
+    if (!empresaId || !fornecedorId) { setError('Selecione empresa e fornecedor.'); return; }
     if (itensValidos.length === 0) { setError('Adicione ao menos um item.'); return; }
     setSaving(true);
     try {
       if (isNew) {
-        const r = await comprasService.create({ empresaId, filialId, fornecedorId, observacoes: observacoes || undefined, itens: itensValidos });
+        const r = await comprasService.create({ empresaId, filialId: filialId || undefined, fornecedorId, observacoes: observacoes || undefined, itens: itensValidos });
         navigate(`/compras/pedidos/${r.id}`);
       } else if (id) {
         await comprasService.update(id, { fornecedorId, observacoes: observacoes || null as unknown as string, itens: itensValidos });
@@ -203,11 +203,12 @@ export default function PedidoCompraDetail() {
             </select>
           </div>
           <div>
-            <label className="input-label">Filial</label>
+            <label className="input-label">Filial <span className="font-normal text-slate-400 dark:text-slate-500">(opcional)</span></label>
             <select className="input" value={filialId} disabled={!podeEditar || !empresaId} onChange={e => setFilialId(e.target.value)}>
-              <option value="">Selecione…</option>
+              <option value="">Matriz</option>
               {filiaisDaEmpresa.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
             </select>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Sem filial, o pedido é da matriz.</p>
           </div>
           <div className="sm:col-span-2">
             <label className="input-label">Fornecedor</label>

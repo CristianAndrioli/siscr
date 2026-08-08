@@ -243,7 +243,8 @@ export const pedidosVenda = sqliteTable('pedidos_venda', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull(),
   empresaId: text('empresa_id').notNull(),
-  filialId: text('filial_id').notNull(),
+  // Sem filial o pedido é da matriz (ver migration 0054).
+  filialId: text('filial_id'),
   clienteId: text('cliente_id').notNull(),
   usuarioId: text('usuario_id'),
   numero: integer('numero').notNull(),

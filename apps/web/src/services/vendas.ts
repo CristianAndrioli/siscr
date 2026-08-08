@@ -17,7 +17,8 @@ export interface Pedido {
   id: string;
   tenant_id: string;
   empresa_id: string;
-  filial_id: string;
+  /** Nulo quando o pedido é da matriz. */
+  filial_id: string | null;
   cliente_id: string;
   vendedor_id: string | null;
   numero: number;
@@ -49,7 +50,8 @@ export interface PedidoItemInput {
 
 export interface PedidoForm {
   empresaId: string;
-  filialId: string;
+  /** Omitido quando o pedido é da matriz. */
+  filialId?: string;
   clienteId: string;
   vendedorId?: string | null;
   tipo: PedidoTipo;

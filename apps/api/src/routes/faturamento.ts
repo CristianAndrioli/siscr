@@ -231,9 +231,11 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     if (!empresaId && row?.empresa_id) empresaId = row.empresa_id
     if (!filialId && row?.filial_id) filialId = row.filial_id
   }
-  if (data.tipo === 'nfe' && (!empresaId || !filialId)) {
+  // Filial é opcional: sem filial a nota é emitida pela matriz. `prepareNfeEnvio`
+  // e `validateNfeBeforeXml` já usam os dados da empresa como fallback do emitente.
+  if (data.tipo === 'nfe' && !empresaId) {
     return c.json(
-      { error: 'Cadastre empresa e pelo menos uma filial em Configurações antes de criar NF-e.' },
+      { error: 'Cadastre a empresa em Configurações antes de criar NF-e.' },
       400,
     )
   }

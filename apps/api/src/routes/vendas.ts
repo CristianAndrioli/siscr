@@ -24,9 +24,15 @@ const itemSchema = z.object({
   desconto: z.number().nonnegative().default(0),
 })
 
+/** Sem filial o pedido é da matriz — string vazia vira `undefined`. */
+const filialOpcional = z.preprocess(
+  (v) => (v === '' ? undefined : v),
+  z.string().uuid().nullish(),
+)
+
 const pedidoSchema = z.object({
   empresaId: z.string().uuid(),
-  filialId: z.string().uuid(),
+  filialId: filialOpcional,
   clienteId: z.string().uuid(),
   vendedorId: z.string().uuid().optional(),
   tipo: z.enum(['pedido', 'orcamento']).default('pedido'),
@@ -46,7 +52,7 @@ const patchStatusSchema = z.object({
 const pedidoUpdateSchema = z
   .object({
     empresaId: z.string().uuid().optional(),
-    filialId: z.string().uuid().optional(),
+    filialId: filialOpcional,
     clienteId: z.string().uuid().optional(),
     vendedorId: z.string().uuid().nullable().optional(),
     tipo: z.enum(['pedido', 'orcamento']).optional(),
@@ -59,7 +65,7 @@ type PedidoRow = {
   id: string
   tenant_id: string
   empresa_id: string
-  filial_id: string
+  filial_id: string | null
   cliente_id: string
   numero: number
   tipo: string
@@ -140,7 +146,7 @@ app.post('/pedidos', zValidator('json', pedidoSchema), async (c) => {
     c.env.DB_SHARED.prepare(`
       INSERT INTO pedidos_venda (id, tenant_id, empresa_id, filial_id, cliente_id, vendedor_id, usuario_id, numero, tipo, status, total, observacoes, created_at, updated_at, created_by, updated_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId, data.clienteId, data.vendedorId ?? null,
+    `).bind(pedidoId, tenant.tenantId, data.empresaId, data.filialId ?? null, data.clienteId, data.vendedorId ?? null,
         user.userId, numero, data.tipo, 'rascunho', total, data.observacoes ?? null, now, now, uid, uid),
 
     ...data.itens.map((item) =>
@@ -457,7 +463,7 @@ app.patch('/pedidos/:id', zValidator('json', pedidoUpdateSchema), async (c) => {
   }
 
   const empresaId = data.empresaId ?? pedido.empresa_id
-  const filialId = data.filialId ?? pedido.filial_id
+  const filialId = data.filialId === undefined ? pedido.filial_id : (data.filialId ?? null)
   const clienteId = data.clienteId ?? pedido.cliente_id
   const vendedorId = data.vendedorId === undefined ? pedido.vendedor_id : data.vendedorId
   const tipo = data.tipo ?? pedido.tipo
