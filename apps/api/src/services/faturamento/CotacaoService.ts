@@ -33,6 +33,10 @@ export class CotacaoService {
     return this.repo.findWithItems(id)
   }
 
+  updateStatusBatch(ids: string[], status: CotacaoStatus, auditUserId: string | null) {
+    return this.repo.updateStatusBatch(ids, status, auditUserId)
+  }
+
   async create(
     input: CotacaoCreateInput,
     auditUserId: string | null,

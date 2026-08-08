@@ -28,11 +28,18 @@ const app = new Hono<{ Bindings: Env }>()
 app.get('/cotacoes', async (c) => {
   const tenant = c.get('tenant')
   const { status, busca, tipo } = c.req.query()
+  const { limit, page, offset } = parseListPagination(c)
   const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
   // Sem `tipo` na query, mantém o comportamento histórico da tela de
   // Faturamento (só cotações de venda) — Compras sempre passa tipo=compra.
-  const cotacoes = await svc.list({ status, busca, tipo: (tipo as 'venda' | 'compra') || 'venda' })
-  return c.json({ cotacoes })
+  const result = await svc.list({
+    status,
+    busca,
+    tipo: (tipo as 'venda' | 'compra') || 'venda',
+    limit,
+    offset,
+  })
+  return c.json({ ...result, page, limit })
 })
 
 app.get('/cotacoes/:id', async (c) => {
@@ -53,14 +60,34 @@ const itemSchema = z.object({
   unidade: z.string().default('UN'),
 })
 
+const cotacaoStatusEnum = z.enum(['rascunho', 'enviada', 'aprovada', 'recusada', 'expirada'])
+
 const cotacaoSchema = z.object({
   tipo: z.enum(['venda', 'compra']).default('venda'),
   pessoaId: z.string().uuid().optional(),
   validade: z.string().optional(),
   observacoes: z.string().optional(),
   desconto: z.number().min(0).default(0),
-  status: z.enum(['rascunho', 'enviada', 'aprovada', 'recusada', 'expirada']).default('rascunho'),
+  status: cotacaoStatusEnum.default('rascunho'),
   itens: z.array(itemSchema).default([]),
+})
+
+const statusBatchSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+  status: cotacaoStatusEnum,
+})
+
+/**
+ * Altera o status de várias cotações sem abrir cada registro —
+ * equivalente à tela de aprovação/controle dos ERPs (Protheus MATA416).
+ * Registrado antes de `/:id` para não capturar "status" como UUID.
+ */
+app.patch('/cotacoes/status', zValidator('json', statusBatchSchema), async (c) => {
+  const tenant = c.get('tenant')
+  const { ids, status } = c.req.valid('json')
+  const svc = createCotacaoService(c.env.DB_SHARED, tenant.tenantId)
+  const atualizadas = await svc.updateStatusBatch(ids, status, auditUserId(c))
+  return c.json({ atualizadas, status, message: `${atualizadas} cotação(ões) atualizada(s).` })
 })
 
 app.post('/cotacoes', zValidator('json', cotacaoSchema), async (c) => {

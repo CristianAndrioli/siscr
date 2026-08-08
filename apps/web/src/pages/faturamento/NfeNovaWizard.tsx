@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
-import { notasService, type NFItem } from '../../services/faturamentoService';
+import {
+  cotacoesService,
+  notasService,
+  type CotacaoItem,
+  type NFItem,
+} from '../../services/faturamentoService';
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
@@ -73,8 +78,25 @@ const emptyItem = (): NFItem => ({
   ncm: '',
 });
 
+function itemCotacaoParaNf(i: CotacaoItem & Record<string, unknown>): NFItem {
+  const produtoId = (i.produtoId ?? i.produto_id) as string | undefined;
+  const servicoId = (i.servicoId ?? i.servico_id) as string | undefined;
+  return {
+    ...emptyItem(),
+    produtoId,
+    servicoId,
+    descricao: String(i.descricao ?? ''),
+    quantidade: Number(i.quantidade) || 1,
+    valorUnitario: Number(i.valorUnitario ?? i.valor_unitario) || 0,
+    desconto: Number(i.desconto) || 0,
+    unidade: String(i.unidade ?? 'UN'),
+  };
+}
+
 export function NfeNovaWizardPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const cotacaoIdParam = searchParams.get('cotacaoId');
   const { reportError } = useErrorNotification();
   const [step, setStep] = useState(0);
   const [empresas, setEmpresas] = useState<EmpresaRow[]>([]);
@@ -83,6 +105,8 @@ export function NfeNovaWizardPage() {
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [cotacaoOrigem, setCotacaoOrigem] = useState<{ id: string; numero: string } | null>(null);
+  const cotacaoCarregada = useRef<string | null>(null);
 
   const [empresaId, setEmpresaId] = useState('');
   const [filialId, setFilialId] = useState('');
@@ -128,6 +152,48 @@ export function NfeNovaWizardPage() {
     loadMeta();
   }, [loadMeta]);
 
+  /**
+   * Cotação aprovada → NF-e: o assistente abre já com cliente e itens.
+   * Empresa/filial continuam no passo 0 (a cotação não carrega esses campos).
+   */
+  useEffect(() => {
+    if (!cotacaoIdParam || cotacaoCarregada.current === cotacaoIdParam) return;
+    let cancelled = false;
+    ;(async () => {
+      try {
+        const c = await cotacoesService.get(cotacaoIdParam);
+        if (cancelled) return;
+        if (c.tipo && c.tipo !== 'venda') {
+          setError('Só é possível faturar cotação de venda.');
+          return;
+        }
+        if (c.status !== 'aprovada') {
+          setError(`A cotação ${c.numero} precisa estar aprovada para faturar (status atual: ${c.status}).`);
+        }
+        const itensNf = (c.itens ?? [])
+          .map((i) => itemCotacaoParaNf(i as CotacaoItem & Record<string, unknown>))
+          .filter((i) => i.descricao.trim());
+        setDestinatarioId(c.pessoa_id ?? '');
+        setDestinatarioNome(c.cliente ?? '');
+        setForm((f) => ({
+          ...f,
+          desconto: Number(c.desconto) || 0,
+          observacoes: c.observacoes
+            ? `Ref. cotação ${c.numero}. ${c.observacoes}`
+            : `Ref. cotação ${c.numero}.`,
+          itens: itensNf.length > 0 ? itensNf : [emptyItem()],
+        }));
+        setCotacaoOrigem({ id: c.id, numero: c.numero });
+        cotacaoCarregada.current = cotacaoIdParam;
+      } catch {
+        if (!cancelled) setError('Não foi possível carregar a cotação para faturamento.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cotacaoIdParam]);
+
   useEffect(() => {
     if (!empresaId) return;
     const fList = filiais.filter((f) => f.empresa_id === empresaId);
@@ -146,7 +212,30 @@ export function NfeNovaWizardPage() {
     api
       .get('/tenant/cadastros/produtos', { params: { empresaId, limit: 200, page: 0 } })
       .then((r) => {
-        if (!cancelled) setProdutos(r.data.produtos ?? []);
+        if (cancelled) return;
+        const lista = (r.data.produtos ?? []) as Produto[];
+        setProdutos(lista);
+        // Cotação traz produto_id sem NCM/CST — completa a partir do cadastro.
+        if (cotacaoOrigem) {
+          setForm((f) => ({
+            ...f,
+            itens: f.itens.map((it) => {
+              if (!it.produtoId) return it;
+              const p = lista.find((x) => x.id === it.produtoId);
+              if (!p) return it;
+              return {
+                ...it,
+                ncm: it.ncm || p.ncm || '',
+                origem: it.origem ?? p.origem ?? 0,
+                icmsCst: it.icmsCst ?? p.icms_cst ?? undefined,
+                icmsCsosn: it.icmsCsosn ?? p.icms_csosn ?? undefined,
+                pisCst: it.pisCst ?? p.pis_cst ?? undefined,
+                cofinsCst: it.cofinsCst ?? p.cofins_cst ?? undefined,
+                unidade: it.unidade || p.unidade || 'UN',
+              };
+            }),
+          }));
+        }
       })
       .catch(() => {
         if (!cancelled) setProdutos([]);
@@ -154,7 +243,7 @@ export function NfeNovaWizardPage() {
     return () => {
       cancelled = true;
     };
-  }, [empresaId]);
+  }, [empresaId, cotacaoOrigem]);
 
   useEffect(() => {
     if (!destinatarioId) {
@@ -300,6 +389,19 @@ export function NfeNovaWizardPage() {
           </p>
         </div>
       </div>
+
+      {cotacaoOrigem && (
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-950/30 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-100">
+          Montada a partir da cotação{' '}
+          <Link
+            to="/faturamento/cotacoes"
+            className="font-semibold underline underline-offset-2"
+          >
+            {cotacaoOrigem.numero}
+          </Link>
+          . Cliente e itens já vieram preenchidos — confira o emitente e complete a emissão.
+        </div>
+      )}
 
       {/* Stepper */}
       <nav aria-label="Progresso" className="flex flex-col sm:flex-row sm:flex-wrap gap-2">

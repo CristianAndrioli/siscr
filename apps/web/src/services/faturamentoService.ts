@@ -108,10 +108,36 @@ export interface NotaFiscal {
 
 const BASE = '/tenant/faturamento';
 
+export type CotacaoResumoStatus = {
+  status: string;
+  quantidade: number;
+  valor_total: number;
+};
+
+export type CotacaoListResponse = {
+  cotacoes: Cotacao[];
+  total: number;
+  page: number;
+  limit: number;
+  resumo: CotacaoResumoStatus[];
+};
+
 export const cotacoesService = {
-  list: async (params?: { status?: string; busca?: string; tipo?: CotacaoTipo }): Promise<Cotacao[]> => {
+  list: async (params?: {
+    status?: string;
+    busca?: string;
+    tipo?: CotacaoTipo;
+    page?: number;
+    limit?: number;
+  }): Promise<CotacaoListResponse> => {
     const res = await api.get(`${BASE}/cotacoes`, { params });
-    return res.data.cotacoes ?? [];
+    return {
+      cotacoes: res.data.cotacoes ?? [],
+      total: Number(res.data.total ?? 0),
+      page: Number(res.data.page ?? 0),
+      limit: Number(res.data.limit ?? 50),
+      resumo: res.data.resumo ?? [],
+    };
   },
   get: async (id: string): Promise<Cotacao> => {
     const res = await api.get(`${BASE}/cotacoes/${id}`);
@@ -154,6 +180,11 @@ export const cotacoesService = {
         unidade: i.unidade ?? 'UN',
       })),
     });
+  },
+  /** Altera o status de várias cotações sem abrir cada uma. */
+  updateStatusBatch: async (ids: string[], status: CotacaoStatus): Promise<{ atualizadas: number }> => {
+    const res = await api.patch(`${BASE}/cotacoes/status`, { ids, status });
+    return { atualizadas: Number(res.data.atualizadas ?? 0) };
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${BASE}/cotacoes/${id}`);

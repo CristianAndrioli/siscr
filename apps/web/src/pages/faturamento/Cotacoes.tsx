@@ -1,12 +1,20 @@
-import { useState, useEffect, useCallback } from 'react';
-import { cotacoesService, type Cotacao, type CotacaoItem, type CotacaoStatus, type CotacaoTipo } from '../../services/faturamentoService';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  cotacoesService,
+  type Cotacao,
+  type CotacaoItem,
+  type CotacaoResumoStatus,
+  type CotacaoStatus,
+  type CotacaoTipo,
+} from '../../services/faturamentoService';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
-
 import { fmtBRL } from '../../utils/format';
 import { formatApiError } from '../../utils/helpers';
 import CurrencyInput from '../../components/common/CurrencyInput';
-const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('pt-BR') : '—';
+
+const fmtDate = (s?: string) => (s ? new Date(s).toLocaleDateString('pt-BR') : '—');
 
 const STATUS_STYLE: Record<CotacaoStatus, string> = {
   rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -16,12 +24,45 @@ const STATUS_STYLE: Record<CotacaoStatus, string> = {
   expirada: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
 };
 const STATUS_LABEL: Record<CotacaoStatus, string> = {
-  rascunho: 'Rascunho', enviada: 'Enviada', aprovada: 'Aprovada', recusada: 'Recusada', expirada: 'Expirada',
+  rascunho: 'Rascunho',
+  enviada: 'Enviada',
+  aprovada: 'Aprovada',
+  recusada: 'Recusada',
+  expirada: 'Expirada',
 };
 
-interface Produto { id: string; descricao: string; codigo: string; unidade: string; preco_venda: number; }
+const PAGE_SIZE = 50;
 
-const emptyItem = (): CotacaoItem => ({ descricao: '', quantidade: 1, valorUnitario: 0, desconto: 0, unidade: 'UN' });
+interface Produto {
+  id: string;
+  descricao: string;
+  codigo: string;
+  unidade: string;
+  preco_venda: number;
+}
+
+const emptyItem = (): CotacaoItem => ({
+  descricao: '',
+  quantidade: 1,
+  valorUnitario: 0,
+  desconto: 0,
+  unidade: 'UN',
+});
+
+/** Normaliza item vindo do D1 (snake_case) para o shape do formulário. */
+function normalizeItem(i: CotacaoItem & Record<string, unknown>): CotacaoItem {
+  return {
+    id: i.id,
+    produtoId: i.produtoId ?? (i.produto_id as string | undefined),
+    servicoId: i.servicoId ?? (i.servico_id as string | undefined),
+    descricao: i.descricao ?? '',
+    quantidade: Number(i.quantidade) || 0,
+    valorUnitario: Number(i.valorUnitario ?? i.valor_unitario) || 0,
+    desconto: Number(i.desconto) || 0,
+    valor_total: i.valor_total,
+    unidade: i.unidade ?? 'UN',
+  };
+}
 
 interface CotacoesPageProps {
   tipo: CotacaoTipo;
@@ -32,11 +73,20 @@ interface CotacoesPageProps {
 }
 
 function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPessoa }: CotacoesPageProps) {
+  const navigate = useNavigate();
   const [cotacoes, setCotacoes] = useState<Cotacao[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [resumo, setResumo] = useState<CotacaoResumoStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busca, setBusca] = useState('');
+  const [buscaDebounced, setBuscaDebounced] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<CotacaoStatus | ''>('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,19 +96,47 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   const [pessoaId, setPessoaId] = useState('');
   const [pessoaNome, setPessoaNome] = useState('');
   const [form, setForm] = useState({
-    validade: '', observacoes: '', desconto: 0,
+    validade: '',
+    observacoes: '',
+    desconto: 0,
     status: 'rascunho' as CotacaoStatus,
     itens: [emptyItem()],
   });
 
-  const load = useCallback(async () => {
-    setLoading(true); setError('');
-    try { setCotacoes(await cotacoesService.list({ tipo })); }
-    catch { setError('Erro ao carregar cotações.'); }
-    finally { setLoading(false); }
-  }, [tipo]);
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(busca.trim()), 300);
+    return () => clearTimeout(t);
+  }, [busca]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setPage(0);
+    setSelectedIds(new Set());
+  }, [buscaDebounced, statusFiltro, tipo]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await cotacoesService.list({
+        tipo,
+        status: statusFiltro || undefined,
+        busca: buscaDebounced || undefined,
+        page,
+        limit: PAGE_SIZE,
+      });
+      setCotacoes(data.cotacoes);
+      setTotal(data.total);
+      setResumo(data.resumo);
+    } catch {
+      setError('Erro ao carregar cotações.');
+    } finally {
+      setLoading(false);
+    }
+  }, [tipo, statusFiltro, buscaDebounced, page]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     if (showModal && produtos.length === 0) {
@@ -69,10 +147,82 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
     }
   }, [showModal, produtos.length]);
 
+  const qtdPorStatus = useMemo(() => {
+    const map: Record<string, number> = {};
+    let valorAprovadas = 0;
+    for (const r of resumo) {
+      map[r.status] = r.quantidade;
+      if (r.status === 'aprovada') valorAprovadas = r.valor_total;
+    }
+    return {
+      total: resumo.reduce((s, r) => s + r.quantidade, 0),
+      aprovadasValor: valorAprovadas,
+      enviada: map.enviada ?? 0,
+      rascunho: map.rascunho ?? 0,
+    };
+  }, [resumo]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const allPageSelected = cotacoes.length > 0 && cotacoes.every((c) => selectedIds.has(c.id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPage = () => {
+    if (allPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const c of cotacoes) next.delete(c.id);
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const c of cotacoes) next.add(c.id);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkStatus = async () => {
+    if (!bulkStatus || selectedIds.size === 0) return;
+    setBulkBusy(true);
+    setError('');
+    try {
+      await cotacoesService.updateStatusBatch([...selectedIds], bulkStatus);
+      setSelectedIds(new Set());
+      setBulkStatus('');
+      await load();
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Erro ao alterar status em massa.'));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleQuickStatus = async (id: string, status: CotacaoStatus) => {
+    try {
+      await cotacoesService.updateStatusBatch([id], status);
+      setCotacoes((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
+      await load();
+    } catch (err: unknown) {
+      setError(formatApiError(err, 'Erro ao alterar status.'));
+    }
+  };
+
   const openNew = () => {
     setForm({ validade: '', observacoes: '', desconto: 0, status: 'rascunho', itens: [emptyItem()] });
-    setPessoaId(''); setPessoaNome('');
-    setEditingId(null); setModalError(''); setShowModal(true);
+    setPessoaId('');
+    setPessoaNome('');
+    setEditingId(null);
+    setModalError('');
+    setShowModal(true);
   };
 
   const openEdit = async (id: string) => {
@@ -83,36 +233,52 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
         observacoes: c.observacoes ?? '',
         desconto: c.desconto,
         status: c.status,
-        itens: (c.itens && c.itens.length > 0)
-          ? c.itens.map(i => ({ ...i, valorUnitario: i.valorUnitario ?? 0, desconto: i.desconto ?? 0 }))
-          : [emptyItem()],
+        itens:
+          c.itens && c.itens.length > 0
+            ? c.itens.map((i) => normalizeItem(i as CotacaoItem & Record<string, unknown>))
+            : [emptyItem()],
       });
       setPessoaId(c.pessoa_id ?? '');
       setPessoaNome(c.cliente ?? '');
-      setEditingId(id); setModalError(''); setShowModal(true);
-    } catch { setError('Erro ao carregar cotação.'); }
+      setEditingId(id);
+      setModalError('');
+      setShowModal(true);
+    } catch {
+      setError('Erro ao carregar cotação.');
+    }
   };
 
   const handleSave = async () => {
-    const validItens = form.itens.filter(i => i.descricao.trim());
-    if (validItens.length === 0) { setModalError('Adicione pelo menos um item.'); return; }
-    setSaving(true); setModalError('');
+    const validItens = form.itens.filter((i) => i.descricao.trim());
+    if (validItens.length === 0) {
+      setModalError('Adicione pelo menos um item.');
+      return;
+    }
+    setSaving(true);
+    setModalError('');
     try {
       const payload = {
         tipo,
-        pessoa_id: pessoaId || undefined, // nunca envia string vazia
+        pessoa_id: pessoaId || undefined,
         validade: form.validade || undefined,
         observacoes: form.observacoes || undefined,
         desconto: form.desconto,
         status: form.status,
         itens: validItens,
       };
-      if (editingId) await cotacoesService.update(editingId, payload as any);
-      else await cotacoesService.create(payload as any);
-      setShowModal(false); load();
+      if (editingId) await cotacoesService.update(editingId, payload as Parameters<typeof cotacoesService.update>[1]);
+      else await cotacoesService.create(payload as Parameters<typeof cotacoesService.create>[0]);
+      setShowModal(false);
+      load();
     } catch (err: unknown) {
       setModalError(formatApiError(err, 'Erro ao salvar cotação.'));
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const faturar = (c: Cotacao) => {
+    navigate(`/faturamento/nf-venda/nova?cotacaoId=${c.id}`);
   };
 
   const calcItemTotal = (item: CotacaoItem) => item.quantidade * item.valorUnitario - (item.desconto ?? 0);
@@ -120,24 +286,27 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
   const totalFinal = subtotal - form.desconto;
 
   const setItem = (idx: number, field: keyof CotacaoItem, value: string | number) =>
-    setForm(f => ({ ...f, itens: f.itens.map((it, i) => i === idx ? { ...it, [field]: value } : it) }));
+    setForm((f) => ({ ...f, itens: f.itens.map((it, i) => (i === idx ? { ...it, [field]: value } : it)) }));
 
   const fillItemFromProduto = (idx: number, prodId: string) => {
-    const p = produtos.find(x => x.id === prodId);
-    if (p) setForm(f => ({
-      ...f, itens: f.itens.map((it, i) => i === idx
-        ? { ...it, produtoId: p.id, descricao: p.descricao, valorUnitario: p.preco_venda ?? 0, unidade: p.unidade ?? 'UN' }
-        : it),
-    }));
+    const p = produtos.find((x) => x.id === prodId);
+    if (p) {
+      setForm((f) => ({
+        ...f,
+        itens: f.itens.map((it, i) =>
+          i === idx
+            ? {
+                ...it,
+                produtoId: p.id,
+                descricao: p.descricao,
+                valorUnitario: p.preco_venda ?? 0,
+                unidade: p.unidade ?? 'UN',
+              }
+            : it,
+        ),
+      }));
+    }
   };
-
-  const filtered = cotacoes.filter(c => {
-    const matchBusca = !busca || c.cliente?.toLowerCase().includes(busca.toLowerCase()) || c.numero?.toLowerCase().includes(busca.toLowerCase());
-    const matchStatus = !statusFiltro || c.status === statusFiltro;
-    return matchBusca && matchStatus;
-  });
-
-  const totAprovadas = cotacoes.filter(c => c.status === 'aprovada').reduce((s, c) => s + (c.valor_total ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -146,68 +315,220 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">{titulo}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{descricao}</p>
         </div>
-        <button onClick={openNew} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+        <button
+          onClick={openNew}
+          className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
           Nova Cotação
         </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {([
-          ['Total', cotacoes.length, ''],
-          ['Aprovadas', fmtBRL(totAprovadas), 'text-emerald-600 dark:text-emerald-400'],
-          ['Aguardando', cotacoes.filter(c => c.status === 'enviada').length, 'text-blue-600 dark:text-blue-400'],
-          ['Rascunhos', cotacoes.filter(c => c.status === 'rascunho').length, ''],
-        ] as const).map(([label, val, cls]) => (
-          <div key={label} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+        {(
+          [
+            ['Total', qtdPorStatus.total, ''],
+            ['Aprovadas', fmtBRL(qtdPorStatus.aprovadasValor), 'text-emerald-600 dark:text-emerald-400'],
+            ['Aguardando', qtdPorStatus.enviada, 'text-blue-600 dark:text-blue-400'],
+            ['Rascunhos', qtdPorStatus.rascunho, ''],
+          ] as const
+        ).map(([label, val, cls]) => (
+          <div
+            key={label}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4"
+          >
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</p>
             <p className={`text-xl font-bold mt-1 text-slate-800 dark:text-slate-100 ${cls}`}>{val}</p>
           </div>
         ))}
       </div>
 
-      {error && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3">
-        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder={`Buscar por ${pessoaLabel.toLowerCase()} ou número...`}
-          className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-        <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value)}
-          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder={`Buscar por ${pessoaLabel.toLowerCase()} ou número...`}
+          className="flex-1 min-w-[200px] border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+        <select
+          value={statusFiltro}
+          onChange={(e) => setStatusFiltro(e.target.value)}
+          className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        >
           <option value="">Todos os status</option>
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(STATUS_LABEL).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
         </select>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl px-4 py-3">
+          <span className="text-sm font-medium text-brand-800 dark:text-brand-200">
+            {selectedIds.size} selecionada(s)
+          </span>
+          <select
+            value={bulkStatus}
+            onChange={(e) => setBulkStatus(e.target.value as CotacaoStatus | '')}
+            className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm bg-white dark:bg-slate-800 dark:text-slate-100"
+          >
+            <option value="">Alterar status para…</option>
+            {Object.entries(STATUS_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!bulkStatus || bulkBusy}
+            onClick={handleBulkStatus}
+            className="px-3 py-1.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg disabled:opacity-50"
+          >
+            {bulkBusy ? 'Aplicando…' : 'Aplicar'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedIds(new Set());
+              setBulkStatus('');
+            }}
+            className="text-sm text-slate-500 hover:underline"
+          >
+            Limpar seleção
+          </button>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+            <svg className="animate-spin w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">Nenhuma cotação encontrada.</div>
+        ) : cotacoes.length === 0 ? (
+          <div className="text-center py-16 text-slate-400 dark:text-slate-500 text-sm">
+            Nenhuma cotação encontrada.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                  {['Número', pessoaLabel, 'Validade', 'Total', 'Status', 'Criado em', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{h}</th>
+                  <th className="px-3 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allPageSelected}
+                      onChange={toggleSelectAllPage}
+                      aria-label="Selecionar página"
+                      className="rounded border-slate-300"
+                    />
+                  </th>
+                  {['Número', pessoaLabel, 'Validade', 'Total', 'Status', 'Criado em', ''].map((h) => (
+                    <th
+                      key={h || 'acoes'}
+                      className="text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+                    >
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer" onClick={() => openEdit(c.id)}>
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-brand-600 dark:text-brand-400">{c.numero}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">{c.cliente || <span className="text-slate-400 italic">Sem {pessoaLabel.toLowerCase()}</span>}</td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">{fmtDate(c.validade)}</td>
-                    <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 tabular-nums">{fmtBRL(c.valor_total)}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_STYLE[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+                {cotacoes.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  >
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                        aria-label={`Selecionar ${c.numero}`}
+                        className="rounded border-slate-300"
+                      />
                     </td>
-                    <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">{fmtDate(c.created_at)}</td>
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setDeleteConfirm(c.id)} className="text-xs text-red-500 hover:underline font-medium">Excluir</button>
+                    <td
+                      className="px-4 py-3 font-mono text-xs font-bold text-brand-600 dark:text-brand-400 cursor-pointer"
+                      onClick={() => openEdit(c.id)}
+                    >
+                      {c.numero}
+                    </td>
+                    <td
+                      className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100 cursor-pointer"
+                      onClick={() => openEdit(c.id)}
+                    >
+                      {c.cliente || (
+                        <span className="text-slate-400 italic">Sem {pessoaLabel.toLowerCase()}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs">
+                      {fmtDate(c.validade)}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-100 tabular-nums">
+                      {fmtBRL(c.valor_total)}
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={c.status}
+                        onChange={(e) => handleQuickStatus(c.id, e.target.value as CotacaoStatus)}
+                        className={`border-0 rounded-full text-xs font-semibold px-2.5 py-1 cursor-pointer focus:ring-2 focus:ring-brand-500 ${STATUS_STYLE[c.status]}`}
+                        title="Alterar status sem abrir a cotação"
+                      >
+                        {Object.entries(STATUS_LABEL).map(([k, v]) => (
+                          <option key={k} value={k}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 dark:text-slate-500 text-xs">
+                      {fmtDate(c.created_at)}
+                    </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 justify-end">
+                        {tipo === 'venda' && c.status === 'aprovada' && (
+                          <button
+                            type="button"
+                            onClick={() => faturar(c)}
+                            className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-semibold"
+                            title="Abrir emissão de NF-e com os dados desta cotação"
+                          >
+                            Faturar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openEdit(c.id)}
+                          className="text-xs text-slate-500 hover:underline font-medium"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirm(c.id)}
+                          className="text-xs text-red-500 hover:underline font-medium"
+                        >
+                          Excluir
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -215,92 +536,197 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
             </table>
           </div>
         )}
+
+        {total > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-sm">
+            <span className="text-slate-500 dark:text-slate-400">
+              {total} cotação(ões) · página {page + 1} de {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page <= 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-40"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                disabled={page + 1 >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg disabled:opacity-40"
+              >
+                Próxima
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Modal Cotação */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-3xl my-6 space-y-5 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{editingId ? 'Editar Cotação' : 'Nova Cotação'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                {editingId ? 'Editar Cotação' : 'Nova Cotação'}
+              </h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
-            {modalError && <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{modalError}</div>}
+            {modalError && (
+              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">
+                {modalError}
+              </div>
+            )}
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">{pessoaLabel}</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  {pessoaLabel}
+                </label>
                 <PessoaBusca
                   value={pessoaId}
                   displayValue={pessoaNome}
-                  onChange={(id, nome) => { setPessoaId(id); setPessoaNome(nome); }}
+                  onChange={(id, nome) => {
+                    setPessoaId(id);
+                    setPessoaNome(nome);
+                  }}
                   tipoCadastro={tipoCadastroPessoa}
                   placeholder={`Buscar ${pessoaLabel.toLowerCase()} por nome ou CPF/CNPJ...`}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Validade</label>
-                <input type="date" value={form.validade} onChange={e => setForm(f => ({ ...f, validade: e.target.value }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Validade
+                </label>
+                <input
+                  type="date"
+                  value={form.validade}
+                  onChange={(e) => setForm((f) => ({ ...f, validade: e.target.value }))}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Status</label>
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as CotacaoStatus }))}
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500">
-                  {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Status
+                </label>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as CotacaoStatus }))}
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  {Object.entries(STATUS_LABEL).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
 
-            {/* Itens */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">Itens</h3>
-                <button onClick={() => setForm(f => ({ ...f, itens: [...f.itens, emptyItem()] }))} className="text-xs text-brand-600 dark:text-brand-400 font-medium hover:underline">+ Adicionar item</button>
+                <button
+                  onClick={() => setForm((f) => ({ ...f, itens: [...f.itens, emptyItem()] }))}
+                  className="text-xs text-brand-600 dark:text-brand-400 font-medium hover:underline"
+                >
+                  + Adicionar item
+                </button>
               </div>
               <div className="space-y-2">
                 {form.itens.map((item, idx) => (
                   <div key={idx} className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3 space-y-2">
                     <div className="flex gap-2">
-                      <select onChange={e => fillItemFromProduto(idx, e.target.value)} value={item.produtoId ?? ''}
-                        className="border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-[150px]">
+                      <select
+                        onChange={(e) => fillItemFromProduto(idx, e.target.value)}
+                        value={item.produtoId ?? ''}
+                        className="border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-700 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 min-w-[150px]"
+                      >
                         <option value="">Selec. produto...</option>
-                        {produtos.map(p => <option key={p.id} value={p.id}>{p.codigo} — {p.descricao}</option>)}
+                        {produtos.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.codigo} — {p.descricao}
+                          </option>
+                        ))}
                       </select>
-                      <input value={item.descricao} onChange={e => setItem(idx, 'descricao', e.target.value)} placeholder="Descrição do item *"
-                        className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                      <input
+                        value={item.descricao}
+                        onChange={(e) => setItem(idx, 'descricao', e.target.value)}
+                        placeholder="Descrição do item *"
+                        className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      />
                       {form.itens.length > 1 && (
-                        <button onClick={() => setForm(f => ({ ...f, itens: f.itens.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600 shrink-0">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                        <button
+                          onClick={() =>
+                            setForm((f) => ({ ...f, itens: f.itens.filter((_, i) => i !== idx) }))
+                          }
+                          className="text-red-400 hover:text-red-600 shrink-0"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
                         </button>
                       )}
                     </div>
                     <div className="grid grid-cols-4 gap-2">
                       <div>
                         <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Qtd.</label>
-                        <input type="number" min="0.001" step="0.001" value={item.quantidade} onChange={e => setItem(idx, 'quantidade', parseFloat(e.target.value) || 0)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <input
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          value={item.quantidade}
+                          onChange={(e) => setItem(idx, 'quantidade', parseFloat(e.target.value) || 0)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
                       </div>
                       <div>
                         <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Unid.</label>
-                        <input value={item.unidade} onChange={e => setItem(idx, 'unidade', e.target.value.toUpperCase())}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                        <input
+                          value={item.unidade}
+                          onChange={(e) => setItem(idx, 'unidade', e.target.value.toUpperCase())}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        />
                       </div>
                       <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Vlr. Unit.</label>
-                        <CurrencyInput value={item.valorUnitario} onChange={v => setItem(idx, 'valorUnitario', v)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums" />
+                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">
+                          Vlr. Unit.
+                        </label>
+                        <CurrencyInput
+                          value={item.valorUnitario}
+                          onChange={(v) => setItem(idx, 'valorUnitario', v)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
+                        />
                       </div>
                       <div>
-                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">Desc. item</label>
-                        <CurrencyInput value={item.desconto} onChange={v => setItem(idx, 'desconto', v)}
-                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums" />
+                        <label className="text-xs text-slate-500 dark:text-slate-400 block mb-0.5">
+                          Desc. item
+                        </label>
+                        <CurrencyInput
+                          value={item.desconto}
+                          onChange={(v) => setItem(idx, 'desconto', v)}
+                          className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
+                        />
                       </div>
                     </div>
-                    <div className="text-right text-xs font-bold text-slate-600 dark:text-slate-300">Subtotal item: {fmtBRL(calcItemTotal(item))}</div>
+                    <div className="text-right text-xs font-bold text-slate-600 dark:text-slate-300">
+                      Subtotal item: {fmtBRL(calcItemTotal(item))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -308,29 +734,62 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
 
             <div className="grid sm:grid-cols-2 gap-4 items-start">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Observações</label>
-                <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} rows={3}
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                  Observações
+                </label>
+                <textarea
+                  value={form.observacoes}
+                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
+                  rows={3}
                   placeholder="Condições comerciais, prazo de entrega..."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" />
+                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                />
               </div>
               <div className="flex flex-col gap-2 text-sm pt-1">
                 <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                  <span>Subtotal:</span><span>{fmtBRL(subtotal)}</span>
+                  <span>Subtotal:</span>
+                  <span>{fmtBRL(subtotal)}</span>
                 </div>
                 <div className="flex justify-between items-center gap-2">
                   <span className="text-slate-500 dark:text-slate-400 whitespace-nowrap">Desconto geral:</span>
-                  <CurrencyInput value={form.desconto} onChange={v => setForm(f => ({ ...f, desconto: v }))}
-                    className="w-28 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums" />
+                  <CurrencyInput
+                    value={form.desconto}
+                    onChange={(v) => setForm((f) => ({ ...f, desconto: v }))}
+                    className="w-28 border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-xs bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 text-right tabular-nums"
+                  />
                 </div>
                 <div className="flex justify-between font-bold text-base border-t border-slate-200 dark:border-slate-700 pt-2 text-slate-800 dark:text-slate-100">
-                  <span>Total:</span><span className="text-brand-600 dark:text-brand-400">{fmtBRL(totalFinal)}</span>
+                  <span>Total:</span>
+                  <span className="text-brand-600 dark:text-brand-400">{fmtBRL(totalFinal)}</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50">
+            <div className="flex flex-wrap gap-3 pt-2">
+              {tipo === 'venda' && editingId && form.status === 'aprovada' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowModal(false);
+                    navigate(`/faturamento/nf-venda/nova?cotacaoId=${editingId}`);
+                  }}
+                  className="px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
+                >
+                  Faturar NF-e
+                </button>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+              >
                 {saving ? 'Salvando...' : 'Salvar Cotação'}
               </button>
             </div>
@@ -344,8 +803,22 @@ function CotacoesPageBase({ tipo, titulo, descricao, pessoaLabel, tipoCadastroPe
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Excluir cotação?</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Esta ação não pode ser desfeita.</p>
             <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
-              <button onClick={async () => { await cotacoesService.delete(deleteConfirm!); setDeleteConfirm(null); load(); }} className="flex-1 px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors">Excluir</button>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  await cotacoesService.delete(deleteConfirm!);
+                  setDeleteConfirm(null);
+                  load();
+                }}
+                className="flex-1 px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+              >
+                Excluir
+              </button>
             </div>
           </div>
         </div>
@@ -359,7 +832,7 @@ export function CotacoesPage() {
     <CotacoesPageBase
       tipo="venda"
       titulo="Cotações"
-      descricao="Propostas comerciais para clientes"
+      descricao="Propostas comerciais para clientes — controle de status e faturamento"
       pessoaLabel="Cliente"
       tipoCadastroPessoa="cliente"
     />

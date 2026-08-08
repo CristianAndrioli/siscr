@@ -61,6 +61,15 @@ export type CotacaoListFilters = {
   status?: string
   busca?: string
   tipo?: CotacaoTipo
+  limit?: number
+  offset?: number
+}
+
+export type CotacaoListResult = {
+  cotacoes: unknown[]
+  total: number
+  /** Contagens por status (do mesmo tipo, sem filtro de status/busca). */
+  resumo: { status: string; quantidade: number; valor_total: number }[]
 }
 
 export class CotacaoRepository extends BaseTenantRepository {
@@ -68,26 +77,96 @@ export class CotacaoRepository extends BaseTenantRepository {
     super(db, tenantId)
   }
 
-  async list(filters: CotacaoListFilters): Promise<unknown[]> {
-    let sql = `
-      SELECT co.id, co.numero, co.tipo, co.status, co.validade, co.valor_total, co.created_at,
-             p.nome as cliente
-      FROM cotacoes co
-      LEFT JOIN pessoas p ON p.id = co.pessoa_id AND p.tenant_id = co.tenant_id
-      WHERE co.tenant_id = ?
-    `
+  async list(filters: CotacaoListFilters): Promise<CotacaoListResult> {
+    const where: string[] = ['co.tenant_id = ?']
     const params: unknown[] = [this.tenantId]
-    if (filters.status) { sql += ' AND co.status = ?'; params.push(filters.status) }
-    if (filters.tipo) { sql += ' AND co.tipo = ?'; params.push(filters.tipo) }
+    if (filters.status) { where.push('co.status = ?'); params.push(filters.status) }
+    if (filters.tipo) { where.push('co.tipo = ?'); params.push(filters.tipo) }
     if (filters.busca) {
-      sql += ' AND (p.nome LIKE ? OR co.numero LIKE ?)'
+      where.push('(p.nome LIKE ? OR co.numero LIKE ?)')
       const like = `%${filters.busca}%`
       params.push(like, like)
     }
-    sql += ' ORDER BY co.created_at DESC LIMIT 100'
+    const whereSql = where.join(' AND ')
+    const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200)
+    const offset = Math.max(filters.offset ?? 0, 0)
 
-    const { results } = await this.db.prepare(sql).bind(...params).all()
-    return results ?? []
+    const countRow = await this.db
+      .prepare(
+        `SELECT COUNT(*) as c
+         FROM cotacoes co
+         LEFT JOIN pessoas p ON p.id = co.pessoa_id AND p.tenant_id = co.tenant_id
+         WHERE ${whereSql}`,
+      )
+      .bind(...params)
+      .first<{ c: number }>()
+
+    const { results } = await this.db
+      .prepare(
+        `SELECT co.id, co.numero, co.tipo, co.status, co.validade, co.valor_total, co.created_at,
+                co.pessoa_id, p.nome as cliente
+         FROM cotacoes co
+         LEFT JOIN pessoas p ON p.id = co.pessoa_id AND p.tenant_id = co.tenant_id
+         WHERE ${whereSql}
+         ORDER BY co.created_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .bind(...params, limit, offset)
+      .all()
+
+    // Resumo do tipo (sem status/busca) — alimenta os cards da lista.
+    const resumoParams: unknown[] = [this.tenantId]
+    let resumoWhere = 'tenant_id = ?'
+    if (filters.tipo) {
+      resumoWhere += ' AND tipo = ?'
+      resumoParams.push(filters.tipo)
+    }
+    const { results: resumoRows } = await this.db
+      .prepare(
+        `SELECT status, COUNT(*) as quantidade, COALESCE(SUM(valor_total), 0) as valor_total
+         FROM cotacoes WHERE ${resumoWhere}
+         GROUP BY status`,
+      )
+      .bind(...resumoParams)
+      .all<{ status: string; quantidade: number; valor_total: number }>()
+
+    return {
+      cotacoes: results ?? [],
+      total: Number(countRow?.c ?? 0),
+      resumo: (resumoRows ?? []).map((r) => ({
+        status: r.status,
+        quantidade: Number(r.quantidade) || 0,
+        valor_total: Number(r.valor_total) || 0,
+      })),
+    }
+  }
+
+  /**
+   * Atualiza o status de várias cotações de uma vez.
+   * Retorna quantas linhas foram realmente atualizadas (só do tenant).
+   */
+  async updateStatusBatch(
+    ids: string[],
+    status: CotacaoStatus,
+    auditUserId: string | null,
+  ): Promise<number> {
+    if (ids.length === 0) return 0
+    const now = new Date().toISOString()
+    // D1 limita binds; lotes de 50 bastam para o painel de controle.
+    let atualizadas = 0
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50)
+      const placeholders = chunk.map(() => '?').join(', ')
+      const result = await this.db
+        .prepare(
+          `UPDATE cotacoes SET status = ?, updated_at = ?, updated_by = ?
+           WHERE tenant_id = ? AND id IN (${placeholders})`,
+        )
+        .bind(status, now, auditUserId, this.tenantId, ...chunk)
+        .run()
+      atualizadas += Number(result.meta?.changes ?? 0)
+    }
+    return atualizadas
   }
 
   async findWithItems(id: string): Promise<{ header: unknown; itens: unknown[] } | null> {
