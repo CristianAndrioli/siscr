@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import * as entradaService from '../../services/entradaService';
@@ -117,6 +117,11 @@ export default function NfEntradaWizardPage() {
   const [avaliandoPedido, setAvaliandoPedido] = useState(false);
   /** Só os itens que o usuário mexeu — os demais seguem o casamento automático. */
   const [overridesPedido, setOverridesPedido] = useState<Record<number, string | null>>({});
+  /**
+   * Produtos escolhidos no passo anterior na última avaliação. O casamento por
+   * produto depende deles, então uma troca lá invalida o que foi calculado aqui.
+   */
+  const assinaturaAvaliada = useRef<string | null>(null);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -171,6 +176,8 @@ export default function NfEntradaWizardPage() {
         sel[s.indice] = s.produtoId ?? CRIAR;
       }
       setVinculoSelect(sel);
+      assinaturaAvaliada.current = JSON.stringify(sel);
+      setOverridesPedido({});
       setPedidoId(data.pedido_sugerido?.id ?? '');
       setPedido(data.pedido_sugerido ?? null);
       setVinculosPedido(data.vinculos_pedido ?? []);
@@ -262,6 +269,15 @@ export default function NfEntradaWizardPage() {
     setOverridesPedido(proximos);
     void reavaliarPedido(pedidoId, proximos);
   };
+
+  const assinaturaProdutos = useMemo(() => JSON.stringify(vinculoSelect), [vinculoSelect]);
+
+  useEffect(() => {
+    if (step !== 3 || !pedidoId) return;
+    if (assinaturaAvaliada.current === assinaturaProdutos) return;
+    assinaturaAvaliada.current = assinaturaProdutos;
+    void reavaliarPedido(pedidoId, overridesPedido);
+  }, [step, pedidoId, assinaturaProdutos, overridesPedido, reavaliarPedido]);
 
   const divergenciasPorIndice = useMemo(() => {
     const mapa = new Map<number, entradaService.DivergenciaVinculo[]>();
