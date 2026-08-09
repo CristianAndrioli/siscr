@@ -29,6 +29,8 @@ const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 60_000)
 const app = new Hono()
 
 app.get('/health', (c) => c.json({ ok: true, service: 'siscr-sefaz-bridge' }))
+// Teste de conexão do SISCR faz GET na URL base
+app.get('/', (c) => c.json({ ok: true, service: 'siscr-sefaz-bridge' }))
 
 app.post('/', async (c) => {
   if (BRIDGE_TOKEN) {

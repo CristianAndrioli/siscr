@@ -27,8 +27,11 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
-    // Health público (monitoramento)
-    if (request.method === 'GET' && url.pathname === '/health') {
+    // Health e raiz públicos (teste de conexão do SISCR faz GET na base_url)
+    if (
+      request.method === 'GET' &&
+      (url.pathname === '/health' || url.pathname === '/')
+    ) {
       const container = getContainer(env.SEFAZ_BRIDGE, 'singleton')
       await container.startAndWaitForPorts()
       return container.fetch(request)
