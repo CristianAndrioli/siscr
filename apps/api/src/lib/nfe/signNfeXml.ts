@@ -97,8 +97,46 @@ export async function pfxToWebCryptoRsaSha1(
   return { privateKey: privateKeyCrypto, x509Base64 }
 }
 
+type XmlPrefixed = {
+  Prefix: string | null
+  element?: Element | null
+  GetIterator?: () => Iterable<unknown>
+}
+
+/**
+ * SEFAZ/XSD exigem Signature sem prefixo `ds:`.
+ * xmldsigjs assina com `ds:` — se só removermos o prefixo depois, o SignatureValue
+ * (calculado sobre o SignedInfo com ds:) deixa de bater → rejeição 297.
+ * Aqui zeramos o prefixo na árvore e forçamos rebuild do XML em cache.
+ */
+function useDefaultXmlDsigNamespace(root: XmlPrefixed): void {
+  const seen = new Set<object>()
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return
+    if (seen.has(node)) return
+    seen.add(node)
+
+    const o = node as XmlPrefixed & Record<string, unknown>
+    if ('Prefix' in o) {
+      o.Prefix = null
+      if ('element' in o) o.element = null
+    }
+    if (typeof o.GetIterator === 'function') {
+      for (const item of o.GetIterator()) visit(item)
+    }
+    for (const [k, v] of Object.entries(o)) {
+      if (k === 'Parent' || k === 'element' || k === 'document') continue
+      if (v && typeof v === 'object' && ('Prefix' in (v as object) || typeof (v as XmlPrefixed).GetIterator === 'function')) {
+        visit(v)
+      }
+    }
+  }
+  visit(root)
+}
+
 /**
  * Assina NF-e 4.00 (XML-DSig, RSA-SHA1, enveloped + C14N 1.0), referência ao `infNFe` (`#NFe{chave44}`).
+ * Emite Signature com xmlns padrão (sem `ds:`), alinhado ao XSD e à verificação da SEFAZ.
  */
 export async function signNfeXmlWithA1(
   unsignedXml: string,
@@ -115,7 +153,6 @@ export async function signNfeXmlWithA1(
     throw new Error('XML NF-e inválido: elemento raiz NFe esperado.')
   }
 
-  // Apenas o certificado folha no KeyInfo (cadeia completa costuma quebrar o XSD da NF-e)
   const signedXml = new SignedXml()
   await signedXml.Sign(
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
@@ -129,25 +166,33 @@ export async function signNfeXmlWithA1(
           transforms: ['enveloped', 'c14n'],
         },
       ],
+      // Apenas o certificado folha no KeyInfo (cadeia completa costuma quebrar o XSD da NF-e)
       x509: x509Base64.slice(0, 1),
     },
   )
 
+  // Recalcula SignatureValue no leiaute sem prefixo ds: (exigido pela SEFAZ / XSD NF-e).
+  useDefaultXmlDsigNamespace(signedXml.XmlSignature as unknown as XmlPrefixed)
+  const dataEl = signedXml['document']?.documentElement ?? root
+  const signedInfoCanon = (
+    signedXml as unknown as { TransformSignedInfo: (data: Element) => string }
+  ).TransformSignedInfo(dataEl)
+  const signatureBuf = await crypto.subtle.sign(
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
+    privateKey,
+    new TextEncoder().encode(signedInfoCanon),
+  )
+  signedXml.XmlSignature.SignatureValue = new Uint8Array(signatureBuf)
+
   let body = signedXml.toString()
-  body = normalizeNfeSignatureXml(body)
+  // Garante xmlns padrão sem espaço estranho; não altera SignedInfo já reassinado.
+  body = body.replace(
+    /<Signature\b[^>]*>/,
+    '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">',
+  )
+  if (body.includes('ds:') || body.includes('xmlns:ds=')) {
+    throw new Error('Assinatura NF-e ainda contém prefixo ds: — regeneração incompleta.')
+  }
   if (body.startsWith('<?xml')) return body
   return `<?xml version="1.0" encoding="UTF-8"?>${body}`
-}
-
-/**
- * SEFAZ / XSD esperam Signature no namespace xmldsig sem prefixo `ds:`.
- */
-function normalizeNfeSignatureXml(xml: string): string {
-  return xml
-    .replace(/<\/?ds:/g, (m) => m.replace('ds:', ''))
-    .replace(
-      /<Signature\b([^>]*)xmlns:ds="http:\/\/www\.w3\.org\/2000\/09\/xmldsig#"([^>]*)>/,
-      '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"$1$2>',
-    )
-    .replace(/\s+xmlns:ds="http:\/\/www\.w3\.org\/2000\/09\/xmldsig#"/g, '')
 }
