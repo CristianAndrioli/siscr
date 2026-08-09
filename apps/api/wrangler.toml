@@ -13,6 +13,8 @@ FRONTEND_URL = "http://localhost:5173"
 ALLOWED_ORIGINS = "http://localhost:5173"
 # "1" = permitir fluxo de XML NF-e sem certificado ICP (desenvolvimento). Produção: "0"
 NFE_DEV_MODE = "1"
+# Limite mensal de NF-e autorizadas (homolog/staging); produção pode sobrescrever
+NFE_QUOTA_MENSAL = "50"
 
 # ──────────────────────────────────────────────
 # D1 — Banco compartilhado (tenants, planos, billing)
@@ -76,6 +78,7 @@ APP_URL = "https://api-staging.siscr.com.br"
 FRONTEND_URL = "https://staging.siscr.com.br"
 ALLOWED_ORIGINS = "https://staging.siscr.com.br,https://staging.siscr-web.pages.dev,https://siscr-web.pages.dev"
 NFE_DEV_MODE = "0"
+NFE_QUOTA_MENSAL = "50"
 EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
 # Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
 # Nota: tenant identificado via ?tenant=slug ou header X-Tenant-Slug no staging

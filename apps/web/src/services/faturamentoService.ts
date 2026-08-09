@@ -2,7 +2,7 @@ import api from './api';
 
 export type CotacaoStatus = 'rascunho' | 'enviada' | 'aprovada' | 'recusada' | 'expirada';
 export type CotacaoTipo = 'venda' | 'compra';
-export type NFStatus = 'rascunho' | 'pendente_emissao' | 'emitida' | 'cancelada' | 'inutilizada';
+export type NFStatus = 'rascunho' | 'pendente_emissao' | 'autorizada' | 'emitida' | 'cancelada' | 'inutilizada';
 export type NFTipo = 'nfe' | 'nfse';
 
 export interface CotacaoItem {
@@ -107,6 +107,12 @@ export interface NotaFiscal {
   empresa_id?: string;
   data_emissao?: string;
   motivo_cancelamento?: string;
+  protocolo_autorizacao?: string | null;
+  data_autorizacao?: string | null;
+  cstat_ultimo?: string | null;
+  xmotivo_ultimo?: string | null;
+  transmissao_erro?: string | null;
+  ambiente?: number | null;
   created_at: string;
   updated_at?: string;
   itens?: NFItem[];
@@ -318,6 +324,22 @@ export const notasService = {
   danfePreviewBlob: async (id: string): Promise<Blob> => {
     const res = await api.get(`${BASE}/notas/${id}/danfe-preview`, { responseType: 'blob' });
     return res.data as Blob;
+  },
+  /** Envia XML assinado à SEFAZ (NFeAutorizacao4) via ponte sefaz-dfe. */
+  transmitir: async (
+    id: string,
+  ): Promise<{
+    message: string
+    autorizada: boolean
+    cStat: string
+    xMotivo: string
+    protocolo?: string | null
+    dataAutorizacao?: string | null
+    status?: string
+    procNfePath?: string | null
+  }> => {
+    const res = await api.post(`${BASE}/notas/${id}/transmitir`, {});
+    return res.data;
   },
 };
 

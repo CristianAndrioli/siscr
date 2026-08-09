@@ -7,6 +7,8 @@ import { parseListPagination } from '../lib/listPagination'
 import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
 import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
+import { enviarNfeAutorizacao } from '../lib/nfe/autorizacaoNfe'
+import { assertNfeQuotaAvailable, incrementNfeUsoMes } from '../lib/nfe/nfeQuota'
 import {
   fetchBrasilApiNcmJson,
   fetchClassifNcmJson,
@@ -422,6 +424,7 @@ app.put('/notas/:id', zValidator('json', nfSchema.partial()), async (c) => {
 
   if (!nota) return c.json({ error: 'Nota não encontrada.' }, 404)
   if (nota.status === 'emitida') return c.json({ error: 'Não é possível editar uma nota já emitida.' }, 400)
+  if (nota.status === 'autorizada') return c.json({ error: 'Não é possível editar uma nota autorizada pela SEFAZ.' }, 400)
   if (nota.status === 'cancelada') return c.json({ error: 'Não é possível editar uma nota cancelada.' }, 400)
 
   const invalidateXml =
@@ -577,6 +580,7 @@ app.post('/notas/:id/faturar', async (c) => {
   if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
   if (nota.status === 'emitida') return c.json({ error: 'Nota já foi faturada.' }, 400)
   if (nota.status === 'cancelada') return c.json({ error: 'Não é possível faturar uma nota cancelada.' }, 400)
+  // autorizada / pendente_emissao / rascunho: ok para faturar no ERP
 
   const { results: itens } = await c.env.DB_SHARED
     .prepare('SELECT produto_id, quantidade, descricao FROM nota_fiscal_itens WHERE nota_fiscal_id = ? AND produto_id IS NOT NULL')
@@ -715,15 +719,173 @@ async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
 /**
  * Gera chave de acesso, monta XML NF-e 4.00, assina com A1 (se configurado) e grava no R2.
  * Fora de `NFE_DEV_MODE`, exige certificado A1 da empresa ou da filial da nota.
- * Não envia à SEFAZ nesta versão — próximo passo: client SOAP (nfeAutorizacao).
  *
  * Query: force=1 para regerar quando já existir chave/xml.
  * `NFE_DEV_MODE=1`: permite XML sem A1; com A1, assina normalmente.
  */
 app.post('/notas/:id/preparar-xml', jsonPrepareNfeXml)
 
-/** Alias até existir envio SOAP real à SEFAZ. */
-app.post('/notas/:id/transmitir', jsonPrepareNfeXml)
+/**
+ * Transmite XML assinado à SEFAZ (NFeAutorizacao4) via ponte mTLS `sefaz-dfe`.
+ * Não fatura no ERP — isso continua em POST /faturar.
+ */
+app.post('/notas/:id/transmitir', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const now = new Date().toISOString()
+
+  const nota = await c.env.DB_SHARED
+    .prepare(
+      `SELECT nf.id, nf.tipo, nf.status, nf.xml_path, nf.chave_acesso, nf.ambiente,
+              nf.empresa_id, nf.filial_id, nf.transmissao_tentativas, nf.protocolo_autorizacao,
+              e.uf AS empresa_uf, f.uf AS filial_uf
+       FROM notas_fiscais nf
+       LEFT JOIN empresas e ON e.id = nf.empresa_id AND e.tenant_id = nf.tenant_id
+       LEFT JOIN filiais f ON f.id = nf.filial_id AND f.tenant_id = nf.tenant_id
+       WHERE nf.id = ? AND nf.tenant_id = ?`,
+    )
+    .bind(id, tenant.tenantId)
+    .first<{
+      id: string
+      tipo: string
+      status: string
+      xml_path: string | null
+      chave_acesso: string | null
+      ambiente: number | null
+      empresa_id: string | null
+      filial_id: string | null
+      transmissao_tentativas: number | null
+      protocolo_autorizacao: string | null
+      empresa_uf: string | null
+      filial_uf: string | null
+    }>()
+
+  if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
+  if (nota.tipo !== 'nfe') return c.json({ error: 'Transmissão SEFAZ disponível apenas para NF-e.' }, 400)
+  if (nota.status === 'cancelada') return c.json({ error: 'Nota cancelada.' }, 400)
+  if (nota.protocolo_autorizacao) {
+    return c.json({ error: 'Nota já possui protocolo de autorização SEFAZ.' }, 400)
+  }
+  if (!nota.xml_path || !nota.chave_acesso) {
+    return c.json(
+      { error: 'Gere e assine o XML antes de transmitir (Preparar XML).' },
+      400,
+    )
+  }
+  if (!c.env.R2_STORAGE) {
+    return c.json({ error: 'R2_STORAGE não configurado.' }, 503)
+  }
+
+  try {
+    await assertNfeQuotaAvailable(c.env, tenant.tenantId)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Cota mensal esgotada.'
+    return c.json({ error: msg, code: 'NFE_QUOTA_EXCEEDED' }, 403)
+  }
+
+  const obj = await c.env.R2_STORAGE.get(nota.xml_path)
+  if (!obj) return c.json({ error: 'Arquivo XML não encontrado no armazenamento.' }, 404)
+  const xmlAssinado = await obj.text()
+  if (!/<Signature\b/i.test(xmlAssinado)) {
+    return c.json(
+      { error: 'XML sem assinatura digital. Envie o certificado A1 e regenere o XML.' },
+      400,
+    )
+  }
+
+  const tpAmb = (nota.ambiente === 1 ? 1 : 2) as 1 | 2
+  const ufEmitente = (nota.filial_uf || nota.empresa_uf || 'SP').trim().toUpperCase()
+  const tent = Number(nota.transmissao_tentativas ?? 0) + 1
+
+  try {
+    const r = await enviarNfeAutorizacao(c.env, tenant.tenantId, {
+      tpAmb,
+      ufEmitente,
+      xmlAssinado,
+      idLote: String(Date.now()).slice(-15),
+    })
+
+    let procPath: string | null = null
+    if (r.procNfeXml && r.autorizada) {
+      procPath = `tenants/${tenant.tenantId}/nfe/${nota.chave_acesso}-procNFe.xml`
+      await c.env.R2_STORAGE.put(procPath, r.procNfeXml, {
+        httpMetadata: { contentType: 'application/xml' },
+      })
+    }
+
+    // Status: se já faturada no ERP, mantém emitida; senão → autorizada
+    let nextStatus = nota.status
+    if (r.autorizada) {
+      if (nota.status !== 'emitida') nextStatus = 'autorizada'
+      await incrementNfeUsoMes(c.env.DB_SHARED, tenant.tenantId)
+    }
+
+    await c.env.DB_SHARED
+      .prepare(
+        `UPDATE notas_fiscais SET
+          cstat_ultimo = ?,
+          xmotivo_ultimo = ?,
+          protocolo_autorizacao = COALESCE(?, protocolo_autorizacao),
+          data_autorizacao = COALESCE(?, data_autorizacao),
+          xml_path = COALESCE(?, xml_path),
+          transmissao_tentativas = ?,
+          transmissao_erro = ?,
+          status = ?,
+          updated_at = ?
+         WHERE id = ? AND tenant_id = ?`,
+      )
+      .bind(
+        r.cStat,
+        r.xMotivo,
+        r.autorizada ? r.nProt : null,
+        r.autorizada ? r.dhRecbto || now : null,
+        procPath,
+        tent,
+        r.autorizada ? null : `SEFAZ ${r.cStat}: ${r.xMotivo}`,
+        nextStatus,
+        now,
+        id,
+        tenant.tenantId,
+      )
+      .run()
+
+    if (!r.autorizada) {
+      return c.json(
+        {
+          error: `SEFAZ rejeitou ou não autorizou: ${r.cStat} — ${r.xMotivo}`,
+          cStat: r.cStat,
+          xMotivo: r.xMotivo,
+          autorizada: false,
+        },
+        400,
+      )
+    }
+
+    return c.json({
+      message: 'NF-e autorizada pela SEFAZ.',
+      autorizada: true,
+      cStat: r.cStat,
+      xMotivo: r.xMotivo,
+      protocolo: r.nProt,
+      dataAutorizacao: r.dhRecbto,
+      status: nextStatus,
+      procNfePath: procPath,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro ao transmitir à SEFAZ.'
+    await c.env.DB_SHARED
+      .prepare(
+        `UPDATE notas_fiscais SET
+          transmissao_tentativas = ?,
+          transmissao_erro = ?,
+          updated_at = ?
+         WHERE id = ? AND tenant_id = ?`,
+      )
+      .bind(tent, msg.slice(0, 500), now, id, tenant.tenantId)
+      .run()
+    return c.json({ error: msg }, 400)
+  }
+})
 
 // GET XML (mantido para futura integração)
 app.get('/notas/:id/xml', async (c) => {

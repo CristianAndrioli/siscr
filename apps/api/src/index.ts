@@ -64,10 +64,12 @@ export type Env = {
   STRIPE_PRICE_PRO: string
   STRIPE_PRICE_ENTERPRISE: string
   /**
-   * "1" = geração de XML NF-e para desenvolvimento (sem envio SOAP real nesta versão).
-   * Produção: use "0" e implemente assinatura + SEFAZ.
+   * "1" = geração de XML NF-e para desenvolvimento (sem exigir A1).
+   * Produção/staging: use "0".
    */
   NFE_DEV_MODE?: string
+  /** Limite mensal de NF-e autorizadas por tenant (default 50). Gancho para pacotes. */
+  NFE_QUOTA_MENSAL?: string
   /**
    * Host “pai” do app (sem esquema), ex.: app.suaempresa.com.br
    * Habilita tenant por subdomínio: {slug}.app.suaempresa.com.br (API + CORS).

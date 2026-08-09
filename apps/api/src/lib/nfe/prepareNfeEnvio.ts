@@ -79,6 +79,14 @@ export async function prepareNfeEnvio(
     )
   }
 
+  if (str(nota.protocolo_autorizacao)) {
+    throw new Error('Nota já autorizada pela SEFAZ. Não é possível regerar o XML.')
+  }
+
+  if (str(nota.status) === 'autorizada') {
+    throw new Error('Nota já autorizada pela SEFAZ. Não é possível regerar o XML.')
+  }
+
   if (str(nota.chave_acesso) && str(nota.xml_path) && !options.force) {
     throw new Error('Nota já possui XML e chave. Use force para regerar.')
   }
