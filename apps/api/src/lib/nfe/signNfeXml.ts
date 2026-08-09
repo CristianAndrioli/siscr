@@ -115,6 +115,7 @@ export async function signNfeXmlWithA1(
     throw new Error('XML NF-e inválido: elemento raiz NFe esperado.')
   }
 
+  // Apenas o certificado folha no KeyInfo (cadeia completa costuma quebrar o XSD da NF-e)
   const signedXml = new SignedXml()
   await signedXml.Sign(
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
@@ -128,11 +129,25 @@ export async function signNfeXmlWithA1(
           transforms: ['enveloped', 'c14n'],
         },
       ],
-      x509: x509Base64,
+      x509: x509Base64.slice(0, 1),
     },
   )
 
-  const body = signedXml.toString()
+  let body = signedXml.toString()
+  body = normalizeNfeSignatureXml(body)
   if (body.startsWith('<?xml')) return body
   return `<?xml version="1.0" encoding="UTF-8"?>${body}`
+}
+
+/**
+ * SEFAZ / XSD esperam Signature no namespace xmldsig sem prefixo `ds:`.
+ */
+function normalizeNfeSignatureXml(xml: string): string {
+  return xml
+    .replace(/<\/?ds:/g, (m) => m.replace('ds:', ''))
+    .replace(
+      /<Signature\b([^>]*)xmlns:ds="http:\/\/www\.w3\.org\/2000\/09\/xmldsig#"([^>]*)>/,
+      '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"$1$2>',
+    )
+    .replace(/\s+xmlns:ds="http:\/\/www\.w3\.org\/2000\/09\/xmldsig#"/g, '')
 }

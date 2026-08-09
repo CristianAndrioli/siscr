@@ -797,6 +797,27 @@ app.post('/notas/:id/transmitir', async (c) => {
       400,
     )
   }
+  // XML gerado antes das correções de schema (ICMS102 / série 001 / xCpl longo)
+  if (/<ICMS\d{3}\b/.test(xmlAssinado) && !/<ICMSSN\d{3}\b/.test(xmlAssinado)) {
+    return c.json(
+      {
+        error:
+          'XML desatualizado (grupo ICMS do Simples inválido). Use "Preparar XML" de novo e depois Transmitir.',
+        code: 'NFE_XML_STALE',
+      },
+      400,
+    )
+  }
+  if (/<serie>0+\d+<\/serie>/.test(xmlAssinado)) {
+    return c.json(
+      {
+        error:
+          'XML desatualizado (série com zeros à esquerda). Use "Preparar XML" de novo e depois Transmitir.',
+        code: 'NFE_XML_STALE',
+      },
+      400,
+    )
+  }
 
   const tpAmb = (nota.ambiente === 1 ? 1 : 2) as 1 | 2
   const ufEmitente = (nota.filial_uf || nota.empresa_uf || 'SP').trim().toUpperCase()
