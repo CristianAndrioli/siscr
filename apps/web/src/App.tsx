@@ -61,6 +61,7 @@ import { FaturamentoConfigPage } from './pages/configuracoes/FaturamentoConfigPa
 import { PermissoesPage } from './pages/configuracoes/PermissoesPage';
 import PersonalizacaoPage from './pages/configuracoes/PersonalizacaoPage';
 import ConexoesPage from './pages/configuracoes/ConexoesPage';
+import ConexaoFormPage from './pages/configuracoes/ConexaoFormPage';
 import EstoqueAtualList from './pages/estoque/EstoqueAtualList';
 import MovimentacoesList from './pages/estoque/MovimentacoesList';
 import Transferencias from './pages/estoque/Transferencias';
@@ -292,6 +293,8 @@ function App() {
         <Route path="/configuracoes/permissoes" element={<ProtectedRoute><Layout><PermissoesPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/personalizacao" element={<ProtectedRoute><PersonalizacaoPage /></ProtectedRoute>} />
         <Route path="/configuracoes/conexoes" element={<ProtectedRoute><Layout><ConexoesPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/conexoes/nova" element={<ProtectedRoute><Layout><ConexaoFormPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/conexoes/:id" element={<ProtectedRoute><Layout><ConexaoFormPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs/:id" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/logs" element={<ProtectedRoute><Layout><ErrorLogsPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="configuracoes" requiredAction="view"><ModuleHub moduleKey="configuracoes" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
