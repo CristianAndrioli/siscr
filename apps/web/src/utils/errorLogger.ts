@@ -103,7 +103,12 @@ export type ErrorLogPage = {
 };
 
 /** Lista paginada de logs (page e limit 0-based / tamanho da página). */
-export async function fetchErrorLog(params?: { page?: number; limit?: number }): Promise<ErrorLogPage> {
+export async function fetchErrorLog(params?: {
+  page?: number
+  limit?: number
+  /** Filtra logs cuja url da tela contém este trecho (ex.: id da nota). */
+  urlContains?: string
+}): Promise<ErrorLogPage> {
   const res = await api.get('/tenant/logs/errors', { params });
   const d = res.data;
   return {

@@ -43,26 +43,38 @@ app.post('/errors', zValidator('json', logSchema), async (c) => {
   return c.json({ ok: true }, 201)
 })
 
-/** Lista erros do tenant paginados (sem stack_trace) */
+/** Lista erros do tenant paginados (sem stack_trace). Filtro opcional por trecho da URL da tela. */
 app.get('/errors', async (c) => {
   const tenant = c.get('tenant')
   const { limit, offset, page } = parseListPagination(c)
+  const urlContains = (c.req.query('urlContains') || '').trim().slice(0, 200)
+
+  const where = urlContains
+    ? 'WHERE tenant_id = ? AND url LIKE ?'
+    : 'WHERE tenant_id = ?'
+  const like = urlContains ? `%${urlContains}%` : null
+  const countBind = like ? [tenant.tenantId, like] : [tenant.tenantId]
+  const listBind = like
+    ? [tenant.tenantId, like, limit, offset]
+    : [tenant.tenantId, limit, offset]
 
   const countRow = await c.env.DB_SHARED
-    .prepare(`SELECT COUNT(*) as c FROM error_logs WHERE tenant_id = ?`)
-    .bind(tenant.tenantId)
+    .prepare(`SELECT COUNT(*) as c FROM error_logs ${where}`)
+    .bind(...countBind)
     .first<{ c: number }>()
   const total = Number(countRow?.c ?? 0)
 
   const { results } = await c.env.DB_SHARED
-    .prepare(`
+    .prepare(
+      `
       SELECT id, timestamp, friendly_message, technical, url, context, created_at
       FROM error_logs
-      WHERE tenant_id = ?
+      ${where}
       ORDER BY timestamp DESC
       LIMIT ? OFFSET ?
-    `)
-    .bind(tenant.tenantId, limit, offset)
+    `,
+    )
+    .bind(...listBind)
     .all()
 
   return c.json({ errors: results, total, page, limit })
