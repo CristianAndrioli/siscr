@@ -883,9 +883,11 @@ app.post('/notas/:id/transmitir', async (c) => {
 
   const schemaCheck = validateNfeXmlDocumento(xmlAssinado)
   if (!schemaCheck.ok) {
+    const first = schemaCheck.errors[0]
+    const detail = first ? ` ${first.path}: ${first.message}` : ''
     return c.json(
       {
-        error: `XML inválido no leiaute ${schemaCheck.layoutVersion} — corrija antes de transmitir à SEFAZ.`,
+        error: `XML inválido no leiaute ${schemaCheck.layoutVersion} — clique em Gerar/Regerar XML e valide de novo antes de transmitir.${detail}`,
         code: 'NFE_XML_INVALID',
         layoutVersion: schemaCheck.layoutVersion,
         errors: schemaCheck.errors,
