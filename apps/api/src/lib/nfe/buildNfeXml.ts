@@ -103,7 +103,7 @@ function destBlock(d: DestinatarioXml): string {
   return `<dest>${doc}<xNome>${xmlEscape(d.nome)}</xNome>${enderDest(d)}<indIEDest>${indIe}</indIEDest></dest>`
 }
 
-function detItemFixed(it: ItemXml): string {
+function detItemFixed(it: ItemXml, crt: string): string {
   const q = it.quantidade.toFixed(4)
   const vu = it.valorUnitario.toFixed(2)
   const vd = it.desconto.toFixed(2)
@@ -117,8 +117,11 @@ function detItemFixed(it: ItemXml): string {
   const pisCst = (it.pisCst || '07').replace(/\D/g, '').padStart(2, '0').slice(-2)
   const cofCst = (it.cofinsCst || '07').replace(/\D/g, '').padStart(2, '0').slice(-2)
 
-  const icmsTag = `ICMS${csosn}`
-  return `<det nItem="${it.nItem}"><prod><cProd>${xmlEscape(it.cProd)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xmlEscape(it.descricao)}</xProd><NCM>${ncm}</NCM><CFOP>${cfop}</CFOP><uCom>${xmlEscape(it.unidade || 'UN')}</uCom><qCom>${q}</qCom><vUnCom>${vu}</vUnCom><vProd>${vp}</vProd>${parseFloat(vd) > 0 ? `<vDesc>${vd}</vDesc>` : ''}<cEANTrib>SEM GTIN</cEANTrib><uTrib>${xmlEscape(it.unidade || 'UN')}</uTrib><qTrib>${q}</qTrib><vUnTrib>${vu}</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><${icmsTag}><orig>${orig}</orig><CSOSN>${csosn}</CSOSN></${icmsTag}></ICMS><PIS><PISNT><CST>${pisCst}</CST></PISNT></PIS><COFINS><COFINSNT><CST>${cofCst}</CST></COFINSNT></COFINS></imposto></det>`
+  // CRT 1/2 (Simples): grupos ICMSSN*; CRT 3: ICMS00/10/...
+  const isSimples = crt === '1' || crt === '2'
+  const icmsTag = isSimples ? `ICMSSN${csosn}` : `ICMS00`
+
+  return `<det nItem="${it.nItem}"><prod><cProd>${xmlEscape(it.cProd)}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xmlEscape(it.descricao)}</xProd><NCM>${ncm}</NCM><CFOP>${cfop}</CFOP><uCom>${xmlEscape(it.unidade || 'UN')}</uCom><qCom>${q}</qCom><vUnCom>${vu}</vUnCom><vProd>${vp}</vProd>${parseFloat(vd) > 0 ? `<vDesc>${vd}</vDesc>` : ''}<cEANTrib>SEM GTIN</cEANTrib><uTrib>${xmlEscape(it.unidade || 'UN')}</uTrib><qTrib>${q}</qTrib><vUnTrib>${vu}</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><${icmsTag}><orig>${orig}</orig>${isSimples ? `<CSOSN>${csosn}</CSOSN>` : `<CST>00</CST><modBC>3</modBC><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS>`}</${icmsTag}></ICMS><PIS><PISNT><CST>${pisCst}</CST></PISNT></PIS><COFINS><COFINSNT><CST>${cofCst}</CST></COFINSNT></COFINS></imposto></det>`
 }
 
 function ideBlock(i: IdeXml): string {
@@ -152,6 +155,18 @@ export type BuildNfeXmlInput = {
   valorDescontoGlobal: number
 }
 
+function respTecBlock(emitCnpj: string): string {
+  const cnpj = onlyDigits(emitCnpj, 14)
+  return (
+    `<infRespTec>` +
+    `<CNPJ>${cnpj}</CNPJ>` +
+    `<xContato>Suporte SISCR</xContato>` +
+    `<email>suporte@siscr.com.br</email>` +
+    `<fone>1130000000</fone>` +
+    `</infRespTec>`
+  )
+}
+
 /**
  * XML da NF-e (sem assinatura). Estrutura mínima 4.00 para evolução (SEFAZ / assinatura).
  * Revisar totais e impostos com contador antes de produção.
@@ -161,10 +176,16 @@ export function buildNfeXmlUnsigned(input: BuildNfeXmlInput): string {
   const vProd = input.itens.reduce((s, x) => s + x.valorTotal, 0).toFixed(2)
   const vNF = input.valorTotalNota.toFixed(2)
   const vDesc = input.valorDescontoGlobal.toFixed(2)
-  const dets = input.itens.map((it) => detItemFixed(it)).join('')
+  const crt = (input.emit.crt || '1').replace(/\D/g, '').slice(0, 1) || '1'
+  const dets = input.itens.map((it) => detItemFixed(it, crt)).join('')
   const destXml = input.dest ? destBlock(input.dest) : ''
 
-  const infNFe = `<infNFe versao="4.00" Id="${idAttr}">${ideBlock(input.ide)}${emitBlock(input.emit)}${destXml}${dets}${totalBlock(vProd, vNF, vDesc)}${transpBlock(input.modFrete)}${pagBlock(input.formaPagamento, vNF)}</infNFe>`
+  const infNFe =
+    `<infNFe versao="4.00" Id="${idAttr}">` +
+    `${ideBlock(input.ide)}${emitBlock(input.emit)}${destXml}${dets}` +
+    `${totalBlock(vProd, vNF, vDesc)}${transpBlock(input.modFrete)}${pagBlock(input.formaPagamento, vNF)}` +
+    `${respTecBlock(input.emit.cnpj)}` +
+    `</infNFe>`
 
   return `<?xml version="1.0" encoding="UTF-8"?><NFe xmlns="${NS}">${infNFe}</NFe>`
 }

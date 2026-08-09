@@ -296,7 +296,7 @@ export async function prepareNfeEnvio(
     cNF: cNF8,
     natOp,
     mod: String(num(nota.modelo, 55)),
-    serie: onlyDigits(serie, 3).padStart(3, '0').slice(-3),
+    serie: String(parseInt(onlyDigits(serie, 3) || '1', 10)),
     nNF,
     dhEmi: dh,
     tpNF: '1',

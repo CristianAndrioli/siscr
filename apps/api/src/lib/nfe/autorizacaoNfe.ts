@@ -157,6 +157,8 @@ export async function enviarNfeAutorizacao(
     sefazUrl,
     soapBody: envelope,
     cert: params.cert,
+    contentType:
+      'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"',
   })
 
   if (!res.ok) {
