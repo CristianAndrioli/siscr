@@ -69,6 +69,9 @@ importers:
 
   apps/sefaz-bridge:
     dependencies:
+      '@cloudflare/containers':
+        specifier: ^0.3.7
+        version: 0.3.7
       '@hono/node-server':
         specifier: ^1.14.0
         version: 1.19.17(hono@4.12.8)
@@ -76,9 +79,18 @@ importers:
         specifier: ^4.7.0
         version: 4.12.8
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20250317.0
+        version: 4.20260317.1
       tsx:
         specifier: ^4.23.11
         version: 4.23.11
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+      wrangler:
+        specifier: ^4.4.0
+        version: 4.76.0(@cloudflare/workers-types@4.20260317.1)
 
   apps/web:
     dependencies:
@@ -314,6 +326,9 @@ packages:
 
   '@better-fetch/fetch@1.1.21':
     resolution: {integrity: sha512-/ImESw0sskqlVR94jB+5+Pxjf+xBwDZF/N5+y2/q4EqD7IARUTSpPfIo8uf39SYpCxyOCtbyYpUrZ3F/k0zT4A==}
+
+  '@cloudflare/containers@0.3.7':
+    resolution: {integrity: sha512-DM9dm3FnIBSyiSJ1FLavKwl/lk3oAmTaynCzZQ9pZR0ncRPquSxkxd8Nu2MFILxmDDsPkxKsSNEh9mHHMty4Fw==}
 
   '@cloudflare/kv-asset-handler@0.4.2':
     resolution: {integrity: sha512-SIOD2DxrRRwQ+jgzlXCqoEFiKOFqaPjhnNTGKXSRLvp1HiOvapLaFG2kEr9dYQTYe8rKrd9uvDUzmAITeNyaHQ==}
@@ -2982,6 +2997,8 @@ snapshots:
   '@better-auth/utils@0.3.1': {}
 
   '@better-fetch/fetch@1.1.21': {}
+
+  '@cloudflare/containers@0.3.7': {}
 
   '@cloudflare/kv-asset-handler@0.4.2': {}
 

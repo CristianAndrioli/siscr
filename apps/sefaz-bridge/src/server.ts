@@ -13,8 +13,8 @@
  *
  * Resposta: status + corpo devolvidos pela SEFAZ (transparência).
  *
- * Deploy: Fly.io / Railway / VPS com HTTPS (Cloudflare Tunnel ou reverse proxy).
- * Em Configurações → Conexões, URL base = URL pública desta ponte.
+ * Deploy: Cloudflare Containers (`wrangler deploy` neste pacote) ou Node em VPS.
+ * Em Configurações → Conexões, URL base = URL pública do Worker da ponte.
  */
 
 import { serve } from '@hono/node-server'

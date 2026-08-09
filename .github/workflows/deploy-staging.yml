@@ -44,6 +44,20 @@ jobs:
           workingDirectory: apps/api
           command: deploy --env staging
 
+      # ─── Etapa 2b: Ponte SEFAZ (Cloudflare Containers / mTLS) ───
+      # Build da imagem no runner (Docker); runtime fica 100% na Cloudflare.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Deploy SEFAZ bridge (Containers)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/sefaz-bridge
+          command: deploy
+          # BRIDGE_TOKEN já existe no Worker (wrangler secret); não sobrescrever aqui.
+
       # ─── Etapa 3: Build do frontend ─────────────────────────────
       - name: Build Frontend
         run: pnpm --filter=@siscr/web run build
@@ -75,3 +89,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **API (Worker):** https://api-staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend (Pages):** https://staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ponte SEFAZ:** https://siscr-sefaz-bridge.lucaspercisi.workers.dev" >> $GITHUB_STEP_SUMMARY

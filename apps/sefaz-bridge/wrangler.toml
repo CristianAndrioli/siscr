@@ -1,0 +1,22 @@
+name = "siscr-sefaz-bridge"
+main = "src/worker.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Conta/staging: mesma conta do siscr-api-staging
+# URL pública após deploy: https://siscr-sefaz-bridge.<subdomain>.workers.dev
+# (ou rota custom, se configurada)
+
+[[containers]]
+class_name = "SefazBridgeContainer"
+image = "./Dockerfile"
+instance_type = "lite"
+max_instances = 2
+
+[[durable_objects.bindings]]
+name = "SEFAZ_BRIDGE"
+class_name = "SefazBridgeContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SefazBridgeContainer"]
