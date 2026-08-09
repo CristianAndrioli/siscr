@@ -64,17 +64,8 @@ jobs:
         env:
           VITE_API_URL: https://api-staging.siscr.com.br
 
-      # ─── Etapa 4: Criar projeto Pages se não existir ────────────
-      - name: Create Cloudflare Pages Project (if not exists)
-        uses: cloudflare/wrangler-action@v3
-        continue-on-error: true
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/api
-          command: pages project create siscr-web --production-branch=main
-
-      # ─── Etapa 5: Deploy do frontend no Cloudflare Pages ────────
+      # ─── Etapa 4: Deploy do frontend no Cloudflare Pages ────────
+      # Projeto `siscr-web` já existe; não rodar `pages project create`.
       - name: Deploy Frontend to Cloudflare Pages (staging)
         uses: cloudflare/wrangler-action@v3
         with:
