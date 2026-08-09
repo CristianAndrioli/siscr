@@ -15,7 +15,8 @@
  */
 
 import type { Env } from '../../index'
-import { getConexaoFetch } from '../conexoes'
+import { decryptA1Bundle } from '../certBlob'
+import { postSoapViaSefazBridge } from '../nfe/sefazBridgeTransport'
 
 export const DFE_CONEXAO_NOME = 'sefaz-dfe'
 
@@ -177,34 +178,44 @@ export function extractDocMeta(schema: string, xml: string): DfeDocMeta {
 export async function consultarDistribuicaoDfe(
   env: Env,
   tenantId: string,
-  params: DistDfeParams,
+  params: DistDfeParams & {
+    /** Escopo do A1 no R2: empresaId ou `filial:${id}` */
+    certScopeKey: string
+    a1ObjectKey: string
+  },
 ): Promise<DistDfeResult> {
+  if (!env.CERT_BLOB_SECRET?.trim()) {
+    throw new Error('CERT_BLOB_SECRET não configurado — impossível ler o certificado A1.')
+  }
+  if (!env.R2_STORAGE) {
+    throw new Error('R2_STORAGE não configurado — impossível ler o certificado A1.')
+  }
+
+  const certObj = await env.R2_STORAGE.get(params.a1ObjectKey)
+  if (!certObj) {
+    throw new Error('Arquivo do certificado A1 não encontrado no armazenamento.')
+  }
+  const bundle = await decryptA1Bundle(
+    env.CERT_BLOB_SECRET,
+    tenantId,
+    params.certScopeKey,
+    await certObj.arrayBuffer(),
+  )
+
   const envelope = buildDistDfeSoapEnvelope(params)
   const sefazUrl = params.tpAmb === 1 ? URL_PRODUCAO : URL_HOMOLOGACAO
-  const headers = { 'Content-Type': 'application/soap+xml; charset=utf-8' }
 
-  // Ponte mTLS via Conexão "sefaz-dfe", se configurada.
-  const ponte = await getConexaoFetch(env, tenantId, DFE_CONEXAO_NOME)
-
-  let res: Response
-  if (ponte) {
-    res = await ponte.fetch('', {
-      method: 'POST',
-      headers: { ...headers, 'X-Sefaz-Url': sefazUrl },
-      body: envelope,
-    })
-  } else {
-    res = await fetch(sefazUrl, { method: 'POST', headers, body: envelope })
-  }
-
-  const text = await res.text()
+  const res = await postSoapViaSefazBridge(env, tenantId, {
+    sefazUrl,
+    soapBody: envelope,
+    cert: { pfxBytes: bundle.pfxBytes, password: bundle.password },
+  })
 
   if (!res.ok) {
-    const hint = ponte
-      ? `ponte "${DFE_CONEXAO_NOME}" respondeu HTTP ${res.status}`
-      : `SEFAZ respondeu HTTP ${res.status} — chamada direta exige mTLS; configure a Conexão "${DFE_CONEXAO_NOME}" (ver doc/integracoes-contabilidade.md §2.3)`
-    throw new Error(`Falha na consulta DFe: ${hint}. ${text.slice(0, 200)}`)
+    throw new Error(
+      `Falha na consulta DFe: ponte "${DFE_CONEXAO_NOME}" respondeu HTTP ${res.status}. ${res.text.slice(0, 200)}`,
+    )
   }
 
-  return parseRetDistDfe(text)
+  return parseRetDistDfe(res.text)
 }

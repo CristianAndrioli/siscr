@@ -216,14 +216,15 @@ export default function ConexaoFormPage() {
               Nome obrigatório: <code className="font-mono bg-sky-100 dark:bg-sky-900/50 px-1 rounded">sefaz-dfe</code>
             </li>
             <li>
-              URL base = endpoint da sua ponte HTTPS→mTLS (ex.:{' '}
-              <code className="font-mono">https://ponte.seudominio.com</code>), não a URL da SEFAZ.
+              URL base = endpoint da ponte em <code className="font-mono">apps/sefaz-bridge</code> (ex.: túnel ngrok /
+              Fly), <strong>não</strong> staging.siscr.com.br nem a SEFAZ.
             </li>
             <li>
-              O SISCR envia o SOAP com o header <code className="font-mono">X-Sefaz-Url</code>; a ponte anexa o A1 e
-              repassa à SEFAZ.
+              Auth recomendada: Bearer com o mesmo <code className="font-mono">BRIDGE_TOKEN</code> do .env da ponte.
             </li>
-            <li>Sem essa ponte, Workers do Cloudflare não conseguem mTLS dinâmico por tenant.</li>
+            <li>
+              O SISCR envia o SOAP + A1 (headers); a ponte faz mTLS até a SEFAZ.
+            </li>
           </ul>
         </div>
       )}

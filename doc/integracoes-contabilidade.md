@@ -85,14 +85,12 @@ dinâmico por requisição (o binding `mtls_certificates` do Workers é estátic
 inviável para A1 por tenant).
 
 **Solução adotada:** o transporte é abstraído. Se existir uma **Conexão** (§4) com nome
-`sefaz-dfe` configurada no tenant, a requisição SOAP é enviada através dela (uma "ponte"
-HTTPS→mTLS: serviço mínimo que recebe o envelope, anexa o certificado do cliente e
-repassa à SEFAZ). Sem a ponte, a chamada direta é tentada e o erro é registrado de forma
-clara em `dfe_sync.ultimo_erro`.
+`sefaz-dfe` configurada no tenant, a requisição SOAP é enviada através dela (ponte
+HTTPS→mTLS em `apps/sefaz-bridge`: recebe o envelope + A1 nos headers `X-Pfx-*`, anexa o
+certificado na camada TLS e repassa à SEFAZ indicada em `X-Sefaz-Url`). Sem a ponte, a
+transmissão falha com mensagem clara.
 
-> A mesma limitação se aplica à futura transmissão de NF-e (nfeAutorizacao) — a ponte
-> mTLS resolve os dois casos. Alternativas: worker de borda próprio (Node/VPS) ou
-> Cloudflare Workers com certificado único (caso single-tenant).
+> A mesma ponte serve DFe e `nfeAutorizacao`. Ver `apps/sefaz-bridge/README.md`.
 
 ---
 

@@ -9,6 +9,7 @@ import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import { enviarNfeAutorizacao } from '../lib/nfe/autorizacaoNfe'
 import { assertNfeQuotaAvailable, incrementNfeUsoMes } from '../lib/nfe/nfeQuota'
+import { decryptA1Bundle } from '../lib/certBlob'
 import {
   fetchBrasilApiNcmJson,
   fetchClassifNcmJson,
@@ -738,7 +739,8 @@ app.post('/notas/:id/transmitir', async (c) => {
     .prepare(
       `SELECT nf.id, nf.tipo, nf.status, nf.xml_path, nf.chave_acesso, nf.ambiente,
               nf.empresa_id, nf.filial_id, nf.transmissao_tentativas, nf.protocolo_autorizacao,
-              e.uf AS empresa_uf, f.uf AS filial_uf
+              e.uf AS empresa_uf, e.a1_r2_object_key AS empresa_a1_key,
+              f.uf AS filial_uf, f.a1_r2_object_key AS filial_a1_key
        FROM notas_fiscais nf
        LEFT JOIN empresas e ON e.id = nf.empresa_id AND e.tenant_id = nf.tenant_id
        LEFT JOIN filiais f ON f.id = nf.filial_id AND f.tenant_id = nf.tenant_id
@@ -757,7 +759,9 @@ app.post('/notas/:id/transmitir', async (c) => {
       transmissao_tentativas: number | null
       protocolo_autorizacao: string | null
       empresa_uf: string | null
+      empresa_a1_key: string | null
       filial_uf: string | null
+      filial_a1_key: string | null
     }>()
 
   if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
@@ -797,12 +801,44 @@ app.post('/notas/:id/transmitir', async (c) => {
   const ufEmitente = (nota.filial_uf || nota.empresa_uf || 'SP').trim().toUpperCase()
   const tent = Number(nota.transmissao_tentativas ?? 0) + 1
 
+  if (!c.env.CERT_BLOB_SECRET?.trim()) {
+    return c.json({ error: 'CERT_BLOB_SECRET não configurado — impossível usar o certificado A1.' }, 503)
+  }
+
+  let a1ObjectKey: string | null = null
+  let decryptScope = nota.empresa_id || ''
+  if (nota.filial_id && nota.filial_a1_key) {
+    a1ObjectKey = nota.filial_a1_key
+    decryptScope = `filial:${nota.filial_id}`
+  } else if (nota.empresa_a1_key) {
+    a1ObjectKey = nota.empresa_a1_key
+    decryptScope = nota.empresa_id || ''
+  }
+  if (!a1ObjectKey || !decryptScope) {
+    return c.json(
+      { error: 'Certificado A1 não configurado para a empresa/filial. Envie o .pfx em Configurações.' },
+      400,
+    )
+  }
+
   try {
+    const certObj = await c.env.R2_STORAGE.get(a1ObjectKey)
+    if (!certObj) {
+      return c.json({ error: 'Arquivo do certificado A1 não encontrado no armazenamento.' }, 404)
+    }
+    const bundle = await decryptA1Bundle(
+      c.env.CERT_BLOB_SECRET,
+      tenant.tenantId,
+      decryptScope,
+      await certObj.arrayBuffer(),
+    )
+
     const r = await enviarNfeAutorizacao(c.env, tenant.tenantId, {
       tpAmb,
       ufEmitente,
       xmlAssinado,
       idLote: String(Date.now()).slice(-15),
+      cert: { pfxBytes: bundle.pfxBytes, password: bundle.password },
     })
 
     let procPath: string | null = null

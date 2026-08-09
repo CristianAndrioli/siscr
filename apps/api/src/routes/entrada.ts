@@ -1646,13 +1646,24 @@ app.post('/dfe/consultar', zValidator('json', z.object({ empresaId: z.string().m
   if (!c.env.R2_STORAGE) return c.json({ error: 'Armazenamento R2 não configurado.' }, 503)
 
   const empresa = await c.env.DB_SHARED
-    .prepare('SELECT id, cnpj, uf, nfe_ambiente FROM empresas WHERE id = ? AND tenant_id = ?')
+    .prepare(
+      'SELECT id, cnpj, uf, nfe_ambiente, a1_r2_object_key FROM empresas WHERE id = ? AND tenant_id = ?',
+    )
     .bind(empresaId, tenant.tenantId)
-    .first<{ id: string; cnpj: string | null; uf: string | null; nfe_ambiente: number | null }>()
+    .first<{
+      id: string
+      cnpj: string | null
+      uf: string | null
+      nfe_ambiente: number | null
+      a1_r2_object_key: string | null
+    }>()
 
   if (!empresa) return c.json({ error: 'Empresa não encontrada.' }, 404)
   const cnpj = (empresa.cnpj ?? '').replace(/\D/g, '')
   if (cnpj.length !== 14) return c.json({ error: 'Empresa sem CNPJ válido cadastrado.' }, 400)
+  if (!empresa.a1_r2_object_key) {
+    return c.json({ error: 'Envie o certificado A1 da empresa antes de consultar a Distribuição DFe.' }, 400)
+  }
 
   const now = new Date().toISOString()
 
@@ -1680,6 +1691,8 @@ app.post('/dfe/consultar', zValidator('json', z.object({ empresaId: z.string().m
       cUfAutor: Number(cUfFromSigla(empresa.uf)) || 91,
       cnpj,
       ultNsu: sync.ult_nsu,
+      certScopeKey: empresaId,
+      a1ObjectKey: empresa.a1_r2_object_key,
     })
 
     // 137 = nenhum documento; 138 = documentos localizados; demais = rejeição

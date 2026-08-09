@@ -6,8 +6,8 @@
  */
 
 import type { Env } from '../../index'
-import { getConexaoFetch } from '../conexoes'
 import { DFE_CONEXAO_NOME } from '../dfe/distribuicaoDfe'
+import { postSoapViaSefazBridge, type SefazBridgeCert } from './sefazBridgeTransport'
 
 /** URLs NFeAutorizacao4 por UF (homologação / produção). Expandir conforme necessidade. */
 const URLS_AUTORIZACAO: Record<string, { prod: string; hom: string }> = {
@@ -140,35 +140,30 @@ export function parseRetEnviNFe(soapXml: string, xmlAssinado: string): Autorizac
 export async function enviarNfeAutorizacao(
   env: Env,
   tenantId: string,
-  params: { tpAmb: 1 | 2; ufEmitente: string; xmlAssinado: string; idLote?: string },
+  params: {
+    tpAmb: 1 | 2
+    ufEmitente: string
+    xmlAssinado: string
+    idLote?: string
+    /** A1 do emitente — obrigatório para a ponte mTLS. */
+    cert: SefazBridgeCert
+  },
 ): Promise<AutorizacaoNfeResult> {
   const idLote = params.idLote ?? String(Date.now()).slice(-15)
   const envelope = buildNfeAutorizacaoSoapEnvelope(params.xmlAssinado, idLote)
   const sefazUrl = resolveAutorizacaoUrl(params.ufEmitente, params.tpAmb)
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/soap+xml; charset=utf-8',
-  }
 
-  const ponte = await getConexaoFetch(env, tenantId, DFE_CONEXAO_NOME)
-  if (!ponte) {
-    throw new Error(
-      `Configure a Conexão "${DFE_CONEXAO_NOME}" (Configurações → Conexões) com a ponte mTLS para transmitir à SEFAZ. ` +
-        `Ver doc/integracoes-contabilidade.md §2.3.`,
-    )
-  }
-
-  const res = await ponte.fetch('', {
-    method: 'POST',
-    headers: { ...headers, 'X-Sefaz-Url': sefazUrl },
-    body: envelope,
+  const res = await postSoapViaSefazBridge(env, tenantId, {
+    sefazUrl,
+    soapBody: envelope,
+    cert: params.cert,
   })
-  const text = await res.text()
 
   if (!res.ok) {
     throw new Error(
-      `Falha na autorização NF-e: ponte "${DFE_CONEXAO_NOME}" respondeu HTTP ${res.status}. ${text.slice(0, 240)}`,
+      `Falha na autorização NF-e: ponte "${DFE_CONEXAO_NOME}" respondeu HTTP ${res.status}. ${res.text.slice(0, 240)}`,
     )
   }
 
-  return parseRetEnviNFe(text, params.xmlAssinado)
+  return parseRetEnviNFe(res.text, params.xmlAssinado)
 }
