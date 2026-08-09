@@ -310,6 +310,20 @@ export const notasService = {
     );
     return res.data;
   },
+  /** Confronta XML no R2 com leiaute 4.00 (sem SEFAZ). */
+  validarXml: async (
+    id: string,
+  ): Promise<{
+    ok: boolean
+    layoutVersion: string
+    chaveAcesso: string | null
+    signed: boolean
+    errors: { path: string; message: string }[]
+    message: string
+  }> => {
+    const res = await api.post(`${BASE}/notas/${id}/validar-xml`, {});
+    return res.data;
+  },
   /** Baixa o XML armazenado no R2 (assinado ou não). */
   downloadXml: async (id: string): Promise<Blob> => {
     const res = await api.get(`${BASE}/notas/${id}/xml`, { responseType: 'blob' });

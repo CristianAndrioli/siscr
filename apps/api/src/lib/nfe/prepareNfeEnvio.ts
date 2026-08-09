@@ -15,6 +15,10 @@ import { decryptA1Bundle } from '../certBlob'
 import { signNfeXmlWithA1 } from './signNfeXml'
 import { validateNfeBeforeXml } from './validateNfeBeforeXml'
 import {
+  formatNfeXmlValidationErrors,
+  validateNfeXmlDocumento,
+} from './validateNfeXmlDocumento'
+import {
   ajustarCfopSaida,
   naturezaOperacaoParaDestino,
   resolveIdDest,
@@ -325,6 +329,14 @@ export async function prepareNfeEnvio(
   }
 
   let xml = buildNfeXmlUnsigned(input)
+  const preSign = validateNfeXmlDocumento(xml)
+  if (!preSign.ok) {
+    throw Object.assign(new Error(formatNfeXmlValidationErrors(preSign.errors)), {
+      code: 'NFE_XML_INVALID',
+      errors: preSign.errors,
+      layoutVersion: preSign.layoutVersion,
+    })
+  }
   let signed = false
 
   const certSecret = env.CERT_BLOB_SECRET?.trim()
@@ -354,6 +366,14 @@ export async function prepareNfeEnvio(
     const bundle = await decryptA1Bundle(certSecret, tenantId, decryptScope, enc)
     xml = await signNfeXmlWithA1(xml, chave44, bundle.pfxBytes, bundle.password)
     signed = true
+    const postSign = validateNfeXmlDocumento(xml)
+    if (!postSign.ok) {
+      throw Object.assign(new Error(formatNfeXmlValidationErrors(postSign.errors)), {
+        code: 'NFE_XML_INVALID',
+        errors: postSign.errors,
+        layoutVersion: postSign.layoutVersion,
+      })
+    }
   } else if (!options.devMode) {
     throw new Error(
       'Certificado A1 não configurado para esta empresa/filial. Envie o .pfx em Configurações ou use NFE_DEV_MODE=1 apenas em desenvolvimento.',

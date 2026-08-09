@@ -7,6 +7,7 @@ import { parseListPagination } from '../lib/listPagination'
 import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
 import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
+import { validateNfeXmlDocumento } from '../lib/nfe/validateNfeXmlDocumento'
 import { enviarNfeAutorizacao } from '../lib/nfe/autorizacaoNfe'
 import { assertNfeQuotaAvailable, incrementNfeUsoMes } from '../lib/nfe/nfeQuota'
 import { decryptA1Bundle } from '../lib/certBlob'
@@ -713,6 +714,18 @@ async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
     })
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erro ao gerar XML.'
+    const extra = e as { code?: string; errors?: unknown; layoutVersion?: string }
+    if (extra?.code === 'NFE_XML_INVALID' && Array.isArray(extra.errors)) {
+      return c.json(
+        {
+          error: msg,
+          code: 'NFE_XML_INVALID',
+          layoutVersion: extra.layoutVersion,
+          errors: extra.errors,
+        },
+        400,
+      )
+    }
     return c.json({ error: msg }, 400)
   }
 }
@@ -725,6 +738,62 @@ async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
  * `NFE_DEV_MODE=1`: permite XML sem A1; com A1, assina normalmente.
  */
 app.post('/notas/:id/preparar-xml', jsonPrepareNfeXml)
+
+/**
+ * Confronta o XML armazenado com regras do leiaute 4.00 (sem transmitir à SEFAZ).
+ */
+app.post('/notas/:id/validar-xml', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'ID da nota inválido.' }, 400)
+
+  const nota = await c.env.DB_SHARED
+    .prepare(
+      `SELECT id, tipo, xml_path, chave_acesso FROM notas_fiscais WHERE id = ? AND tenant_id = ?`,
+    )
+    .bind(id, tenant.tenantId)
+    .first<{ id: string; tipo: string; xml_path: string | null; chave_acesso: string | null }>()
+
+  if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
+  if (nota.tipo !== 'nfe') {
+    return c.json({ error: 'Validação de leiaute disponível apenas para NF-e.' }, 400)
+  }
+  if (!nota.xml_path) {
+    return c.json(
+      {
+        error: 'Gere o XML antes de validar (Preparar XML).',
+        ok: false,
+        errors: [{ path: '/', message: 'XML ainda não gerado.' }],
+      },
+      400,
+    )
+  }
+  if (!c.env.R2_STORAGE) return c.json({ error: 'R2_STORAGE não configurado.' }, 503)
+
+  const obj = await c.env.R2_STORAGE.get(nota.xml_path)
+  if (!obj) return c.json({ error: 'Arquivo XML não encontrado no armazenamento.' }, 404)
+  const xml = await obj.text()
+  const result = validateNfeXmlDocumento(xml)
+  const hasSig = /<(?:[\w.-]+:)?Signature\b/i.test(xml)
+  if (!hasSig) {
+    result.errors.push({
+      path: '/NFe/Signature',
+      message: 'Assinatura digital ausente — necessário para transmitir à SEFAZ.',
+    })
+    result.ok = false
+  }
+
+  return c.json({
+    ok: result.ok,
+    layoutVersion: result.layoutVersion,
+    chaveAcesso: nota.chave_acesso,
+    signed: hasSig,
+    errors: result.errors,
+    message: result.ok
+      ? `XML conforme leiaute ${result.layoutVersion} (confrontação local).`
+      : `Encontrado(s) ${result.errors.length} problema(s) no leiaute ${result.layoutVersion}.`,
+  })
+})
 
 /**
  * Transmite XML assinado à SEFAZ (NFeAutorizacao4) via ponte mTLS `sefaz-dfe`.
@@ -797,23 +866,15 @@ app.post('/notas/:id/transmitir', async (c) => {
       400,
     )
   }
-  // XML gerado antes das correções de schema (ICMS102 / série 001 / xCpl longo)
-  if (/<ICMS\d{3}\b/.test(xmlAssinado) && !/<ICMSSN\d{3}\b/.test(xmlAssinado)) {
+
+  const schemaCheck = validateNfeXmlDocumento(xmlAssinado)
+  if (!schemaCheck.ok) {
     return c.json(
       {
-        error:
-          'XML desatualizado (grupo ICMS do Simples inválido). Use "Preparar XML" de novo e depois Transmitir.',
-        code: 'NFE_XML_STALE',
-      },
-      400,
-    )
-  }
-  if (/<serie>0+\d+<\/serie>/.test(xmlAssinado)) {
-    return c.json(
-      {
-        error:
-          'XML desatualizado (série com zeros à esquerda). Use "Preparar XML" de novo e depois Transmitir.',
-        code: 'NFE_XML_STALE',
+        error: `XML inválido no leiaute ${schemaCheck.layoutVersion} — corrija antes de transmitir à SEFAZ.`,
+        code: 'NFE_XML_INVALID',
+        layoutVersion: schemaCheck.layoutVersion,
+        errors: schemaCheck.errors,
       },
       400,
     )

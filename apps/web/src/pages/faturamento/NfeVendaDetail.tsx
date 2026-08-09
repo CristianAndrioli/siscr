@@ -45,9 +45,13 @@ export default function NfeVendaDetail() {
   const [hint, setHint] = useState('');
   const [busyXml, setBusyXml] = useState(false);
   const [busyTx, setBusyTx] = useState(false);
+  const [busyValidar, setBusyValidar] = useState(false);
   const [xmlToolsBusy, setXmlToolsBusy] = useState(false);
   const [assinaturaVerif, setAssinaturaVerif] = useState<VerificacaoAssinaturaNfe | null>(null);
   const [assinaturaVerifLoading, setAssinaturaVerifLoading] = useState(false);
+  const [xmlValidationErrors, setXmlValidationErrors] = useState<
+    { path: string; message: string }[]
+  >([]);
 
   const [modal, setModal] = useState<'faturar' | 'cancel' | null>(null);
   const [motivoCancel, setMotivoCancel] = useState('');
@@ -104,11 +108,20 @@ export default function NfeVendaDetail() {
     };
   }, [nota?.id, nota?.chave_acesso]);
 
+  const extractXmlErrors = (err: unknown): { path: string; message: string }[] => {
+    const ax = err as {
+      response?: { data?: { errors?: { path: string; message: string }[]; code?: string } };
+    };
+    const list = ax.response?.data?.errors;
+    return Array.isArray(list) ? list : [];
+  };
+
   const handlePrepararXml = async (force?: boolean) => {
     if (!nota) return;
     setBusyXml(true);
     setError('');
     setHint('');
+    setXmlValidationErrors([]);
     try {
       const r = await notasService.prepararXml(nota.id, { force });
       setHint(
@@ -119,10 +132,35 @@ export default function NfeVendaDetail() {
       await load();
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { error?: string } } };
+      setXmlValidationErrors(extractXmlErrors(err));
       setError(ax.response?.data?.error || 'Não foi possível gerar o XML.');
       reportError('Erro ao gerar XML da NF-e.', err, 'Faturamento NF-e');
     } finally {
       setBusyXml(false);
+    }
+  };
+
+  const handleValidarXml = async () => {
+    if (!nota) return;
+    setBusyValidar(true);
+    setError('');
+    setHint('');
+    setXmlValidationErrors([]);
+    try {
+      const r = await notasService.validarXml(nota.id);
+      setXmlValidationErrors(r.errors);
+      if (r.ok) {
+        setHint(r.message);
+      } else {
+        setError(r.message);
+      }
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string; message?: string } } };
+      setXmlValidationErrors(extractXmlErrors(err));
+      setError(ax.response?.data?.error || ax.response?.data?.message || 'Não foi possível validar o XML.');
+      reportError('Erro ao validar XML da NF-e.', err, 'Faturamento NF-e');
+    } finally {
+      setBusyValidar(false);
     }
   };
 
@@ -131,6 +169,7 @@ export default function NfeVendaDetail() {
     setBusyTx(true);
     setError('');
     setHint('');
+    setXmlValidationErrors([]);
     try {
       const r = await notasService.transmitir(nota.id);
       setHint(
@@ -140,6 +179,7 @@ export default function NfeVendaDetail() {
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { error?: string; cStat?: string; xMotivo?: string } } };
       const d = ax.response?.data;
+      setXmlValidationErrors(extractXmlErrors(err));
       setError(d?.error || 'Não foi possível transmitir à SEFAZ.');
       reportError('Erro ao transmitir NF-e à SEFAZ.', err, 'Faturamento NF-e');
       await load();
@@ -474,6 +514,22 @@ export default function NfeVendaDetail() {
         </div>
       )}
 
+      {xmlValidationErrors.length > 0 && (
+        <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 rounded-xl px-3 py-3 space-y-2">
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            Confrontação leiaute NF-e — {xmlValidationErrors.length} item(ns)
+          </p>
+          <ul className="text-xs text-amber-900 dark:text-amber-100 space-y-1.5 max-h-48 overflow-y-auto list-none pl-0">
+            {xmlValidationErrors.map((e, i) => (
+              <li key={`${e.path}-${i}`} className="font-mono leading-snug">
+                <span className="text-amber-700 dark:text-amber-300">{e.path}</span>
+                <span className="text-slate-600 dark:text-slate-300"> — {e.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {nota.observacoes && (
         <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2">
           <span className="font-semibold">Obs: </span>
@@ -497,6 +553,16 @@ export default function NfeVendaDetail() {
             className="px-4 py-2.5 text-sm bg-slate-700 hover:bg-slate-800 text-white font-medium rounded-xl disabled:opacity-50"
           >
             {busyXml ? 'Gerando…' : nota.chave_acesso ? 'Regerar XML' : 'Gerar XML NF-e'}
+          </button>
+        )}
+        {nota.chave_acesso && (
+          <button
+            type="button"
+            onClick={() => handleValidarXml()}
+            disabled={busyValidar}
+            className="px-4 py-2.5 text-sm border border-sky-300 dark:border-sky-700 text-sky-800 dark:text-sky-200 bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 dark:hover:bg-sky-900/50 font-medium rounded-xl disabled:opacity-50"
+          >
+            {busyValidar ? 'Validando…' : 'Validar XML'}
           </button>
         )}
         {podeTransmitir && (
