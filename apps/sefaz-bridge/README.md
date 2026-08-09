@@ -71,3 +71,8 @@ pnpm start
 ```
 
 O certificado A1 **não** fica gravado na ponte: a API envia o `.pfx` só no momento da chamada.
+
+## TLS / ICP-Brasil
+
+Webservices SEFAZ (ex. SP) usam SSL da cadeia **ICP-Brasil**, fora do Mozilla CA do Node.
+A imagem inclui `certs/icp-brasil-https-cas.pem` (AC Soluti SSL EV + Raiz v10).

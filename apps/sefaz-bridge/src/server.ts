@@ -19,13 +19,40 @@
 
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import fs from 'node:fs'
 import https from 'node:https'
+import path from 'node:path'
 import tls from 'node:tls'
 import { URL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 const PORT = Number(process.env.PORT || 8788)
 const BRIDGE_TOKEN = (process.env.BRIDGE_TOKEN || '').trim()
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 60_000)
+
+/** SEFAZ (ICP-Brasil) não está no Mozilla CA do Node — embutimos a cadeia. */
+function loadTrustStore(): string[] {
+  const cas: string[] = [...tls.rootCertificates]
+  const candidates = [
+    process.env.NODE_EXTRA_CA_CERTS,
+    path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'certs', 'icp-brasil-https-cas.pem'),
+    '/app/certs/icp-brasil-https-cas.pem',
+  ].filter(Boolean) as string[]
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        cas.push(fs.readFileSync(p, 'utf8'))
+        console.log(`[sefaz-bridge] trust store + ICP-Brasil CA (${p})`)
+        break
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return cas
+}
+
+const TRUST_STORE = loadTrustStore()
 
 const app = new Hono()
 
@@ -138,9 +165,7 @@ function postWithMtls(opts: {
         },
         pfx: opts.pfx,
         passphrase: opts.passphrase,
-        // Com `pfx`, o OpenSSL às vezes não usa o trust store do sistema —
-        // força as CAs raiz do Node para validar o certificado da SEFAZ.
-        ca: [...tls.rootCertificates],
+        ca: TRUST_STORE,
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2',
         timeout: opts.timeoutMs,
