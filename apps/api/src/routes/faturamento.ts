@@ -569,7 +569,8 @@ app.post('/notas/:id/faturar', async (c) => {
   // Buscar a nota com todos os dados necessários
   const nota = await c.env.DB_SHARED
     .prepare(`SELECT id, tipo, status, empresa_id, destinatario_id,
-                     valor_total, natureza_operacao, descricao_servico, numero
+                     valor_total, natureza_operacao, descricao_servico, numero,
+                     protocolo_autorizacao, chave_acesso
               FROM notas_fiscais WHERE id = ? AND tenant_id = ?`)
     .bind(id, tenant.tenantId)
     .first<{
@@ -577,12 +578,25 @@ app.post('/notas/:id/faturar', async (c) => {
       destinatario_id: string | null; valor_total: number
       natureza_operacao: string | null; descricao_servico: string | null
       numero: number | null
+      protocolo_autorizacao: string | null
+      chave_acesso: string | null
     }>()
 
   if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
   if (nota.status === 'emitida') return c.json({ error: 'Nota já foi faturada.' }, 400)
   if (nota.status === 'cancelada') return c.json({ error: 'Não é possível faturar uma nota cancelada.' }, 400)
-  // autorizada / pendente_emissao / rascunho: ok para faturar no ERP
+
+  // NF-e: estoque/financeiro só depois da autorização SEFAZ (evita faturar sem XML/protocolo)
+  if (nota.tipo === 'nfe' && !nota.protocolo_autorizacao) {
+    return c.json(
+      {
+        error:
+          'Para NF-e, autorize na SEFAZ antes de faturar no ERP. Ordem: Gerar XML → Validar → Transmitir à SEFAZ → Faturar no ERP.',
+        code: 'NFE_REQUIRES_SEFAZ',
+      },
+      400,
+    )
+  }
 
   const { results: itens } = await c.env.DB_SHARED
     .prepare('SELECT produto_id, quantidade, descricao FROM nota_fiscal_itens WHERE nota_fiscal_id = ? AND produto_id IS NOT NULL')

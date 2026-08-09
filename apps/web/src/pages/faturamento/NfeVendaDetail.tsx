@@ -337,13 +337,17 @@ export default function NfeVendaDetail() {
     );
   }
 
-  const podeGerarXml = nota.status !== 'cancelada' && !nota.protocolo_autorizacao;
+  const podeGerarXml = nota.status !== 'cancelada' && !nota.protocolo_autorizacao && nota.status !== 'emitida';
   const podeTransmitir =
     Boolean(nota.chave_acesso) &&
     !nota.protocolo_autorizacao &&
-    nota.status !== 'cancelada';
+    nota.status !== 'cancelada' &&
+    nota.status !== 'emitida';
+  // NF-e: faturar ERP só após protocolo SEFAZ
   const podeFaturarErp =
-    nota.status !== 'emitida' && nota.status !== 'cancelada';
+    nota.status !== 'emitida' &&
+    nota.status !== 'cancelada' &&
+    Boolean(nota.protocolo_autorizacao);
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -375,9 +379,10 @@ export default function NfeVendaDetail() {
       </div>
 
       <div className="bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-800 rounded-xl px-4 py-3 text-xs text-brand-800 dark:text-brand-200 leading-relaxed">
-        <strong>XML gerado</strong> = documento assinado.{' '}
-        <strong>Autorizada (SEFAZ)</strong> = protocolo fiscal.{' '}
-        <strong>Faturada (ERP)</strong> = estoque e contas a receber — etapas independentes.
+        Ordem para NF-e:{' '}
+        <strong>1. Gerar XML</strong> → <strong>2. Validar</strong> →{' '}
+        <strong>3. Transmitir à SEFAZ</strong> → <strong>4. Faturar no ERP</strong> (estoque/CR).
+        O faturamento ERP só libera depois do protocolo SEFAZ.
       </div>
 
       {nota.status === 'pendente_emissao' && !nota.protocolo_autorizacao && (
