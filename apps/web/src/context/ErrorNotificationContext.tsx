@@ -5,7 +5,7 @@ export type ToastVariant = 'error' | 'warning' | 'success' | 'info';
 
 export interface AppToast {
   id: string;
-  /** Se definido, o toast oferece link para o log persistido. */
+  /** Se definido, o toast % link para o log persistido. */
   logId?: string;
   friendlyMessage: string;
   variant: ToastVariant;
@@ -21,6 +21,10 @@ interface ErrorNotificationContextValue {
    */
   notify: (message: string, variant?: Exclude<ToastVariant, 'error'>) => void;
   dismiss: (id: string) => void;
+  /** Pausa o auto-dismiss enquanto o mouse está sobre o toast (global). */
+  pauseDismiss: (id: string) => void;
+  /** Retoma o auto-dismiss após o mouse sair do toast. */
+  resumeDismiss: (id: string) => void;
 }
 
 const Ctx = createContext<ErrorNotificationContextValue | null>(null);
@@ -35,12 +39,62 @@ const AUTO_DISMISS_MS: Record<ToastVariant, number> = {
 export function ErrorNotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppToast[]>([]);
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const remainingMs = useRef<Map<string, number>>(new Map());
+  const startedAt = useRef<Map<string, number>>(new Map());
+  const paused = useRef<Set<string>>(new Set());
 
-  const dismiss = useCallback((id: string) => {
-    clearTimeout(timers.current.get(id));
+  const clearTimer = useCallback((id: string) => {
+    const t = timers.current.get(id);
+    if (t) clearTimeout(t);
     timers.current.delete(id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
+
+  const dismiss = useCallback(
+    (id: string) => {
+      clearTimer(id);
+      remainingMs.current.delete(id);
+      startedAt.current.delete(id);
+      paused.current.delete(id);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    },
+    [clearTimer],
+  );
+
+  const scheduleDismiss = useCallback(
+    (id: string, ms: number) => {
+      clearTimer(id);
+      remainingMs.current.set(id, ms);
+      startedAt.current.set(id, Date.now());
+      const timer = setTimeout(() => dismiss(id), ms);
+      timers.current.set(id, timer);
+    },
+    [clearTimer, dismiss],
+  );
+
+  const pauseDismiss = useCallback(
+    (id: string) => {
+      if (paused.current.has(id)) return;
+      const start = startedAt.current.get(id);
+      const remaining = remainingMs.current.get(id);
+      if (start == null || remaining == null) return;
+      const elapsed = Date.now() - start;
+      const left = Math.max(500, remaining - elapsed);
+      remainingMs.current.set(id, left);
+      clearTimer(id);
+      paused.current.add(id);
+    },
+    [clearTimer],
+  );
+
+  const resumeDismiss = useCallback(
+    (id: string) => {
+      if (!paused.current.has(id)) return;
+      paused.current.delete(id);
+      const left = remainingMs.current.get(id) ?? AUTO_DISMISS_MS.info;
+      scheduleDismiss(id, left);
+    },
+    [scheduleDismiss],
+  );
 
   const pushToast = useCallback(
     (toast: Omit<AppToast, 'id'> & { id?: string }) => {
@@ -51,10 +105,9 @@ export function ErrorNotificationProvider({ children }: { children: React.ReactN
         variant: toast.variant,
       };
       setNotifications((prev) => [notif, ...prev].slice(0, 5));
-      const timer = setTimeout(() => dismiss(notif.id), AUTO_DISMISS_MS[notif.variant]);
-      timers.current.set(notif.id, timer);
+      scheduleDismiss(notif.id, AUTO_DISMISS_MS[notif.variant]);
     },
-    [dismiss],
+    [scheduleDismiss],
   );
 
   const reportError = useCallback(
@@ -73,7 +126,9 @@ export function ErrorNotificationProvider({ children }: { children: React.ReactN
   );
 
   return (
-    <Ctx.Provider value={{ notifications, reportError, notify, dismiss }}>
+    <Ctx.Provider
+      value={{ notifications, reportError, notify, dismiss, pauseDismiss, resumeDismiss }}
+    >
       {children}
     </Ctx.Provider>
   );

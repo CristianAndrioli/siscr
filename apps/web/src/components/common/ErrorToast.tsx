@@ -60,7 +60,7 @@ function ToastIcon({ variant }: { variant: ToastVariant }) {
 
 /** Stack de toasts flutuantes (canto inferior direito). */
 export default function ErrorToastStack() {
-  const { notifications, dismiss } = useErrorNotification();
+  const { notifications, dismiss, pauseDismiss, resumeDismiss } = useErrorNotification();
   const navigate = useNavigate();
 
   if (notifications.length === 0) return null;
@@ -74,6 +74,8 @@ export default function ErrorToastStack() {
             key={n.id}
             className={`flex flex-col gap-2 bg-white dark:bg-slate-800 border ${ui.border} rounded-xl shadow-xl px-4 py-3 animate-slide-in`}
             role="status"
+            onMouseEnter={() => pauseDismiss(n.id)}
+            onMouseLeave={() => resumeDismiss(n.id)}
           >
             <div className="flex items-start gap-2">
               <span className="mt-0.5 flex-shrink-0">
