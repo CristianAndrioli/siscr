@@ -79,6 +79,7 @@ export const empresas = sqliteTable('empresas', {
   nomeFantasia: text('nome_fantasia'),
   cnpj: text('cnpj').notNull(),
   inscricaoEstadual: text('inscricao_estadual'),
+  inscricaoMunicipal: text('inscricao_municipal'),
   email: text('email'),
   telefone: text('telefone'),
   logradouro: text('logradouro'),
@@ -94,6 +95,10 @@ export const empresas = sqliteTable('empresas', {
   nfeSerie: text('nfe_serie'),
   nfeAmbiente: integer('nfe_ambiente'),
   nfeProximoNumero: integer('nfe_proximo_numero'),
+  nfseSerie: text('nfse_serie'),
+  nfseAmbiente: integer('nfse_ambiente'),
+  nfseProximoNumero: integer('nfse_proximo_numero'),
+  nfseCodigoServicoPadrao: text('nfse_codigo_servico_padrao'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at'),
 }, (t) => [
@@ -117,6 +122,7 @@ export const filiais = sqliteTable('filiais', {
   cep: text('cep'),
   codigoMunicipio: text('codigo_municipio'),
   inscricaoEstadual: text('inscricao_estadual'),
+  inscricaoMunicipal: text('inscricao_municipal'),
   ativa: integer('ativa', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull(),
 }, (t) => [

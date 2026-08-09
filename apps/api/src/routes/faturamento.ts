@@ -10,7 +10,10 @@ import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import { validateNfeXmlDocumento } from '../lib/nfe/validateNfeXmlDocumento'
 import { enviarNfeAutorizacao } from '../lib/nfe/autorizacaoNfe'
 import { assertNfeQuotaAvailable, incrementNfeUsoMes } from '../lib/nfe/nfeQuota'
+import { prepareNfseEnvio } from '../lib/nfse/prepareNfseEnvio'
+import { getNfseAdapter } from '../lib/nfse'
 import { decryptA1Bundle } from '../lib/certBlob'
+import { onlyDigits } from '../lib/nfe/xmlEscape'
 import {
   fetchBrasilApiNcmJson,
   fetchClassifNcmJson,
@@ -272,7 +275,7 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
     if (!destinatarioId) destinatarioId = ped.cliente_id
   }
 
-  if (data.tipo === 'nfe' && (!empresaId || !filialId)) {
+  if ((data.tipo === 'nfe' || data.tipo === 'nfse') && !empresaId) {
     const row = await c.env.DB_SHARED
       .prepare(
         `SELECT e.id AS empresa_id,
@@ -282,7 +285,7 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
       .bind(tenant.tenantId)
       .first<{ empresa_id: string; filial_id: string | null }>()
     if (!empresaId && row?.empresa_id) empresaId = row.empresa_id
-    if (!filialId && row?.filial_id) filialId = row.filial_id
+    if (data.tipo === 'nfe' && !filialId && row?.filial_id) filialId = row.filial_id
   }
   // Filial é opcional: sem filial a nota é emitida pela matriz. `prepareNfeEnvio`
   // e `validateNfeBeforeXml` já usam os dados da empresa como fallback do emitente.
@@ -292,16 +295,39 @@ app.post('/notas', zValidator('json', nfSchema), async (c) => {
       400,
     )
   }
+  if (data.tipo === 'nfse' && !empresaId) {
+    return c.json(
+      { error: 'Cadastre a empresa em Configurações antes de criar NFS-e.' },
+      400,
+    )
+  }
 
   let serieNf = data.serie ?? '1'
   let ambienteNf = data.ambiente ?? 2
-  if (empresaId) {
+  if (empresaId && data.tipo === 'nfe') {
     const em = await c.env.DB_SHARED
       .prepare('SELECT nfe_serie, nfe_ambiente FROM empresas WHERE id = ? AND tenant_id = ?')
       .bind(empresaId, tenant.tenantId)
       .first<{ nfe_serie: string | null; nfe_ambiente: number | null }>()
     if (em?.nfe_serie) serieNf = em.nfe_serie
     if (em?.nfe_ambiente != null) ambienteNf = em.nfe_ambiente
+  }
+  if (empresaId && data.tipo === 'nfse') {
+    const em = await c.env.DB_SHARED
+      .prepare(
+        'SELECT nfse_serie, nfse_ambiente, nfse_codigo_servico_padrao FROM empresas WHERE id = ? AND tenant_id = ?',
+      )
+      .bind(empresaId, tenant.tenantId)
+      .first<{
+        nfse_serie: string | null
+        nfse_ambiente: number | null
+        nfse_codigo_servico_padrao: string | null
+      }>()
+    if (em?.nfse_serie) serieNf = em.nfse_serie
+    if (em?.nfse_ambiente != null) ambienteNf = em.nfse_ambiente
+    if (!data.codigoServico && em?.nfse_codigo_servico_padrao) {
+      ;(data as { codigoServico?: string }).codigoServico = em.nfse_codigo_servico_padrao
+    }
   }
 
   let numero: number
@@ -598,6 +624,18 @@ app.post('/notas/:id/faturar', async (c) => {
     )
   }
 
+  // NFS-e: financeiro só depois da autorização municipal / Sefin Nacional
+  if (nota.tipo === 'nfse' && !nota.protocolo_autorizacao) {
+    return c.json(
+      {
+        error:
+          'Para NFS-e, autorize na prefeitura antes de faturar no ERP. Ordem: Gerar → Transmitir → Faturar no ERP.',
+        code: 'NFSE_REQUIRES_PREFEITURA',
+      },
+      400,
+    )
+  }
+
   const { results: itens } = await c.env.DB_SHARED
     .prepare('SELECT produto_id, quantidade, descricao FROM nota_fiscal_itens WHERE nota_fiscal_id = ? AND produto_id IS NOT NULL')
     .bind(id)
@@ -752,6 +790,226 @@ async function jsonPrepareNfeXml(c: Context<{ Bindings: Env }>) {
  * `NFE_DEV_MODE=1`: permite XML sem A1; com A1, assina normalmente.
  */
 app.post('/notas/:id/preparar-xml', jsonPrepareNfeXml)
+
+/**
+ * Gera DPS (Sistema Nacional) ou PedidoEnvioLoteRPS (Paulistana), assina com A1 e grava no R2.
+ * Query: force=1 para regerar. `NFE_DEV_MODE=1` permite XML sem A1.
+ */
+app.post('/notas/:id/preparar-nfse', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  if (!id) return c.json({ error: 'ID da nota inválido.' }, 400)
+  const force = c.req.query('force') === '1'
+  const devMode = c.env.NFE_DEV_MODE === '1'
+  try {
+    const r = await prepareNfseEnvio(c.env, tenant.tenantId, id, { devMode, force })
+    return c.json({
+      xmlPath: r.xmlPath,
+      signed: r.signed,
+      adapter: r.adapter,
+      numero: r.numero,
+      serie: r.serie,
+      message: r.message,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro ao gerar NFS-e.'
+    return c.json({ error: msg }, 400)
+  }
+})
+
+/**
+ * Transmite NFS-e à prefeitura / Sefin Nacional via ponte mTLS.
+ * Não fatura no ERP — isso continua em POST /faturar.
+ */
+app.post('/notas/:id/transmitir-nfse', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+  const now = new Date().toISOString()
+
+  const nota = await c.env.DB_SHARED
+    .prepare(
+      `SELECT nf.id, nf.tipo, nf.status, nf.xml_path, nf.ambiente, nf.empresa_id, nf.filial_id,
+              nf.transmissao_tentativas, nf.protocolo_autorizacao,
+              e.cnpj AS empresa_cnpj, e.codigo_municipio AS empresa_cmun,
+              e.a1_r2_object_key AS empresa_a1_key,
+              f.codigo_municipio AS filial_cmun, f.a1_r2_object_key AS filial_a1_key
+       FROM notas_fiscais nf
+       LEFT JOIN empresas e ON e.id = nf.empresa_id AND e.tenant_id = nf.tenant_id
+       LEFT JOIN filiais f ON f.id = nf.filial_id AND f.tenant_id = nf.tenant_id
+       WHERE nf.id = ? AND nf.tenant_id = ?`,
+    )
+    .bind(id, tenant.tenantId)
+    .first<{
+      id: string
+      tipo: string
+      status: string
+      xml_path: string | null
+      ambiente: number | null
+      empresa_id: string | null
+      filial_id: string | null
+      transmissao_tentativas: number | null
+      protocolo_autorizacao: string | null
+      empresa_cnpj: string | null
+      empresa_cmun: string | null
+      empresa_a1_key: string | null
+      filial_cmun: string | null
+      filial_a1_key: string | null
+    }>()
+
+  if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
+  if (nota.tipo !== 'nfse') {
+    return c.json({ error: 'Transmissão municipal disponível apenas para NFS-e.' }, 400)
+  }
+  if (nota.status === 'cancelada') return c.json({ error: 'Nota cancelada.' }, 400)
+  if (nota.protocolo_autorizacao) {
+    return c.json({ error: 'Nota já possui protocolo/número de autorização municipal.' }, 400)
+  }
+  if (!nota.xml_path) {
+    return c.json({ error: 'Gere o XML/DPS antes de transmitir (Preparar NFS-e).' }, 400)
+  }
+  if (!c.env.R2_STORAGE) return c.json({ error: 'R2_STORAGE não configurado.' }, 503)
+  if (!c.env.CERT_BLOB_SECRET?.trim()) {
+    return c.json({ error: 'CERT_BLOB_SECRET não configurado — impossível usar o certificado A1.' }, 503)
+  }
+
+  const cMun = onlyDigits(nota.filial_cmun || nota.empresa_cmun || '')
+  let adapter
+  try {
+    adapter = getNfseAdapter(cMun)
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Adapter NFS-e indisponível.' }, 400)
+  }
+
+  const obj = await c.env.R2_STORAGE.get(nota.xml_path)
+  if (!obj) return c.json({ error: 'Arquivo XML/DPS não encontrado no armazenamento.' }, 404)
+  const xmlAssinado = await obj.text()
+  if (!/<(?:[\w.-]+:)?Signature\b/i.test(xmlAssinado) && c.env.NFE_DEV_MODE !== '1') {
+    return c.json(
+      { error: 'XML/DPS sem assinatura digital. Envie o certificado A1 e regenere.' },
+      400,
+    )
+  }
+
+  let a1ObjectKey: string | null = null
+  let decryptScope = nota.empresa_id || ''
+  if (nota.filial_id && nota.filial_a1_key) {
+    a1ObjectKey = nota.filial_a1_key
+    decryptScope = `filial:${nota.filial_id}`
+  } else if (nota.empresa_a1_key) {
+    a1ObjectKey = nota.empresa_a1_key
+    decryptScope = nota.empresa_id || ''
+  }
+  if (!a1ObjectKey || !decryptScope) {
+    return c.json(
+      { error: 'Certificado A1 não configurado para a empresa/filial. Envie o .pfx em Configurações.' },
+      400,
+    )
+  }
+
+  const tent = Number(nota.transmissao_tentativas ?? 0) + 1
+  const tpAmb = (nota.ambiente === 1 ? 1 : 2) as 1 | 2
+
+  try {
+    const certObj = await c.env.R2_STORAGE.get(a1ObjectKey)
+    if (!certObj) {
+      return c.json({ error: 'Arquivo do certificado A1 não encontrado no armazenamento.' }, 404)
+    }
+    const bundle = await decryptA1Bundle(
+      c.env.CERT_BLOB_SECRET,
+      tenant.tenantId,
+      decryptScope,
+      await certObj.arrayBuffer(),
+    )
+
+    const r = await adapter.transmitir(c.env, tenant.tenantId, {
+      xmlAssinado,
+      ambiente: tpAmb,
+      cnpjPrestador: onlyDigits(nota.empresa_cnpj || ''),
+      cert: { pfxBytes: bundle.pfxBytes, password: bundle.password },
+    })
+
+    let procPath: string | null = null
+    if (r.xmlRetorno && r.autorizada) {
+      procPath = `tenants/${tenant.tenantId}/nfse/${id}-autorizada.xml`
+      await c.env.R2_STORAGE.put(procPath, r.xmlRetorno, {
+        httpMetadata: { contentType: 'application/xml' },
+      })
+    }
+
+    let nextStatus = nota.status
+    if (r.autorizada && nota.status !== 'emitida') nextStatus = 'autorizada'
+
+    await c.env.DB_SHARED
+      .prepare(
+        `UPDATE notas_fiscais SET
+          cstat_ultimo = ?,
+          xmotivo_ultimo = ?,
+          protocolo_autorizacao = COALESCE(?, protocolo_autorizacao),
+          data_autorizacao = COALESCE(?, data_autorizacao),
+          chave_acesso = COALESCE(?, chave_acesso),
+          xml_path = COALESCE(?, xml_path),
+          transmissao_tentativas = ?,
+          transmissao_erro = ?,
+          status = ?,
+          updated_at = ?
+         WHERE id = ? AND tenant_id = ?`,
+      )
+      .bind(
+        r.cStat,
+        r.xMotivo,
+        r.autorizada ? r.protocolo : null,
+        r.autorizada ? r.dhRecbto || now : null,
+        r.autorizada ? r.chaveAcesso : null,
+        procPath,
+        tent,
+        r.autorizada ? null : `NFS-e ${r.cStat}: ${r.xMotivo}`,
+        nextStatus,
+        now,
+        id,
+        tenant.tenantId,
+      )
+      .run()
+
+    if (!r.autorizada) {
+      return c.json(
+        {
+          error: `Prefeitura/Sefin rejeitou: ${r.cStat} — ${r.xMotivo}`,
+          cStat: r.cStat,
+          xMotivo: r.xMotivo,
+          autorizada: false,
+          adapter: adapter.kind,
+        },
+        400,
+      )
+    }
+
+    return c.json({
+      message: 'NFS-e autorizada pela prefeitura.',
+      autorizada: true,
+      cStat: r.cStat,
+      xMotivo: r.xMotivo,
+      protocolo: r.protocolo,
+      chaveAcesso: r.chaveAcesso,
+      dataAutorizacao: r.dhRecbto,
+      status: nextStatus,
+      adapter: adapter.kind,
+      xmlPath: procPath,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Erro ao transmitir NFS-e.'
+    await c.env.DB_SHARED
+      .prepare(
+        `UPDATE notas_fiscais SET
+          transmissao_tentativas = ?,
+          transmissao_erro = ?,
+          updated_at = ?
+         WHERE id = ? AND tenant_id = ?`,
+      )
+      .bind(tent, msg.slice(0, 500), now, id, tenant.tenantId)
+      .run()
+    return c.json({ error: msg }, 400)
+  }
+})
 
 /**
  * Confronta o XML armazenado com regras do leiaute 4.00 (sem transmitir à SEFAZ).

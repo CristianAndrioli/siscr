@@ -22,6 +22,7 @@ export type FilialInsertRow = {
   cep: string | null
   codigoMunicipio: string | null
   inscricaoEstadual: string | null
+  inscricaoMunicipal: string | null
   ativa: number
   createdAt: string
   auditUserId: string | null
@@ -39,6 +40,7 @@ export type FilialUpdateFields = {
   cep?: string | null
   codigoMunicipio?: string | null
   inscricaoEstadual?: string | null
+  inscricaoMunicipal?: string | null
   ativa?: number
 }
 
@@ -54,6 +56,7 @@ const FILIAL_COLUMN_MAP: Record<keyof FilialUpdateFields, string> = {
   cep: 'cep',
   codigoMunicipio: 'codigo_municipio',
   inscricaoEstadual: 'inscricao_estadual',
+  inscricaoMunicipal: 'inscricao_municipal',
   ativa: 'ativa',
 }
 
@@ -66,7 +69,7 @@ export class FilialRepository extends BaseTenantRepository {
     const { results } = await this.prepareTenant(
       `
       SELECT id, nome, cnpj, uf, cidade, logradouro, numero, complemento, bairro, cep,
-             codigo_municipio, inscricao_estadual, ativa, created_at, a1_cert_uploaded_at, a1_cert_meta
+             codigo_municipio, inscricao_estadual, inscricao_municipal, ativa, created_at, a1_cert_uploaded_at, a1_cert_meta
       FROM filiais
       WHERE empresa_id = ? AND tenant_id = ?
       ORDER BY nome
@@ -80,7 +83,7 @@ export class FilialRepository extends BaseTenantRepository {
     const { results } = await this.prepareTenant(
       `
       SELECT f.id, f.nome, f.cnpj, f.uf, f.cidade, f.logradouro, f.numero, f.complemento, f.bairro, f.cep,
-             f.codigo_municipio, f.inscricao_estadual, f.ativa, f.created_at, f.a1_cert_uploaded_at, f.a1_cert_meta,
+             f.codigo_municipio, f.inscricao_estadual, f.inscricao_municipal, f.ativa, f.created_at, f.a1_cert_uploaded_at, f.a1_cert_meta,
              e.id as empresa_id, e.razao_social as empresa_nome
       FROM filiais f
       LEFT JOIN empresas e ON e.id = f.empresa_id AND e.tenant_id = f.tenant_id
@@ -95,8 +98,8 @@ export class FilialRepository extends BaseTenantRepository {
     await this.db
       .prepare(
         `
-      INSERT INTO filiais (id, tenant_id, empresa_id, nome, cnpj, uf, cidade, logradouro, numero, complemento, bairro, cep, codigo_municipio, inscricao_estadual, ativa, created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO filiais (id, tenant_id, empresa_id, nome, cnpj, uf, cidade, logradouro, numero, complemento, bairro, cep, codigo_municipio, inscricao_estadual, inscricao_municipal, ativa, created_at, updated_at, created_by, updated_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .bind(
@@ -114,6 +117,7 @@ export class FilialRepository extends BaseTenantRepository {
         row.cep,
         row.codigoMunicipio,
         row.inscricaoEstadual,
+        row.inscricaoMunicipal,
         row.ativa,
         row.createdAt,
         row.createdAt,

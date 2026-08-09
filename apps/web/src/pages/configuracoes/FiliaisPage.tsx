@@ -79,6 +79,7 @@ function CertMetaDetails({ meta }: { meta: A1CertMeta }) {
 interface Empresa {
   id: string; razao_social: string; nome_fantasia?: string; cnpj?: string;
   inscricao_estadual?: string | null;
+  inscricao_municipal?: string | null;
   cidade?: string; uf?: string; email?: string; telefone?: string;
   logradouro?: string; numero?: string; complemento?: string | null; bairro?: string; cep?: string;
   codigo_municipio?: string | null;
@@ -96,6 +97,7 @@ interface Filial {
   logradouro?: string; numero?: string; complemento?: string | null; bairro?: string; cep?: string;
   codigo_municipio?: string | null;
   inscricao_estadual?: string | null;
+  inscricao_municipal?: string | null;
   ativa: number; empresa_id: string; empresa_nome?: string; created_at?: string;
   a1_cert_uploaded_at?: string | null;
   a1_cert_meta?: string | null;
@@ -135,7 +137,7 @@ function normalizeFilialRow(row: unknown): Filial {
 }
 
 type EmpresaForm = {
-  razaoSocial: string; nomeFantasia: string; cnpj: string; inscricaoEstadual: string;
+  razaoSocial: string; nomeFantasia: string; cnpj: string; inscricaoEstadual: string; inscricaoMunicipal: string;
   email: string; telefone: string; uf: string; cidade: string; logradouro: string; numero: string;
   complemento: string; bairro: string; cep: string;
   codigoMunicipio: string; crt: string; cnae: string; nfeSerie: string; nfeAmbiente: string; nfeProximoNumero: string;
@@ -143,12 +145,12 @@ type EmpresaForm = {
 type FilialForm = {
   nome: string; cnpj: string; uf: string; cidade: string; logradouro: string; numero: string;
   complemento: string; bairro: string; cep: string;
-  codigoMunicipio: string; inscricaoEstadual: string;
+  codigoMunicipio: string; inscricaoEstadual: string; inscricaoMunicipal: string;
   ativa: boolean;
 };
 
 const emptyEmpresa = (): EmpresaForm => ({
-  razaoSocial: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '',
+  razaoSocial: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '', inscricaoMunicipal: '',
   email: '', telefone: '', uf: 'SC', cidade: '', logradouro: '', numero: '',
   complemento: '', bairro: '', cep: '',
   codigoMunicipio: '', crt: '1', cnae: '', nfeSerie: '1', nfeAmbiente: '2', nfeProximoNumero: '1',
@@ -156,7 +158,7 @@ const emptyEmpresa = (): EmpresaForm => ({
 const emptyFilial = (): FilialForm => ({
   nome: '', cnpj: '', uf: 'SC', cidade: '', logradouro: '', numero: '',
   complemento: '', bairro: '', cep: '',
-  codigoMunicipio: '', inscricaoEstadual: '',
+  codigoMunicipio: '', inscricaoEstadual: '', inscricaoMunicipal: '',
   ativa: true,
 });
 
@@ -279,6 +281,7 @@ export function FiliaisPage() {
     setEmpresaForm({
       razaoSocial: row.razao_social, nomeFantasia: row.nome_fantasia ?? '', cnpj: row.cnpj ?? '',
       inscricaoEstadual: row.inscricao_estadual ?? '',
+      inscricaoMunicipal: row.inscricao_municipal ?? '',
       email: row.email ?? '', telefone: row.telefone ?? '', uf: row.uf ?? 'SC', cidade: row.cidade ?? '',
       logradouro: row.logradouro ?? '', numero: row.numero ?? '', complemento: row.complemento ?? '',
       bairro: row.bairro ?? '', cep: row.cep ?? '',
@@ -343,6 +346,7 @@ export function FiliaisPage() {
       bairro: row.bairro ?? '', cep: row.cep ?? '',
       codigoMunicipio: row.codigo_municipio ?? '',
       inscricaoEstadual: row.inscricao_estadual ?? '',
+      inscricaoMunicipal: row.inscricao_municipal ?? '',
       ativa: row.ativa === 1,
     });
     setFilialEditing(row.id); setFilialParentId(row.empresa_id);
@@ -664,6 +668,7 @@ export function FiliaisPage() {
                 </div>
                 <Field label="Complemento" value={empresaForm.complemento} onChange={v => setEF('complemento', v)} />
                 <Field label="Inscrição Estadual" value={empresaForm.inscricaoEstadual} onChange={v => setEF('inscricaoEstadual', v)} />
+                <Field label="Inscrição Municipal" value={empresaForm.inscricaoMunicipal} onChange={v => setEF('inscricaoMunicipal', v)} />
                 <Field label="Cód. município (IBGE)" value={empresaForm.codigoMunicipio} onChange={v => setEF('codigoMunicipio', v.replace(/\D/g, '').slice(0, 7))} maxLen={7} />
                 <SelectField label="CRT (regime tributário)" value={empresaForm.crt} onChange={v => setEF('crt', v)} options={['1', '2', '3']} />
                 <Field label="CNAE (principal)" value={empresaForm.cnae} onChange={v => setEF('cnae', v)} />
@@ -798,6 +803,7 @@ export function FiliaisPage() {
                 <Field label="Bairro" value={filialForm.bairro} onChange={v => setFF('bairro', v)} />
                 <Field label="Cód. município (IBGE)" value={filialForm.codigoMunicipio} onChange={v => setFF('codigoMunicipio', v.replace(/\D/g, '').slice(0, 7))} maxLen={7} />
                 <Field label="Inscrição Estadual" value={filialForm.inscricaoEstadual} onChange={v => setFF('inscricaoEstadual', v)} />
+                <Field label="Inscrição Municipal" value={filialForm.inscricaoMunicipal} onChange={v => setFF('inscricaoMunicipal', v)} />
               </div>
               {filialEditing && (
                 <div className="flex items-center gap-3">

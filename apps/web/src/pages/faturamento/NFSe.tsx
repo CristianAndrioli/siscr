@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { notasService, type NotaFiscal, type NFStatus } from '../../services/faturamentoService';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import api from '../../services/api';
@@ -12,13 +12,15 @@ const fmtPct = (v?: number | null) => v != null ? `${v}%` : '—';
 const STATUS_STYLE: Record<NFStatus, string> = {
   rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
   pendente_emissao: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  autorizada: 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300',
   emitida: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
   cancelada: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
   inutilizada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 const STATUS_LABEL: Record<NFStatus, string> = {
   rascunho: 'Rascunho',
-  pendente_emissao: 'XML gerado',
+  pendente_emissao: 'XML/DPS gerado',
+  autorizada: 'Autorizada (prefeitura)',
   emitida: 'Faturada (ERP)',
   cancelada: 'Cancelada',
   inutilizada: 'Inutilizada',
@@ -31,7 +33,7 @@ type FaturarStep = { label: string; status: 'pending' | 'running' | 'done' | 'er
 interface CondicaoPagamento { parcelas: number; vencimento: string; intervalo_dias: number; }
 
 export function NFSePage() {
-  const { reportError } = useErrorNotification();
+  const { reportError, notify } = useErrorNotification();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notas, setNotas] = useState<NotaFiscal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,7 @@ export function NFSePage() {
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [selectedNota, setSelectedNota] = useState<NotaFiscal | null>(null);
   const [saving, setSaving] = useState(false);
+  const [txBusy, setTxBusy] = useState(false);
   const [modalError, setModalError] = useState('');
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [faturarSteps, setFaturarSteps] = useState<FaturarStep[]>([]);
@@ -144,6 +147,50 @@ export function NFSePage() {
     setModalMode(null); setMotivoCancel(''); load();
   };
 
+  const refreshSelected = async (id: string) => {
+    const nota = await notasService.get(id);
+    setSelectedNota(nota);
+    return nota;
+  };
+
+  const handlePrepararNfse = async (force = false) => {
+    if (!selectedNota) return;
+    setTxBusy(true); setModalError('');
+    try {
+      const r = await notasService.prepararNfse(selectedNota.id, { force });
+      notify(r.message, 'success');
+      await refreshSelected(selectedNota.id);
+      load();
+    } catch (err) {
+      reportError('Erro ao gerar XML/DPS da NFS-e.', err, 'Faturamento NFS-e');
+      setModalError((err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Erro ao gerar.');
+    } finally {
+      setTxBusy(false);
+    }
+  };
+
+  const handleTransmitirNfse = async () => {
+    if (!selectedNota) return;
+    setTxBusy(true); setModalError('');
+    try {
+      if (selectedNota.status === 'rascunho') {
+        await notasService.prepararNfse(selectedNota.id, { force: false });
+      }
+      const r = await notasService.transmitirNfse(selectedNota.id);
+      notify(r.message, 'success');
+      await refreshSelected(selectedNota.id);
+      load();
+    } catch (err) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      if (msg) notify(msg, 'info');
+      else reportError('Erro ao transmitir NFS-e.', err, 'Faturamento NFS-e');
+      setModalError(msg || 'Erro ao transmitir.');
+      try { await refreshSelected(selectedNota.id); } catch { /* ignore */ }
+    } finally {
+      setTxBusy(false);
+    }
+  };
+
   const iniciarFaturamento = () => {
     setFaturarDone(false);
     setFaturarConfirmando(false);
@@ -163,8 +210,8 @@ export function NFSePage() {
   const confirmarFaturamento = () => {
     setFaturarConfirmando(true);
     setFaturarSteps([
-      { label: 'Validando nota de serviço', status: 'pending' },
-      { label: 'Emitindo NFS-e', status: 'pending' },
+      { label: 'Validando autorização municipal', status: 'pending' },
+      { label: 'Faturando no ERP', status: 'pending' },
       { label: `Gerando ${condicao.parcelas}x em Contas a Receber`, status: 'pending' },
       { label: 'Finalizando', status: 'pending' },
     ]);
@@ -223,17 +270,29 @@ export function NFSePage() {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">NFS-e</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Notas fiscais eletrônicas de serviços</p>
         </div>
-        <button onClick={openNew} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-          Nova NFS-e
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/configuracoes/nfse"
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+          >
+            Configurar emissão
+          </Link>
+          <button onClick={openNew} className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+            Nova NFS-e
+          </button>
+        </div>
       </div>
 
       <div className="bg-brand-50 dark:bg-brand-950 border border-brand-200 dark:border-brand-800 rounded-xl px-4 py-3 flex gap-3 items-start">
         <svg className="w-5 h-5 text-brand-600 dark:text-brand-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
         <div>
-          <p className="text-sm font-semibold text-brand-800 dark:text-brand-200">Integração com prefeitura em breve</p>
-          <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5">Registre as notas em rascunho e gerencie o cadastro. A emissão eletrônica será habilitada em uma próxima versão.</p>
+          <p className="text-sm font-semibold text-brand-800 dark:text-brand-200">Emissão municipal — SP capital e Chapecó</p>
+          <p className="text-xs text-brand-600 dark:text-brand-400 mt-0.5">
+            Fluxo: Gerar XML/DPS → Transmitir à prefeitura → Faturar no ERP.{' '}
+            <Link to="/configuracoes/nfse" className="underline font-medium">Configurar IM, ambiente e série</Link>
+            {' '}antes da primeira emissão.
+          </p>
         </div>
       </div>
 
@@ -443,23 +502,58 @@ export function NFSePage() {
               </p>
             )}
 
+            {(selectedNota.protocolo_autorizacao || selectedNota.transmissao_erro || selectedNota.cstat_ultimo) && (
+              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-1 text-sm">
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Transmissão</p>
+                {selectedNota.protocolo_autorizacao && (
+                  <p className="text-slate-700 dark:text-slate-200">Protocolo/nº: <span className="font-mono">{selectedNota.protocolo_autorizacao}</span></p>
+                )}
+                {selectedNota.chave_acesso && (
+                  <p className="text-slate-700 dark:text-slate-200 text-xs break-all">Chave: <span className="font-mono">{selectedNota.chave_acesso}</span></p>
+                )}
+                {selectedNota.cstat_ultimo && (
+                  <p className="text-slate-500 dark:text-slate-400 text-xs">{selectedNota.cstat_ultimo}: {selectedNota.xmotivo_ultimo}</p>
+                )}
+                {selectedNota.transmissao_erro && (
+                  <p className="text-red-600 dark:text-red-400 text-xs">{selectedNota.transmissao_erro}</p>
+                )}
+              </div>
+            )}
+
             {modalError && (
               <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">{modalError}</div>
             )}
 
             <div className="flex gap-3 pt-2 flex-wrap">
-              <button onClick={() => setModalMode(null)} className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Fechar</button>
+              <button onClick={() => setModalMode(null)} className="px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Fechar</button>
               {selectedNota.status !== 'emitida' && selectedNota.status !== 'cancelada' && (
                 <>
-                  <button
-                    onClick={iniciarFaturamento}
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Faturar NFS-e
-                  </button>
+                  {(selectedNota.status === 'rascunho' || selectedNota.status === 'pendente_emissao') && (
+                    <button
+                      disabled={txBusy}
+                      onClick={() => handlePrepararNfse(selectedNota.status === 'pendente_emissao')}
+                      className="px-4 py-2.5 text-sm bg-slate-800 hover:bg-slate-700 dark:bg-slate-100 dark:hover:bg-white dark:text-slate-900 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      {txBusy ? 'Gerando…' : selectedNota.status === 'pendente_emissao' ? 'Regerar XML/DPS' : 'Gerar XML/DPS'}
+                    </button>
+                  )}
+                  {(selectedNota.status === 'pendente_emissao' || selectedNota.status === 'rascunho') && !selectedNota.protocolo_autorizacao && (
+                    <button
+                      disabled={txBusy}
+                      onClick={handleTransmitirNfse}
+                      className="px-4 py-2.5 text-sm bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      {txBusy ? 'Transmitindo…' : 'Transmitir prefeitura'}
+                    </button>
+                  )}
+                  {(selectedNota.status === 'autorizada' || Boolean(selectedNota.protocolo_autorizacao)) && (
+                    <button
+                      onClick={iniciarFaturamento}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl transition-colors"
+                    >
+                      Faturar no ERP
+                    </button>
+                  )}
                   <button onClick={() => { setMotivoCancel(''); setModalMode('cancel'); }} className="px-4 py-2.5 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition-colors">Cancelar</button>
                 </>
               )}

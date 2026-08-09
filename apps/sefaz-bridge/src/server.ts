@@ -1,17 +1,19 @@
 /**
- * Ponte HTTPS → mTLS SEFAZ
+ * Ponte HTTPS → mTLS (SEFAZ / NFS-e municipal / Sefin Nacional)
  *
  * Contrato (igual ao esperado pela API SISCR / conexão `sefaz-dfe`):
  *   POST /
  *   Headers:
- *     Content-Type: application/soap+xml; charset=utf-8
- *     X-Sefaz-Url: https://... (URL real do webservice SEFAZ)
+ *     Content-Type: application/soap+xml|application/xml|text/xml; charset=utf-8
+ *     X-Sefaz-Url ou X-Target-Url: https://... (URL do webservice)
  *     X-Pfx-Base64: certificado A1 em base64 (PKCS#12)
  *     X-Pfx-Password: senha do .pfx
+ *     Accept: (opcional, encaminhado)
+ *     SOAPAction: (opcional, encaminhado — Paulistana)
  *     Authorization: Bearer <BRIDGE_TOKEN>  (se BRIDGE_TOKEN estiver definido)
- *   Body: envelope SOAP
+ *   Body: envelope SOAP ou XML REST
  *
- * Resposta: status + corpo devolvidos pela SEFAZ (transparência).
+ * Resposta: status + corpo devolvidos pelo destino (transparência).
  *
  * Deploy: Cloudflare Containers (`wrangler deploy` neste pacote) ou Node em VPS.
  * Em Configurações → Conexões, URL base = URL pública do Worker da ponte.
@@ -30,7 +32,7 @@ const PORT = Number(process.env.PORT || 8788)
 const BRIDGE_TOKEN = (process.env.BRIDGE_TOKEN || '').trim()
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 60_000)
 
-/** SEFAZ (ICP-Brasil) não está no Mozilla CA do Node — embutimos a cadeia. */
+/** SEFAZ / prefeituras (ICP-Brasil) não estão no Mozilla CA do Node — embutimos a cadeia. */
 function loadTrustStore(): string[] {
   const cas: string[] = [...tls.rootCertificates]
   const candidates = [
@@ -69,19 +71,19 @@ app.post('/', async (c) => {
     }
   }
 
-  const sefazUrl = (c.req.header('X-Sefaz-Url') || '').trim()
-  if (!sefazUrl) {
-    return c.json({ error: 'Header X-Sefaz-Url é obrigatório.' }, 400)
+  const targetUrl = (c.req.header('X-Target-Url') || c.req.header('X-Sefaz-Url') || '').trim()
+  if (!targetUrl) {
+    return c.json({ error: 'Header X-Sefaz-Url ou X-Target-Url é obrigatório.' }, 400)
   }
 
   let parsed: URL
   try {
-    parsed = new URL(sefazUrl)
+    parsed = new URL(targetUrl)
   } catch {
-    return c.json({ error: 'X-Sefaz-Url inválida.' }, 400)
+    return c.json({ error: 'URL de destino inválida.' }, 400)
   }
   if (parsed.protocol !== 'https:') {
-    return c.json({ error: 'X-Sefaz-Url deve ser https://' }, 400)
+    return c.json({ error: 'URL de destino deve ser https://' }, 400)
   }
   // Evita SSRF trivial para redes internas
   const host = parsed.hostname.toLowerCase()
@@ -92,7 +94,7 @@ app.post('/', async (c) => {
     host.startsWith('192.168.') ||
     host.endsWith('.local')
   ) {
-    return c.json({ error: 'Host SEFAZ não permitido.' }, 400)
+    return c.json({ error: 'Host de destino não permitido.' }, 400)
   }
 
   const pfxB64 = (c.req.header('X-Pfx-Base64') || '').replace(/\s/g, '')
@@ -119,6 +121,8 @@ app.post('/', async (c) => {
 
   const contentType =
     c.req.header('Content-Type') || 'application/soap+xml; charset=utf-8'
+  const accept = c.req.header('Accept') || undefined
+  const soapAction = c.req.header('SOAPAction') || undefined
   const body = Buffer.from(await c.req.arrayBuffer())
 
   try {
@@ -126,6 +130,8 @@ app.post('/', async (c) => {
       url: parsed,
       body,
       contentType,
+      accept,
+      soapAction,
       pfx,
       passphrase: pfxPassword,
       timeoutMs: REQUEST_TIMEOUT_MS,
@@ -133,11 +139,11 @@ app.post('/', async (c) => {
     return new Response(upstream.body, {
       status: upstream.status,
       headers: {
-        'Content-Type': upstream.contentType || 'application/soap+xml; charset=utf-8',
+        'Content-Type': upstream.contentType || contentType,
       },
     })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Falha no mTLS / SEFAZ'
+    const msg = e instanceof Error ? e.message : 'Falha no mTLS / destino'
     console.error('[sefaz-bridge]', msg)
     return c.json({ error: msg }, 502)
   }
@@ -147,11 +153,20 @@ function postWithMtls(opts: {
   url: URL
   body: Buffer
   contentType: string
+  accept?: string
+  soapAction?: string
   pfx: Buffer
   passphrase: string
   timeoutMs: number
 }): Promise<{ status: number; body: Buffer; contentType: string }> {
   return new Promise((resolve, reject) => {
+    const headers: Record<string, string | number> = {
+      'Content-Type': opts.contentType,
+      'Content-Length': opts.body.length,
+    }
+    if (opts.accept) headers.Accept = opts.accept
+    if (opts.soapAction) headers.SOAPAction = opts.soapAction
+
     const req = https.request(
       {
         protocol: opts.url.protocol,
@@ -159,10 +174,7 @@ function postWithMtls(opts: {
         port: opts.url.port || 443,
         path: opts.url.pathname + opts.url.search,
         method: 'POST',
-        headers: {
-          'Content-Type': opts.contentType,
-          'Content-Length': opts.body.length,
-        },
+        headers,
         pfx: opts.pfx,
         passphrase: opts.passphrase,
         ca: TRUST_STORE,
@@ -183,7 +195,7 @@ function postWithMtls(opts: {
       },
     )
     req.on('timeout', () => {
-      req.destroy(new Error(`Timeout após ${opts.timeoutMs}ms na SEFAZ.`))
+      req.destroy(new Error(`Timeout após ${opts.timeoutMs}ms no destino.`))
     })
     req.on('error', reject)
     req.write(opts.body)

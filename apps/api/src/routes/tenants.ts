@@ -63,7 +63,8 @@ const empresaSchema = z.object({
   razaoSocial: z.string().min(2),
   nomeFantasia: z.string().optional(),
   cnpj: z.string().length(14),
-  inscricaoEstadual: z.string().optional(),
+  inscricaoEstadual: z.string().optional().nullable(),
+  inscricaoMunicipal: z.string().optional().nullable(),
   email: z.string().email().optional(),
   telefone: z.string().optional(),
   logradouro: z.string().optional(),
@@ -79,6 +80,10 @@ const empresaSchema = z.object({
   nfeSerie: z.string().max(3).optional(),
   nfeAmbiente: z.coerce.number().int().min(1).max(2).optional(),
   nfeProximoNumero: z.coerce.number().int().min(1).optional(),
+  nfseSerie: z.string().max(5).optional(),
+  nfseAmbiente: z.coerce.number().int().min(1).max(2).optional(),
+  nfseProximoNumero: z.coerce.number().int().min(1).optional(),
+  nfseCodigoServicoPadrao: z.string().max(20).optional().nullable(),
 })
 
 app.post('/empresas', zValidator('json', empresaSchema), async (c) => {
@@ -124,6 +129,7 @@ const filialSchema = z.object({
   cep: z.string().optional(),
   codigoMunicipio: z.string().max(7).optional(),
   inscricaoEstadual: z.string().optional(),
+  inscricaoMunicipal: z.string().optional(),
 })
 
 app.post('/empresas/:id/filiais', zValidator('json', filialSchema), async (c) => {

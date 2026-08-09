@@ -73,6 +73,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         items: [
           { label: 'Tabela NCM', to: '/faturamento/ncm' },
           { label: 'Configuração NF-e', to: '/configuracoes/faturamento' },
+          { label: 'Configuração NFS-e', to: '/configuracoes/nfse' },
         ],
       },
     ],
@@ -294,6 +295,7 @@ export const HUB_MODULES: Record<string, HubModule> = {
         items: [
           { label: 'Empresas e Filiais', to: '/configuracoes/filiais' },
           { label: 'Faturamento (NF-e)', to: '/configuracoes/faturamento' },
+          { label: 'Faturamento (NFS-e)', to: '/configuracoes/nfse' },
           { label: 'Personalização', to: '/configuracoes/personalizacao' },
         ],
       },

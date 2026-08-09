@@ -47,6 +47,7 @@ export class EmpresaFilialService {
       nomeFantasia: input.nomeFantasia ?? null,
       cnpj: input.cnpj,
       inscricaoEstadual: input.inscricaoEstadual ?? null,
+      inscricaoMunicipal: input.inscricaoMunicipal ?? null,
       email: input.email ?? null,
       telefone: input.telefone ?? null,
       logradouro: input.logradouro ?? null,
@@ -62,6 +63,10 @@ export class EmpresaFilialService {
       nfeSerie: input.nfeSerie ?? '1',
       nfeAmbiente: input.nfeAmbiente ?? 2,
       nfeProximoNumero: input.nfeProximoNumero ?? 1,
+      nfseSerie: input.nfseSerie ?? '1',
+      nfseAmbiente: input.nfseAmbiente ?? 2,
+      nfseProximoNumero: input.nfseProximoNumero ?? 1,
+      nfseCodigoServicoPadrao: input.nfseCodigoServicoPadrao ?? null,
       createdAt: now,
       auditUserId,
     }
@@ -121,6 +126,7 @@ export class EmpresaFilialService {
       cep: input.cep ?? null,
       codigoMunicipio: input.codigoMunicipio ?? null,
       inscricaoEstadual: input.inscricaoEstadual ?? null,
+      inscricaoMunicipal: input.inscricaoMunicipal ?? null,
       ativa: 1,
       createdAt: now,
       auditUserId,
@@ -154,6 +160,7 @@ export class EmpresaFilialService {
       cep: input.cep,
       codigoMunicipio: input.codigoMunicipio,
       inscricaoEstadual: input.inscricaoEstadual,
+      inscricaoMunicipal: input.inscricaoMunicipal,
     }
     if (input.ativa !== undefined) {
       patch.ativa = input.ativa ? 1 : 0
@@ -173,6 +180,7 @@ export type EmpresaCreateInput = {
   nomeFantasia?: string
   cnpj: string
   inscricaoEstadual?: string
+  inscricaoMunicipal?: string
   email?: string
   telefone?: string
   logradouro?: string
@@ -188,6 +196,10 @@ export type EmpresaCreateInput = {
   nfeSerie?: string
   nfeAmbiente?: number
   nfeProximoNumero?: number
+  nfseSerie?: string
+  nfseAmbiente?: number
+  nfseProximoNumero?: number
+  nfseCodigoServicoPadrao?: string
 }
 
 export type FilialCreateInput = {
@@ -202,6 +214,7 @@ export type FilialCreateInput = {
   cep?: string
   codigoMunicipio?: string
   inscricaoEstadual?: string
+  inscricaoMunicipal?: string
 }
 
 export type FilialUpdateInput = FilialUpdateFields & { ativa?: boolean }

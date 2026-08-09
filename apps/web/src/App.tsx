@@ -58,6 +58,7 @@ import ConciliacaoWizard from './pages/financeiro/ConciliacaoWizard';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
 import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
 import { FaturamentoConfigPage } from './pages/configuracoes/FaturamentoConfigPage';
+import { NfseConfigPage } from './pages/configuracoes/NfseConfigPage';
 import { PermissoesPage } from './pages/configuracoes/PermissoesPage';
 import PersonalizacaoPage from './pages/configuracoes/PersonalizacaoPage';
 import ConexoesPage from './pages/configuracoes/ConexoesPage';
@@ -290,6 +291,7 @@ function App() {
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/filiais" element={<ProtectedRoute><Layout><FiliaisPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/faturamento" element={<ProtectedRoute><Layout><FaturamentoConfigPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/nfse" element={<ProtectedRoute><Layout><NfseConfigPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/permissoes" element={<ProtectedRoute><Layout><PermissoesPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/personalizacao" element={<ProtectedRoute><PersonalizacaoPage /></ProtectedRoute>} />
         <Route path="/configuracoes/conexoes" element={<ProtectedRoute><Layout><ConexoesPage /></Layout></ProtectedRoute>} />

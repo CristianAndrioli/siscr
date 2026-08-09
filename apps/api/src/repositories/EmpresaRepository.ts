@@ -19,6 +19,7 @@ export type EmpresaInsertRow = {
   nomeFantasia: string | null
   cnpj: string
   inscricaoEstadual: string | null
+  inscricaoMunicipal: string | null
   email: string | null
   telefone: string | null
   logradouro: string | null
@@ -34,6 +35,10 @@ export type EmpresaInsertRow = {
   nfeSerie: string | null
   nfeAmbiente: number | null
   nfeProximoNumero: number | null
+  nfseSerie: string | null
+  nfseAmbiente: number | null
+  nfseProximoNumero: number | null
+  nfseCodigoServicoPadrao: string | null
   createdAt: string
   /** Usuário autenticado ao criar (created_by / updated_by). */
   auditUserId: string | null
@@ -49,6 +54,7 @@ export type EmpresaUpdateFields = {
   nomeFantasia?: string | null
   cnpj?: string
   inscricaoEstadual?: string | null
+  inscricaoMunicipal?: string | null
   email?: string | null
   telefone?: string | null
   logradouro?: string | null
@@ -64,6 +70,10 @@ export type EmpresaUpdateFields = {
   nfeSerie?: string | null
   nfeAmbiente?: number | null
   nfeProximoNumero?: number | null
+  nfseSerie?: string | null
+  nfseAmbiente?: number | null
+  nfseProximoNumero?: number | null
+  nfseCodigoServicoPadrao?: string | null
 }
 
 const EMPRESA_COLUMN_MAP: Record<keyof EmpresaUpdateFields, string> = {
@@ -71,6 +81,7 @@ const EMPRESA_COLUMN_MAP: Record<keyof EmpresaUpdateFields, string> = {
   nomeFantasia: 'nome_fantasia',
   cnpj: 'cnpj',
   inscricaoEstadual: 'inscricao_estadual',
+  inscricaoMunicipal: 'inscricao_municipal',
   email: 'email',
   telefone: 'telefone',
   logradouro: 'logradouro',
@@ -86,6 +97,10 @@ const EMPRESA_COLUMN_MAP: Record<keyof EmpresaUpdateFields, string> = {
   nfeSerie: 'nfe_serie',
   nfeAmbiente: 'nfe_ambiente',
   nfeProximoNumero: 'nfe_proximo_numero',
+  nfseSerie: 'nfse_serie',
+  nfseAmbiente: 'nfse_ambiente',
+  nfseProximoNumero: 'nfse_proximo_numero',
+  nfseCodigoServicoPadrao: 'nfse_codigo_servico_padrao',
 }
 
 export class EmpresaRepository extends BaseTenantRepository {
@@ -96,9 +111,11 @@ export class EmpresaRepository extends BaseTenantRepository {
   async listWithFilialCount(): Promise<unknown[]> {
     const { results } = await this.prepareTenant(
       `
-      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.inscricao_estadual, e.email, e.telefone,
+      SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.inscricao_estadual, e.inscricao_municipal,
+             e.email, e.telefone,
              e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf, e.cep,
              e.codigo_municipio, e.crt, e.cnae, e.nfe_serie, e.nfe_ambiente, e.nfe_proximo_numero,
+             e.nfse_serie, e.nfse_ambiente, e.nfse_proximo_numero, e.nfse_codigo_servico_padrao,
              e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta,
              (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id AND f.tenant_id = e.tenant_id) as total_filiais
       FROM empresas e
@@ -113,11 +130,12 @@ export class EmpresaRepository extends BaseTenantRepository {
     await this.db
       .prepare(
         `
-      INSERT INTO empresas (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual,
+      INSERT INTO empresas (id, tenant_id, razao_social, nome_fantasia, cnpj, inscricao_estadual, inscricao_municipal,
         email, telefone, logradouro, numero, complemento, bairro, cidade, uf, cep,
         codigo_municipio, crt, cnae, nfe_serie, nfe_ambiente, nfe_proximo_numero,
+        nfse_serie, nfse_ambiente, nfse_proximo_numero, nfse_codigo_servico_padrao,
         created_at, updated_at, created_by, updated_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       )
       .bind(
@@ -127,6 +145,7 @@ export class EmpresaRepository extends BaseTenantRepository {
         row.nomeFantasia,
         row.cnpj,
         row.inscricaoEstadual,
+        row.inscricaoMunicipal,
         row.email,
         row.telefone,
         row.logradouro,
@@ -142,6 +161,10 @@ export class EmpresaRepository extends BaseTenantRepository {
         row.nfeSerie,
         row.nfeAmbiente,
         row.nfeProximoNumero,
+        row.nfseSerie,
+        row.nfseAmbiente,
+        row.nfseProximoNumero,
+        row.nfseCodigoServicoPadrao,
         row.createdAt,
         row.createdAt,
         row.auditUserId,

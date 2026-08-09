@@ -42,16 +42,21 @@ pnpm deploy
 
 ```
 POST /
-Content-Type: application/soap+xml; charset=utf-8
-X-Sefaz-Url: https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx
+Content-Type: application/soap+xml|application/xml|text/xml; charset=utf-8
+X-Sefaz-Url: https://…   (ou X-Target-Url — alias para NFS-e / Sefin Nacional)
 X-Pfx-Base64: <PKCS#12 em base64>
 X-Pfx-Password: <senha do pfx>
+Accept: (opcional)
+SOAPAction: (opcional — Paulistana)
 Authorization: Bearer <BRIDGE_TOKEN>
 ```
 
-Body = envelope SOAP. Resposta = status/corpo da SEFAZ.
+Body = envelope SOAP (SEFAZ / Paulistana) ou XML REST (Sistema Nacional NFS-e).
+Resposta = status/corpo do destino.
 
 `GET /health` → `{ "ok": true }`.
+
+A mesma ponte atende NF-e (SEFAZ) e NFS-e (Paulistana + Sefin Nacional) via mTLS com o A1 do tenant.
 
 ## Cadastrar no SISCR
 

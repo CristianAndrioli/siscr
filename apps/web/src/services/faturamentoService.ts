@@ -355,6 +355,42 @@ export const notasService = {
     const res = await api.post(`${BASE}/notas/${id}/transmitir`, {});
     return res.data;
   },
+  /** Gera DPS/RPS assinado e grava no R2. */
+  prepararNfse: async (
+    id: string,
+    opts?: { force?: boolean },
+  ): Promise<{
+    xmlPath: string
+    signed: boolean
+    adapter: string
+    numero: number
+    serie: string
+    message: string
+  }> => {
+    const res = await api.post(
+      `${BASE}/notas/${id}/preparar-nfse`,
+      {},
+      { params: opts?.force ? { force: '1' } : undefined },
+    );
+    return res.data;
+  },
+  /** Transmite NFS-e à prefeitura / Sefin Nacional. */
+  transmitirNfse: async (
+    id: string,
+  ): Promise<{
+    message: string
+    autorizada: boolean
+    cStat: string
+    xMotivo: string
+    protocolo?: string | null
+    chaveAcesso?: string | null
+    dataAutorizacao?: string | null
+    status?: string
+    adapter?: string
+  }> => {
+    const res = await api.post(`${BASE}/notas/${id}/transmitir-nfse`, {});
+    return res.data;
+  },
 };
 
 export type NcmSyncRunRow = {
