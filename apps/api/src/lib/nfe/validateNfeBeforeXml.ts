@@ -54,13 +54,16 @@ export function validateNfeBeforeXml(input: {
     const puf = str(p.uf).trim().toUpperCase()
     const pcep = onlyDigits(str(p.cep), 8)
     const pcod = onlyDigits(str(p.codigo_municipio), 7)
+    const pais = onlyDigits(str(p.codigo_pais) || '1058', 4) || '1058'
     if (!plogr.trim()) errors.push('Logradouro do destinatário é obrigatório (cadastro da pessoa).')
     if (!pnum.trim()) errors.push('Número do endereço do destinatário é obrigatório.')
     if (!pbairro.trim()) errors.push('Bairro do destinatário é obrigatório.')
     if (!pcid.trim()) errors.push('Cidade do destinatário é obrigatória.')
-    if (!/^[A-Z]{2}$/.test(puf)) errors.push('UF do destinatário deve ter 2 letras.')
+    if (pais === '1058' && puf !== 'EX' && !/^[A-Z]{2}$/.test(puf)) {
+      errors.push('UF do destinatário deve ter 2 letras.')
+    }
     if (pcep.length !== 8) errors.push('CEP do destinatário deve ter 8 dígitos.')
-    if (pcod.length !== 7) {
+    if (pais === '1058' && puf !== 'EX' && pcod.length !== 7) {
       errors.push('Código IBGE do município do destinatário deve ter 7 dígitos (cadastro da pessoa).')
     }
   }

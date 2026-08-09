@@ -11,6 +11,12 @@ import {
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import {
+  ajustarCfopSaida,
+  cfopPadraoSaida,
+  resolveIdDest,
+  rotuloIdDest,
+} from '../../lib/nfeOperacaoDestino';
 
 /** Passos alinhados ao fluxo comum em ERPs brasileiros (emitente → destinatário → itens → condições → conferência). */
 const STEPS = [
@@ -40,6 +46,7 @@ interface EmpresaRow {
   id: string;
   razao_social: string;
   cnpj?: string;
+  uf?: string | null;
   codigo_municipio?: string | null;
   crt?: string | null;
   a1_cert_uploaded_at?: string | null;
@@ -51,6 +58,7 @@ interface FilialRow {
   id: string;
   nome: string;
   empresa_id: string;
+  uf?: string | null;
   codigo_municipio?: string | null;
 }
 
@@ -68,13 +76,13 @@ interface Produto {
   cofins_cst?: string | null;
 }
 
-const emptyItem = (): NFItem => ({
+const emptyItem = (idDest: '1' | '2' | '3' = '1'): NFItem => ({
   descricao: '',
   quantidade: 1,
   valorUnitario: 0,
   desconto: 0,
   unidade: 'UN',
-  cfop: '5102',
+  cfop: cfopPadraoSaida(idDest),
   ncm: '',
 });
 
@@ -118,6 +126,8 @@ export function NfeNovaWizardPage() {
   const [pessoaIe, setPessoaIe] = useState('');
   const [pessoaIndIe, setPessoaIndIe] = useState('9');
   const [pessoaCodMun, setPessoaCodMun] = useState('');
+  const [pessoaUf, setPessoaUf] = useState('');
+  const [pessoaPais, setPessoaPais] = useState('1058');
 
   const [form, setForm] = useState({
     naturezaOperacao: 'Venda de mercadorias',
@@ -304,6 +314,8 @@ export function NfeNovaWizardPage() {
       setPessoaIe('');
       setPessoaCodMun('');
       setPessoaIndIe('9');
+      setPessoaUf('');
+      setPessoaPais('1058');
       return;
     }
     api
@@ -313,12 +325,40 @@ export function NfeNovaWizardPage() {
         setPessoaIe(String(p.inscricao_estadual ?? ''));
         setPessoaCodMun(String(p.codigo_municipio ?? ''));
         setPessoaIndIe(String(p.ind_ie_dest ?? '9'));
+        setPessoaUf(String(p.uf ?? ''));
+        setPessoaPais(String(p.codigo_pais ?? '1058'));
       })
       .catch(() => {});
   }, [destinatarioId]);
 
   const empresaSel = useMemo(() => empresas.find((e) => e.id === empresaId), [empresas, empresaId]);
   const filiaisDaEmpresa = useMemo(() => filiais.filter((f) => f.empresa_id === empresaId), [filiais, empresaId]);
+  const filialSel = useMemo(() => filiaisDaEmpresa.find((f) => f.id === filialId), [filiaisDaEmpresa, filialId]);
+  const ufEmitente = filialSel?.uf || empresaSel?.uf || '';
+
+  const idDestOperacao = useMemo(
+    () =>
+      resolveIdDest({
+        ufEmitente,
+        ufDestinatario: pessoaUf,
+        codigoPaisDestinatario: pessoaPais,
+      }),
+    [ufEmitente, pessoaUf, pessoaPais],
+  );
+
+  // Ajusta CFOP dos itens quando muda o destino (UF emitente × destinatário) — padrão ERP
+  useEffect(() => {
+    if (!ufEmitente || !pessoaUf) return;
+    setForm((f) => {
+      let changed = false;
+      const itens = f.itens.map((it) => {
+        const next = ajustarCfopSaida(it.cfop || cfopPadraoSaida(idDestOperacao), idDestOperacao);
+        if (next !== (it.cfop ?? '')) changed = true;
+        return next === it.cfop ? it : { ...it, cfop: next };
+      });
+      return changed ? { ...f, itens } : f;
+    });
+  }, [idDestOperacao, ufEmitente, pessoaUf]);
 
   const warningsEmitente = useMemo(() => {
     const w: string[] = [];
@@ -682,7 +722,14 @@ export function NfeNovaWizardPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-500">CFOP</label>
+                      <label className="text-[10px] text-slate-500">
+                        CFOP
+                        {pessoaUf && ufEmitente ? (
+                          <span className="ml-1 text-slate-400 font-normal">
+                            · {rotuloIdDest(idDestOperacao)}
+                          </span>
+                        ) : null}
+                      </label>
                       <input
                         value={item.cfop ?? ''}
                         onChange={(e) => setItem(idx, 'cfop', e.target.value)}
@@ -712,7 +759,7 @@ export function NfeNovaWizardPage() {
               ))}
               <button
                 type="button"
-                onClick={() => setForm((f) => ({ ...f, itens: [...f.itens, emptyItem()] }))}
+                onClick={() => setForm((f) => ({ ...f, itens: [...f.itens, emptyItem(idDestOperacao)] }))}
                 className="text-sm text-brand-600 dark:text-brand-400 font-medium hover:underline"
               >
                 + Adicionar linha

@@ -14,6 +14,13 @@ import { onlyDigits } from './xmlEscape'
 import { decryptA1Bundle } from '../certBlob'
 import { signNfeXmlWithA1 } from './signNfeXml'
 import { validateNfeBeforeXml } from './validateNfeBeforeXml'
+import {
+  ajustarCfopSaida,
+  naturezaOperacaoParaDestino,
+  resolveIdDest,
+  rotuloIdDest,
+  type IdDest,
+} from './operacaoDestino'
 
 export type PrepareNfeResult = {
   chaveAcesso: string
@@ -194,6 +201,16 @@ export async function prepareNfeEnvio(
     cep: str(filial?.cep) || str(empresa.cep),
   }
 
+  const ufEmitente = str(filial?.uf) || str(empresa.uf)
+  const ufDestinatario = pessoa ? str(pessoa.uf) : ''
+  const codigoPaisDest = pessoa ? str(pessoa.codigo_pais) || '1058' : '1058'
+  const idDest: IdDest = resolveIdDest({
+    ufEmitente,
+    ufDestinatario,
+    codigoPaisDestinatario: codigoPaisDest,
+  })
+  const natOp = naturezaOperacaoParaDestino(idDest, str(nota.natureza_operacao) || 'Venda')
+
   let dest: DestinatarioXml | null = null
   if (pessoa) {
     const tipo = str(pessoa.tipo) === 'PF' ? 'PF' : 'PJ'
@@ -210,22 +227,33 @@ export async function prepareNfeEnvio(
       bairro: str(pessoa.bairro),
       codigoMunicipio: str(pessoa.codigo_municipio),
       cidade: str(pessoa.cidade),
-      uf: str(pessoa.uf),
+      uf: idDest === '3' ? 'EX' : str(pessoa.uf),
       cep: str(pessoa.cep),
+      codigoPais: codigoPaisDest,
     }
   }
 
-  const itens: ItemXml[] = itensList.map((ni, i) => {
+  const itens: ItemXml[] = []
+  const cfopUpdates: { itemId: string; cfop: string }[] = []
+
+  for (let i = 0; i < itensList.length; i++) {
+    const ni = itensList[i]!
     const q = num(ni.quantidade, 1)
     const vu = num(ni.valor_unitario, 0)
     const desc = num(ni.desconto, 0)
     const vt = num(ni.valor_total, q * vu - desc)
-    return {
+    const cfopInformado = str(ni.cfop)
+    const cfop = ajustarCfopSaida(cfopInformado || null, idDest)
+    const itemId = str(ni.id)
+    if (itemId && cfop !== onlyDigits(cfopInformado, 4)) {
+      cfopUpdates.push({ itemId, cfop })
+    }
+    itens.push({
       nItem: i + 1,
       cProd: str(ni.produto_codigo) || `ITEM${i + 1}`,
       descricao: str(ni.descricao) || 'Produto',
       ncm: str(ni.ncm) || '99999999',
-      cfop: str(ni.cfop) || '5102',
+      cfop,
       unidade: str(ni.unidade) || 'UN',
       quantidade: q,
       valorUnitario: vu,
@@ -235,8 +263,22 @@ export async function prepareNfeEnvio(
       icmsCsosn: str(ni.icms_csosn) || null,
       pisCst: str(ni.pis_cst) || null,
       cofinsCst: str(ni.cofins_cst) || null,
-    }
-  })
+    })
+  }
+
+  // Persiste CFOP corrigido (e natureza) como ERPs fazem na emissão
+  for (const u of cfopUpdates) {
+    await db
+      .prepare(`UPDATE nota_fiscal_itens SET cfop = ? WHERE id = ? AND nota_fiscal_id = ?`)
+      .bind(u.cfop, u.itemId, notaId)
+      .run()
+  }
+  if (natOp !== str(nota.natureza_operacao)) {
+    await db
+      .prepare(`UPDATE notas_fiscais SET natureza_operacao = ? WHERE id = ? AND tenant_id = ?`)
+      .bind(natOp, notaId, tenantId)
+      .run()
+  }
 
   const valorTotalNota = num(nota.valor_total, itens.reduce((s, x) => s + x.valorTotal, 0))
   const vDescGlobal = num(nota.valor_desconto, 0)
@@ -244,13 +286,13 @@ export async function prepareNfeEnvio(
   const ide: IdeXml = {
     cUF,
     cNF: cNF8,
-    natOp: str(nota.natureza_operacao) || 'Venda',
+    natOp,
     mod: String(num(nota.modelo, 55)),
     serie: onlyDigits(serie, 3).padStart(3, '0').slice(-3),
     nNF,
     dhEmi: dh,
     tpNF: '1',
-    idDest: '1',
+    idDest,
     cMunFG,
     tpImp: '1',
     tpEmis,
@@ -339,6 +381,11 @@ export async function prepareNfeEnvio(
     .bind(chave44, xmlPath, now, tent, now, notaId, tenantId)
     .run()
 
+  const ajusteDestino =
+    cfopUpdates.length > 0
+      ? ` Operação ${rotuloIdDest(idDest)} (idDest=${idDest}): CFOP ajustado automaticamente.`
+      : ` Operação ${rotuloIdDest(idDest)} (idDest=${idDest}).`
+
   return {
     chaveAcesso: chave44,
     xmlPath,
@@ -347,8 +394,8 @@ export async function prepareNfeEnvio(
     signed,
     message: signed
       ? options.devMode
-        ? 'XML assinado e salvo. Modo desenvolvimento — envio SOAP à SEFAZ ainda não implementado.'
-        : 'XML assinado e salvo. Próximo passo: envio SOAP (nfeAutorizacao) e tratamento do retorno.'
-      : 'XML gerado e salvo sem assinatura (sem A1). Modo desenvolvimento — sem envio à SEFAZ.',
+        ? `XML assinado e salvo. Modo desenvolvimento — envio SOAP à SEFAZ ainda não implementado.${ajusteDestino}`
+        : `XML assinado e salvo. Próximo passo: envio SOAP (nfeAutorizacao) e tratamento do retorno.${ajusteDestino}`
+      : `XML gerado e salvo sem assinatura (sem A1). Modo desenvolvimento — sem envio à SEFAZ.${ajusteDestino}`,
   }
 }

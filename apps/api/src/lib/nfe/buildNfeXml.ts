@@ -32,6 +32,8 @@ export type DestinatarioXml = {
   cidade?: string | null
   uf?: string | null
   cep?: string | null
+  /** Código Bacen do país (1058 = Brasil). */
+  codigoPais?: string | null
 }
 
 export type ItemXml = {
@@ -87,7 +89,9 @@ function emitBlock(e: EmitenteXml): string {
 function enderDest(d: DestinatarioXml): string {
   const cmun = onlyDigits(d.codigoMunicipio ?? '', 7) || '3550308'
   const cep = onlyDigits(d.cep ?? '', 8).padStart(8, '0')
-  return `<enderDest><xLgr>${xmlEscape(d.logradouro || 'NAO INFORMADO')}</xLgr><nro>${xmlEscape(d.numero || 'S/N')}</nro>${d.complemento ? `<xCpl>${xmlEscape(d.complemento)}</xCpl>` : ''}<xBairro>${xmlEscape(d.bairro || 'CENTRO')}</xBairro><cMun>${cmun}</cMun><xMun>${xmlEscape(d.cidade || 'NAO INFORMADO')}</xMun><UF>${xmlEscape((d.uf || 'SP').toUpperCase())}</UF><CEP>${cep}</CEP><cPais>1058</cPais><xPais>Brasil</xPais></enderDest>`
+  const cPais = onlyDigits(d.codigoPais ?? '1058', 4) || '1058'
+  const xPais = cPais === '1058' ? 'Brasil' : 'Exterior'
+  return `<enderDest><xLgr>${xmlEscape(d.logradouro || 'NAO INFORMADO')}</xLgr><nro>${xmlEscape(d.numero || 'S/N')}</nro>${d.complemento ? `<xCpl>${xmlEscape(d.complemento)}</xCpl>` : ''}<xBairro>${xmlEscape(d.bairro || 'CENTRO')}</xBairro><cMun>${cmun}</cMun><xMun>${xmlEscape(d.cidade || 'NAO INFORMADO')}</xMun><UF>${xmlEscape((d.uf || 'SP').toUpperCase())}</UF><CEP>${cep}</CEP><cPais>${cPais}</cPais><xPais>${xPais}</xPais></enderDest>`
 }
 
 function destBlock(d: DestinatarioXml): string {
