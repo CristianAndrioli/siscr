@@ -2,10 +2,17 @@ import { xmlEscape, onlyDigits } from './xmlEscape'
 
 const NS = 'http://www.portalfiscal.inf.br/nfe'
 
-/** Limita string ao tamanho máximo do leiaute NF-e (evita rejeição 225). */
+/**
+ * Limita string ao tamanho máximo do leiaute NF-e (TString / rejeição 225).
+ * XSD TString: não pode começar/terminar com espaço — após truncar, trimEnd.
+ */
 function lim(s: string, max: number): string {
-  const t = (s || '').trim()
-  return t.length <= max ? t : t.slice(0, max)
+  let t = (s || '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+    .replace(/[ \t\r\n]+/g, ' ')
+    .trim()
+  if (t.length > max) t = t.slice(0, max).trimEnd()
+  return t
 }
 
 export type EmitenteXml = {
@@ -167,7 +174,9 @@ function detItemFixed(it: ItemXml, crt: string): string {
   const isSimples = crt === '1' || crt === '2'
   const icmsTag = isSimples ? `ICMSSN${csosn}` : `ICMS00`
 
-  return `<det nItem="${it.nItem}"><prod><cProd>${xmlEscape(lim(it.cProd, 60))}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xmlEscape(lim(it.descricao, 120))}</xProd><NCM>${ncm}</NCM><CFOP>${cfop}</CFOP><uCom>${xmlEscape(lim(it.unidade || 'UN', 6))}</uCom><qCom>${q}</qCom><vUnCom>${vu}</vUnCom><vProd>${vp}</vProd>${parseFloat(vd) > 0 ? `<vDesc>${vd}</vDesc>` : ''}<cEANTrib>SEM GTIN</cEANTrib><uTrib>${xmlEscape(lim(it.unidade || 'UN', 6))}</uTrib><qTrib>${q}</qTrib><vUnTrib>${vu}</vUnTrib><indTot>1</indTot></prod><imposto><ICMS><${icmsTag}><orig>${orig}</orig>${isSimples ? `<CSOSN>${csosn}</CSOSN>` : `<CST>00</CST><modBC>3</modBC><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS>`}</${icmsTag}></ICMS><PIS><PISNT><CST>${pisCst}</CST></PISNT></PIS><COFINS><COFINSNT><CST>${cofCst}</CST></COFINSNT></COFINS></imposto></det>`
+  // Ordem prod (leiaute 4.00): … vProd → cEANTrib → uTrib → qTrib → vUnTrib → vDesc? → indTot
+  const vDescXml = parseFloat(vd) > 0 ? `<vDesc>${vd}</vDesc>` : ''
+  return `<det nItem="${it.nItem}"><prod><cProd>${xmlEscape(lim(it.cProd, 60))}</cProd><cEAN>SEM GTIN</cEAN><xProd>${xmlEscape(lim(it.descricao, 120))}</xProd><NCM>${ncm}</NCM><CFOP>${cfop}</CFOP><uCom>${xmlEscape(lim(it.unidade || 'UN', 6))}</uCom><qCom>${q}</qCom><vUnCom>${vu}</vUnCom><vProd>${vp}</vProd><cEANTrib>SEM GTIN</cEANTrib><uTrib>${xmlEscape(lim(it.unidade || 'UN', 6))}</uTrib><qTrib>${q}</qTrib><vUnTrib>${vu}</vUnTrib>${vDescXml}<indTot>1</indTot></prod><imposto><ICMS><${icmsTag}><orig>${orig}</orig>${isSimples ? `<CSOSN>${csosn}</CSOSN>` : `<CST>00</CST><modBC>3</modBC><vBC>0.00</vBC><pICMS>0.00</pICMS><vICMS>0.00</vICMS>`}</${icmsTag}></ICMS><PIS><PISNT><CST>${pisCst}</CST></PISNT></PIS><COFINS><COFINSNT><CST>${cofCst}</CST></COFINSNT></COFINS></imposto></det>`
 }
 
 function ideBlock(i: IdeXml): string {
@@ -207,7 +216,9 @@ function transpBlock(modFrete: number): string {
 
 function pagBlock(tPag: string, vPag: string): string {
   const tp = onlyDigits(tPag, 2).padStart(2, '0')
-  return `<pag><detPag><tPag>${tp}</tPag><vPag>${vPag}</vPag></detPag></pag>`
+  // tPag=99 exige xPag (regra 441); ordem XSD: tPag → xPag? → vPag
+  const xPag = tp === '99' ? `<xPag>${xmlEscape(lim('Outros', 60))}</xPag>` : ''
+  return `<pag><detPag><tPag>${tp}</tPag>${xPag}<vPag>${vPag}</vPag></detPag></pag>`
 }
 
 export type BuildNfeXmlInput = {

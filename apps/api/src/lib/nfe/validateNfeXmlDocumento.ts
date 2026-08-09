@@ -62,6 +62,21 @@ function maxLen(errors: NfeXmlValidationError[], path: string, value: string, ma
   }
 }
 
+/** Padrão XSD TString: não pode começar/terminar com espaço (rejeição 225). */
+const TSTRING_RE = /^[!-ÿ](?:[ -ÿ]*[!-ÿ])?$/
+
+function checkTString(errors: NfeXmlValidationError[], path: string, value: string, max: number) {
+  if (!value) return
+  maxLen(errors, path, value, max)
+  if (!TSTRING_RE.test(value)) {
+    push(
+      errors,
+      path,
+      'Texto inválido no leiaute (TString): não pode começar/terminar com espaço nem conter caracteres de controle.',
+    )
+  }
+}
+
 /**
  * Valida o documento NFe (assinado ou não) contra regras do leiaute 4.00.
  * Acumula todos os erros — não para no primeiro.
@@ -152,8 +167,8 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
     if (tpAmb !== '1' && tpAmb !== '2') {
       push(errors, '/NFe/infNFe/ide/tpAmb', 'tpAmb deve ser 1 (produção) ou 2 (homologação).')
     }
-    maxLen(errors, '/NFe/infNFe/ide/natOp', textContent(firstChild(ide, 'natOp')), 60)
-    maxLen(errors, '/NFe/infNFe/ide/verProc', textContent(firstChild(ide, 'verProc')), 20)
+    checkTString(errors, '/NFe/infNFe/ide/natOp', textContent(firstChild(ide, 'natOp')), 60)
+    checkTString(errors, '/NFe/infNFe/ide/verProc', textContent(firstChild(ide, 'verProc')), 20)
   }
 
   const emit = firstChild(infNFe, 'emit')
@@ -165,9 +180,9 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
     if (!/^\d{14}$/.test(cnpj)) {
       push(errors, '/NFe/infNFe/emit/CNPJ', 'CNPJ do emitente deve ter 14 dígitos.')
     }
-    maxLen(errors, '/NFe/infNFe/emit/xNome', textContent(firstChild(emit, 'xNome')), 60)
+    checkTString(errors, '/NFe/infNFe/emit/xNome', textContent(firstChild(emit, 'xNome')), 60)
     const xFant = firstChild(emit, 'xFant')
-    if (xFant) maxLen(errors, '/NFe/infNFe/emit/xFant', textContent(xFant), 60)
+    if (xFant) checkTString(errors, '/NFe/infNFe/emit/xFant', textContent(xFant), 60)
     crt = textContent(firstChild(emit, 'CRT')) || '1'
     if (!/^[123]$/.test(crt)) {
       push(errors, '/NFe/infNFe/emit/CRT', 'CRT deve ser 1, 2 ou 3.')
@@ -176,12 +191,12 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
     if (!ender) {
       push(errors, '/NFe/infNFe/emit', 'enderEmit ausente.')
     } else {
-      maxLen(errors, '/NFe/infNFe/emit/enderEmit/xLgr', textContent(firstChild(ender, 'xLgr')), 60)
-      maxLen(errors, '/NFe/infNFe/emit/enderEmit/nro', textContent(firstChild(ender, 'nro')), 60)
+      checkTString(errors, '/NFe/infNFe/emit/enderEmit/xLgr', textContent(firstChild(ender, 'xLgr')), 60)
+      checkTString(errors, '/NFe/infNFe/emit/enderEmit/nro', textContent(firstChild(ender, 'nro')), 60)
       const xCpl = firstChild(ender, 'xCpl')
-      if (xCpl) maxLen(errors, '/NFe/infNFe/emit/enderEmit/xCpl', textContent(xCpl), 60)
-      maxLen(errors, '/NFe/infNFe/emit/enderEmit/xBairro', textContent(firstChild(ender, 'xBairro')), 60)
-      maxLen(errors, '/NFe/infNFe/emit/enderEmit/xMun', textContent(firstChild(ender, 'xMun')), 60)
+      if (xCpl) checkTString(errors, '/NFe/infNFe/emit/enderEmit/xCpl', textContent(xCpl), 60)
+      checkTString(errors, '/NFe/infNFe/emit/enderEmit/xBairro', textContent(firstChild(ender, 'xBairro')), 60)
+      checkTString(errors, '/NFe/infNFe/emit/enderEmit/xMun', textContent(firstChild(ender, 'xMun')), 60)
       const cMun = textContent(firstChild(ender, 'cMun'))
       if (!/^\d{7}$/.test(cMun)) {
         push(errors, '/NFe/infNFe/emit/enderEmit/cMun', 'cMun (IBGE) deve ter 7 dígitos.')
@@ -195,15 +210,15 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
 
   const dest = firstChild(infNFe, 'dest')
   if (dest) {
-    maxLen(errors, '/NFe/infNFe/dest/xNome', textContent(firstChild(dest, 'xNome')), 60)
+    checkTString(errors, '/NFe/infNFe/dest/xNome', textContent(firstChild(dest, 'xNome')), 60)
     const ender = firstChild(dest, 'enderDest')
     if (ender) {
-      maxLen(errors, '/NFe/infNFe/dest/enderDest/xLgr', textContent(firstChild(ender, 'xLgr')), 60)
-      maxLen(errors, '/NFe/infNFe/dest/enderDest/nro', textContent(firstChild(ender, 'nro')), 60)
+      checkTString(errors, '/NFe/infNFe/dest/enderDest/xLgr', textContent(firstChild(ender, 'xLgr')), 60)
+      checkTString(errors, '/NFe/infNFe/dest/enderDest/nro', textContent(firstChild(ender, 'nro')), 60)
       const xCpl = firstChild(ender, 'xCpl')
-      if (xCpl) maxLen(errors, '/NFe/infNFe/dest/enderDest/xCpl', textContent(xCpl), 60)
-      maxLen(errors, '/NFe/infNFe/dest/enderDest/xBairro', textContent(firstChild(ender, 'xBairro')), 60)
-      maxLen(errors, '/NFe/infNFe/dest/enderDest/xMun', textContent(firstChild(ender, 'xMun')), 60)
+      if (xCpl) checkTString(errors, '/NFe/infNFe/dest/enderDest/xCpl', textContent(xCpl), 60)
+      checkTString(errors, '/NFe/infNFe/dest/enderDest/xBairro', textContent(firstChild(ender, 'xBairro')), 60)
+      checkTString(errors, '/NFe/infNFe/dest/enderDest/xMun', textContent(firstChild(ender, 'xMun')), 60)
       const cMun = textContent(firstChild(ender, 'cMun'))
       if (cMun && !/^\d{7}$/.test(cMun)) {
         push(errors, '/NFe/infNFe/dest/enderDest/cMun', 'cMun (IBGE) deve ter 7 dígitos.')
@@ -224,8 +239,8 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
       push(errors, base, 'prod ausente.')
       return
     }
-    maxLen(errors, `${base}/prod/cProd`, textContent(firstChild(prod, 'cProd')), 60)
-    maxLen(errors, `${base}/prod/xProd`, textContent(firstChild(prod, 'xProd')), 120)
+    checkTString(errors, `${base}/prod/cProd`, textContent(firstChild(prod, 'cProd')), 60)
+    checkTString(errors, `${base}/prod/xProd`, textContent(firstChild(prod, 'xProd')), 120)
     const ncm = textContent(firstChild(prod, 'NCM'))
     if (!/^\d{8}$/.test(ncm)) {
       push(errors, `${base}/prod/NCM`, 'NCM deve ter 8 dígitos.')
@@ -273,6 +288,24 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
     }
   })
 
+  const pag = firstChild(infNFe, 'pag')
+  if (pag) {
+    for (const detPag of childrenByLocal(pag, 'detPag')) {
+      const tPag = textContent(firstChild(detPag, 'tPag'))
+      const xPag = firstChild(detPag, 'xPag')
+      if (tPag === '99') {
+        const desc = textContent(xPag)
+        if (!desc) {
+          push(errors, '/NFe/infNFe/pag/detPag/xPag', 'tPag=99 (Outros) exige xPag com a descrição do pagamento.')
+        } else {
+          checkTString(errors, '/NFe/infNFe/pag/detPag/xPag', desc, 60)
+        }
+      } else if (xPag && textContent(xPag)) {
+        push(errors, '/NFe/infNFe/pag/detPag/xPag', 'xPag só é permitido quando tPag=99.')
+      }
+    }
+  }
+
   const resp = firstChild(infNFe, 'infRespTec')
   if (!resp) {
     push(errors, '/NFe/infNFe/infRespTec', 'infRespTec é obrigatório (NT 2018.005).')
@@ -281,9 +314,7 @@ export function validateNfeXmlDocumento(xml: string): NfeXmlValidationResult {
     if (!/^\d{14}$/.test(cnpj)) {
       push(errors, '/NFe/infNFe/infRespTec/CNPJ', 'CNPJ do responsável técnico deve ter 14 dígitos.')
     }
-    if (!textContent(firstChild(resp, 'xContato'))) {
-      push(errors, '/NFe/infNFe/infRespTec/xContato', 'xContato obrigatório.')
-    }
+    checkTString(errors, '/NFe/infNFe/infRespTec/xContato', textContent(firstChild(resp, 'xContato')), 60)
     const email = textContent(firstChild(resp, 'email'))
     if (!email || !email.includes('@')) {
       push(errors, '/NFe/infNFe/infRespTec/email', 'email do responsável técnico inválido.')
