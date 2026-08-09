@@ -201,7 +201,7 @@ export async function prepareNfeEnvio(
     cnpj: cnpjEmit,
     razaoSocial: str(empresa.razao_social) || 'Emitente',
     nomeFantasia: str(empresa.nome_fantasia) || null,
-    ie: str(empresa.inscricao_estadual) || null,
+    ie: str(filial?.inscricao_estadual) || str(empresa.inscricao_estadual) || null,
     crt: str(empresa.crt) || '1',
     logradouro: str(filial?.logradouro) || str(empresa.logradouro),
     numero: str(filial?.numero) || str(empresa.numero),

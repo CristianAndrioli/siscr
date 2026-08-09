@@ -29,6 +29,16 @@ export function validateNfeBeforeXml(input: {
   if (onlyDigits(str(emp.cnpj)).length !== 14) {
     errors.push('CNPJ da empresa deve ter 14 dígitos.')
   }
+
+  // IE do emitente: SEFAZ rejeita 209 se vier vazia/ISENTO indevido.
+  // Preferir IE da filial quando a nota for emitida por filial.
+  const ieEmit =
+    onlyDigits(str(fil?.inscricao_estadual), 14) || onlyDigits(str(emp.inscricao_estadual), 14)
+  if (!ieEmit) {
+    errors.push(
+      'Inscrição Estadual do emitente é obrigatória (cadastro da empresa ou filial). Sem IE válida a SEFAZ rejeita com cStat 209.',
+    )
+  }
   if (!logr.trim()) errors.push('Logradouro do emitente é obrigatório (empresa ou filial).')
   if (!num.trim()) errors.push('Número do endereço do emitente é obrigatório.')
   if (!bairro.trim()) errors.push('Bairro do emitente é obrigatório.')
