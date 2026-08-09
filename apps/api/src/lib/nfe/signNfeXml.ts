@@ -1,6 +1,13 @@
 import * as forge from 'node-forge'
-import { Parse, SignedXml } from 'xmldsigjs'
+import { Parse, XmlDsigC14NTransform } from 'xmldsigjs'
 import { ensureXmlCoreNodeDependencies } from './xmlCoreWorkerDeps'
+
+const DS_NS = 'http://www.w3.org/2000/09/xmldsig#'
+const NFE_NS = 'http://www.portalfiscal.inf.br/nfe'
+const C14N_ALG = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+const ENV_ALG = 'http://www.w3.org/2000/09/xmldsig#enveloped-signature'
+const RSA_SHA1 = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1'
+const SHA1 = 'http://www.w3.org/2000/09/xmldsig#sha1'
 
 function isCaCert(cert: forge.pki.Certificate): boolean {
   const ext = cert.getExtension('basicConstraints') as { cA?: boolean } | undefined
@@ -22,6 +29,48 @@ function derStringToUint8(der: string): Uint8Array {
 function certToBase64Der(cert: forge.pki.Certificate): string {
   const der = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes()
   return btoa(der)
+}
+
+function bytesToBase64(buf: ArrayBuffer): string {
+  const u8 = new Uint8Array(buf)
+  let s = ''
+  for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]!)
+  return btoa(s)
+}
+
+function stripXmlDecl(xml: string): string {
+  return xml.replace(/^\uFEFF?<\?xml[^?]*\?>\s*/i, '').trim()
+}
+
+function c14nElement(el: Element): string {
+  const t = new XmlDsigC14NTransform()
+  t.LoadInnerXml(el)
+  const out = t.GetOutput()
+  if (typeof out !== 'string') {
+    throw new Error('Falha na canonicalização C14N do XML.')
+  }
+  return out
+}
+
+function findInfNFe(nfe: Element, idAttr: string): Element {
+  for (let i = 0; i < nfe.childNodes.length; i++) {
+    const n = nfe.childNodes[i]
+    if (n.nodeType === 1 && (n as Element).localName === 'infNFe') {
+      const el = n as Element
+      if ((el.getAttribute('Id') || '') === idAttr) return el
+    }
+  }
+  throw new Error(`infNFe com Id="${idAttr}" não encontrado no XML.`)
+}
+
+/** Clone de infNFe com xmlns do NFe (C14N inclusivo precisa do namespace no escopo). */
+function prepareInfNFeForDigest(infNFe: Element, nfe: Element): Element {
+  const clone = infNFe.cloneNode(true) as Element
+  const xmlns = nfe.getAttribute('xmlns') || NFE_NS
+  if (!clone.getAttribute('xmlns')) {
+    clone.setAttribute('xmlns', xmlns)
+  }
+  return clone
 }
 
 /**
@@ -97,46 +146,9 @@ export async function pfxToWebCryptoRsaSha1(
   return { privateKey: privateKeyCrypto, x509Base64 }
 }
 
-type XmlPrefixed = {
-  Prefix: string | null
-  element?: Element | null
-  GetIterator?: () => Iterable<unknown>
-}
-
 /**
- * SEFAZ/XSD exigem Signature sem prefixo `ds:`.
- * xmldsigjs assina com `ds:` — se só removermos o prefixo depois, o SignatureValue
- * (calculado sobre o SignedInfo com ds:) deixa de bater → rejeição 297.
- * Aqui zeramos o prefixo na árvore e forçamos rebuild do XML em cache.
- */
-function useDefaultXmlDsigNamespace(root: XmlPrefixed): void {
-  const seen = new Set<object>()
-  const visit = (node: unknown) => {
-    if (!node || typeof node !== 'object') return
-    if (seen.has(node)) return
-    seen.add(node)
-
-    const o = node as XmlPrefixed & Record<string, unknown>
-    if ('Prefix' in o) {
-      o.Prefix = null
-      if ('element' in o) o.element = null
-    }
-    if (typeof o.GetIterator === 'function') {
-      for (const item of o.GetIterator()) visit(item)
-    }
-    for (const [k, v] of Object.entries(o)) {
-      if (k === 'Parent' || k === 'element' || k === 'document') continue
-      if (v && typeof v === 'object' && ('Prefix' in (v as object) || typeof (v as XmlPrefixed).GetIterator === 'function')) {
-        visit(v)
-      }
-    }
-  }
-  visit(root)
-}
-
-/**
- * Assina NF-e 4.00 (XML-DSig, RSA-SHA1, enveloped + C14N 1.0), referência ao `infNFe` (`#NFe{chave44}`).
- * Emite Signature com xmlns padrão (sem `ds:`), alinhado ao XSD e à verificação da SEFAZ.
+ * Assina NF-e 4.00 (XML-DSig enveloped + C14N 1.0 + RSA-SHA1).
+ * Monta Signature com xmlns padrão (sem prefixo `ds:`), exigido pelo XSD e pela SEFAZ.
  */
 export async function signNfeXmlWithA1(
   unsignedXml: string,
@@ -146,53 +158,73 @@ export async function signNfeXmlWithA1(
 ): Promise<string> {
   ensureXmlCoreNodeDependencies()
   const { privateKey, x509Base64 } = await pfxToWebCryptoRsaSha1(pfxBytes, password)
+  const leafCert = x509Base64[0]
+  if (!leafCert) {
+    throw new Error('Certificado A1 sem X509Certificate para KeyInfo.')
+  }
 
   const doc = Parse(unsignedXml)
-  const root = doc.documentElement
-  if (!root || root.localName !== 'NFe') {
+  const nfe = doc.documentElement
+  if (!nfe || nfe.localName !== 'NFe') {
     throw new Error('XML NF-e inválido: elemento raiz NFe esperado.')
   }
 
-  const signedXml = new SignedXml()
-  await signedXml.Sign(
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
-    privateKey,
-    doc,
-    {
-      references: [
-        {
-          uri: `#NFe${chave44}`,
-          hash: 'SHA-1',
-          transforms: ['enveloped', 'c14n'],
-        },
-      ],
-      // Apenas o certificado folha no KeyInfo (cadeia completa costuma quebrar o XSD da NF-e)
-      x509: x509Base64.slice(0, 1),
-    },
-  )
+  const idAttr = `NFe${chave44}`
+  const infNFe = findInfNFe(nfe, idAttr)
+  const digestCanon = c14nElement(prepareInfNFeForDigest(infNFe, nfe))
+  const digestValue = bytesToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(digestCanon)))
 
-  // Recalcula SignatureValue no leiaute sem prefixo ds: (exigido pela SEFAZ / XSD NF-e).
-  useDefaultXmlDsigNamespace(signedXml.XmlSignature as unknown as XmlPrefixed)
-  const dataEl = signedXml['document']?.documentElement ?? root
-  const signedInfoCanon = (
-    signedXml as unknown as { TransformSignedInfo: (data: Element) => string }
-  ).TransformSignedInfo(dataEl)
+  // SignedInfo com xmlns próprio — C14N inclusivo fica equivalente ao SignedInfo
+  // embutido em <Signature xmlns="..."> (namespace herdado).
+  const signedInfoForSign =
+    `<SignedInfo xmlns="${DS_NS}">` +
+    `<CanonicalizationMethod Algorithm="${C14N_ALG}"/>` +
+    `<SignatureMethod Algorithm="${RSA_SHA1}"/>` +
+    `<Reference URI="#${idAttr}">` +
+    `<Transforms>` +
+    `<Transform Algorithm="${ENV_ALG}"/>` +
+    `<Transform Algorithm="${C14N_ALG}"/>` +
+    `</Transforms>` +
+    `<DigestMethod Algorithm="${SHA1}"/>` +
+    `<DigestValue>${digestValue}</DigestValue>` +
+    `</Reference>` +
+    `</SignedInfo>`
+
+  const siDoc = Parse(signedInfoForSign)
+  const siCanon = c14nElement(siDoc.documentElement!)
   const signatureBuf = await crypto.subtle.sign(
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
     privateKey,
-    new TextEncoder().encode(signedInfoCanon),
+    new TextEncoder().encode(siCanon),
   )
-  signedXml.XmlSignature.SignatureValue = new Uint8Array(signatureBuf)
+  const signatureValue = bytesToBase64(signatureBuf)
 
-  let body = signedXml.toString()
-  // Garante xmlns padrão sem espaço estranho; não altera SignedInfo já reassinado.
-  body = body.replace(
-    /<Signature\b[^>]*>/,
-    '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">',
-  )
-  if (body.includes('ds:') || body.includes('xmlns:ds=')) {
-    throw new Error('Assinatura NF-e ainda contém prefixo ds: — regeneração incompleta.')
+  const signature =
+    `<Signature xmlns="${DS_NS}">` +
+    `<SignedInfo>` +
+    `<CanonicalizationMethod Algorithm="${C14N_ALG}"/>` +
+    `<SignatureMethod Algorithm="${RSA_SHA1}"/>` +
+    `<Reference URI="#${idAttr}">` +
+    `<Transforms>` +
+    `<Transform Algorithm="${ENV_ALG}"/>` +
+    `<Transform Algorithm="${C14N_ALG}"/>` +
+    `</Transforms>` +
+    `<DigestMethod Algorithm="${SHA1}"/>` +
+    `<DigestValue>${digestValue}</DigestValue>` +
+    `</Reference>` +
+    `</SignedInfo>` +
+    `<SignatureValue>${signatureValue}</SignatureValue>` +
+    `<KeyInfo><X509Data><X509Certificate>${leafCert}</X509Certificate></X509Data></KeyInfo>` +
+    `</Signature>`
+
+  if (signature.includes('ds:') || signature.includes('xmlns:ds=')) {
+    throw new Error('Assinatura NF-e gerada com prefixo ds: inesperado.')
   }
-  if (body.startsWith('<?xml')) return body
-  return `<?xml version="1.0" encoding="UTF-8"?>${body}`
+
+  const body = stripXmlDecl(unsignedXml)
+  if (!/<\/NFe>\s*$/i.test(body)) {
+    throw new Error('XML NF-e sem fechamento </NFe>.')
+  }
+  const signed = body.replace(/<\/NFe>\s*$/i, `${signature}</NFe>`)
+  return `<?xml version="1.0" encoding="UTF-8"?>${signed}`
 }
