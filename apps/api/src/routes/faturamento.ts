@@ -790,7 +790,8 @@ app.post('/notas/:id/transmitir', async (c) => {
   const obj = await c.env.R2_STORAGE.get(nota.xml_path)
   if (!obj) return c.json({ error: 'Arquivo XML não encontrado no armazenamento.' }, 404)
   const xmlAssinado = await obj.text()
-  if (!/<Signature\b/i.test(xmlAssinado)) {
+  // Aceita Signature com ou sem prefixo de namespace (ex.: ds:Signature)
+  if (!/<(?:[\w.-]+:)?Signature\b/i.test(xmlAssinado)) {
     return c.json(
       { error: 'XML sem assinatura digital. Envie o certificado A1 e regenere o XML.' },
       400,
