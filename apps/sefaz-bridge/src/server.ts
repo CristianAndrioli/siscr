@@ -20,6 +20,7 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import https from 'node:https'
+import tls from 'node:tls'
 import { URL } from 'node:url'
 
 const PORT = Number(process.env.PORT || 8788)
@@ -137,6 +138,9 @@ function postWithMtls(opts: {
         },
         pfx: opts.pfx,
         passphrase: opts.passphrase,
+        // Com `pfx`, o OpenSSL às vezes não usa o trust store do sistema —
+        // força as CAs raiz do Node para validar o certificado da SEFAZ.
+        ca: [...tls.rootCertificates],
         rejectUnauthorized: true,
         minVersion: 'TLSv1.2',
         timeout: opts.timeoutMs,
