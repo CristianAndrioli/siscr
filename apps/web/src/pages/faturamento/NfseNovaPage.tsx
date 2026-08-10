@@ -169,12 +169,12 @@ export default function NfseNovaPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Cód. Serviço (LC 116)
+              Cód. serviço (municipal SP / LC 116)
             </label>
             <input
               value={form.codigoServico}
               onChange={(e) => setForm((f) => ({ ...f, codigoServico: e.target.value }))}
-              placeholder="Ex: 01.01"
+              placeholder="Ex: 02800 (SP) ou 01.01 (nacional)"
               className={`${FIELD} font-mono`}
             />
           </div>

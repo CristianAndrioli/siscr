@@ -17,6 +17,7 @@ import {
   formatNfseXmlValidationErrors,
   validatePaulistanaPedidoXml,
 } from './validatePaulistanaPedidoXml'
+import { normalizePaulistanaCodigoServico } from './paulistanaCodigoServico'
 import { verificarAssinaturaPaulistanaXml } from './verifyPaulistanaSignature'
 
 export type PrepareNfseResult = {
@@ -139,10 +140,17 @@ export async function prepareNfseEnvio(
   const descricao =
     str(nota.descricao_servico).trim() ||
     'Prestação de serviços'
-  const codigoServico =
+  const codigoServicoRaw =
     str(nota.codigo_servico).trim() ||
-    str(empresa.nfse_codigo_servico_padrao).trim() ||
-    '01.01'
+    str(empresa.nfse_codigo_servico_padrao).trim()
+  let codigoServico = codigoServicoRaw
+  if (kind === 'paulistana') {
+    const cod = normalizePaulistanaCodigoServico(codigoServicoRaw)
+    if (!cod.ok) throw new Error(cod.message)
+    codigoServico = cod.codigo
+  } else if (!codigoServico) {
+    codigoServico = '01.01'
+  }
   const valorServico = num(nota.valor_total, 0)
   if (valorServico <= 0) throw new Error('Valor do serviço deve ser maior que zero.')
   const aliquotaIss = num(nota.aliquota_iss, 0)

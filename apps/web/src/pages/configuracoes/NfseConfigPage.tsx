@@ -287,14 +287,18 @@ export function NfseConfigPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                Código de serviço LC 116 padrão (opcional)
+                Código de serviço municipal padrão (Paulistana)
               </label>
               <input
                 value={codigoServico}
                 onChange={(e) => setCodigoServico(e.target.value)}
                 className={`${FIELD} font-mono`}
-                placeholder="Ex: 01.01"
+                placeholder="Ex: 02800"
               />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Em São Paulo use o código da lista da Prefeitura (4–5 dígitos), não o item da LC 116
+                (01.01). Consulte o CCM / portal da Nota Fiscal Paulistana.
+              </p>
             </div>
 
             <div className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-3 space-y-2">

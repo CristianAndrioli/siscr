@@ -4,6 +4,7 @@
  */
 
 import { DOMParser } from '@xmldom/xmldom'
+import { normalizePaulistanaCodigoServico } from './paulistanaCodigoServico'
 
 export type NfseXmlValidationError = {
   path: string
@@ -122,6 +123,19 @@ export function validatePaulistanaPedidoXml(xml: string): NfseXmlValidationResul
     ] as const) {
       if (!text(firstChild(rps, tag))) {
         push(errors, `${base}/${tag}`, `${tag} obrigatório.`)
+      }
+    }
+    const codServTxt = text(firstChild(rps, 'CodigoServico'))
+    if (codServTxt) {
+      const cod = normalizePaulistanaCodigoServico(codServTxt)
+      if (!cod.ok) {
+        push(errors, `${base}/CodigoServico`, cod.message)
+      } else if (cod.codigo !== codServTxt) {
+        push(
+          errors,
+          `${base}/CodigoServico`,
+          `CodigoServico deve ter 5 dígitos municipais (encontrado "${codServTxt}", esperado "${cod.codigo}").`,
+        )
       }
     }
     const aliq = firstChild(rps, 'AliquotaServicos') || firstChild(rps, 'Aliquota')

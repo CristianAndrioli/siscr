@@ -322,7 +322,7 @@ export default function NfseDetail() {
               {fmtDate(nota.data_emissao || nota.created_at)}
             </p>
             {nota.codigo_servico && (
-              <p className="text-xs text-slate-500">LC 116: {nota.codigo_servico}</p>
+              <p className="text-xs text-slate-500">Cód. serviço: {nota.codigo_servico}</p>
             )}
             {nota.serie && (
               <p className="text-xs text-slate-500">Série RPS/DPS: {nota.serie}</p>

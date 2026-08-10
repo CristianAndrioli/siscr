@@ -1,4 +1,5 @@
 import { xmlEscape, onlyDigits } from '../nfe/xmlEscape'
+import { normalizePaulistanaCodigoServico } from './paulistanaCodigoServico'
 
 function money(v: number): string {
   return (Math.round((Number.isFinite(v) ? v : 0) * 100) / 100).toFixed(2)
@@ -57,7 +58,9 @@ export function buildAssinaturaRpsStringV1(fields: AssinaturaRpsFields): string 
   const issRetido = fields.issRetido ? 'S' : 'N'
   const valorServ = centavos15(fields.valorServicos)
   const valorDed = centavos15(fields.valorDeducoes ?? 0)
-  const codServ = onlyDigits(fields.codigoServico).padStart(5, '0').slice(-5)
+  const codNorm = normalizePaulistanaCodigoServico(fields.codigoServico)
+  if (!codNorm.ok) throw new Error(codNorm.message)
+  const codServ = codNorm.codigo
   const tomDoc = onlyDigits(fields.cpfCnpjTomador)
   let indTom = '3'
   if (tomDoc.length === 11) indTom = '1'
@@ -91,7 +94,9 @@ export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): st
   const im = onlyDigits(input.imPrestador).padStart(8, '0').slice(-8)
   const serie = xmlEscape(String(input.serieRps || '1').slice(0, 5))
   const nRps = String(Math.max(1, Math.floor(input.numeroRps)))
-  const codServ = onlyDigits(input.codigoServico).padStart(5, '0').slice(-5) || '01001'
+  const codNorm = normalizePaulistanaCodigoServico(input.codigoServico)
+  if (!codNorm.ok) throw new Error(codNorm.message)
+  const codServ = codNorm.codigo
   const tomDoc = onlyDigits(input.cpfCnpjTomador)
   const isCpf = tomDoc.length === 11
   const dt = xmlEscape(input.dataEmissao.slice(0, 10))
