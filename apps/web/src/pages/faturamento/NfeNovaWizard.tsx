@@ -11,6 +11,7 @@ import {
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import PageContainer from '../../components/common/PageContainer';
 import {
   ajustarCfopSaida,
   cfopPadraoSaida,
@@ -468,7 +469,7 @@ export function NfeNovaWizardPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-16">
+    <PageContainer variant="form" className="space-y-6 pb-16">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <Link
@@ -908,7 +909,7 @@ export function NfeNovaWizardPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   type NotaFinanceiroConta,
   type NotaFinanceiroLancamento,
 } from '../../components/faturamento/NotaFinanceiroTab';
+import PageContainer from '../../components/common/PageContainer';
 import type { ErrorLogEntry } from '../../utils/errorLogger';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
@@ -797,7 +798,7 @@ export default function NfseDetail() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <PageContainer variant="detail" className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Link
@@ -973,6 +974,6 @@ export default function NfseDetail() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

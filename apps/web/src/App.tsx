@@ -42,11 +42,17 @@ import ProdutosDetail from './pages/cadastros/ProdutosDetail';
 import ServicosList from './pages/cadastros/ServicosList';
 import ServicosDetail from './pages/cadastros/ServicosDetail';
 import GruposProdutosPage from './pages/cadastros/GruposProdutosPage';
+import GruposProdutosDetail from './pages/cadastros/GruposProdutosDetail';
 import UnidadesMedidaPage from './pages/cadastros/UnidadesMedidaPage';
+import UnidadesMedidaDetail from './pages/cadastros/UnidadesMedidaDetail';
 import TabelasPrecoPage from './pages/cadastros/TabelasPrecoPage';
+import TabelasPrecoDetail from './pages/cadastros/TabelasPrecoDetail';
 import CategoriasFinanceirasPage from './pages/cadastros/CategoriasFinanceirasPage';
+import CategoriasFinanceirasDetail from './pages/cadastros/CategoriasFinanceirasDetail';
 import CentrosCustoPage from './pages/cadastros/CentrosCustoPage';
+import CentrosCustoDetail from './pages/cadastros/CentrosCustoDetail';
 import CondicoesPagamentoPage from './pages/cadastros/CondicoesPagamentoPage';
+import CondicoesPagamentoDetail from './pages/cadastros/CondicoesPagamentoDetail';
 import ContasReceberList from './pages/financeiro/ContasReceberList';
 import ContasReceberDetail from './pages/financeiro/ContasReceberDetail';
 import ContasPagarList from './pages/financeiro/ContasPagarList';
@@ -58,7 +64,10 @@ import ContasBancariasPage from './pages/financeiro/ContasBancariasPage';
 import ContaBancariaDetailPage from './pages/financeiro/ContaBancariaDetailPage';
 import ConciliacaoWizard from './pages/financeiro/ConciliacaoWizard';
 import { UsuariosPage } from './pages/configuracoes/UsuariosPage';
+import UsuarioFormPage from './pages/configuracoes/UsuarioFormPage';
 import { FiliaisPage } from './pages/configuracoes/FiliaisPage';
+import EmpresaFormPage from './pages/configuracoes/EmpresaFormPage';
+import FilialFormPage from './pages/configuracoes/FilialFormPage';
 import { FaturamentoConfigPage } from './pages/configuracoes/FaturamentoConfigPage';
 import { NfseConfigPage } from './pages/configuracoes/NfseConfigPage';
 import { PermissoesPage } from './pages/configuracoes/PermissoesPage';
@@ -77,7 +86,9 @@ import ObrasDetail from './pages/frota/ObrasDetail';
 import OrdensServicoList from './pages/frota/OrdensServicoList';
 import OrdensServicoDetail from './pages/frota/OrdensServicoDetail';
 import AbastecimentosPage from './pages/frota/AbastecimentosPage';
+import AbastecimentoFormPage from './pages/frota/AbastecimentoFormPage';
 import ManutencoesFrotaPage from './pages/frota/ManutencoesFrotaPage';
+import ManutencaoFrotaFormPage from './pages/frota/ManutencaoFrotaFormPage';
 import NfEntradaList from './pages/entrada/NfEntradaList';
 import NfEntradaDetail from './pages/entrada/NfEntradaDetail';
 import NfEntradaWizardPage from './pages/entrada/NfEntradaWizard';
@@ -94,9 +105,12 @@ import FluxoCaixaPage from './pages/financeiro/FluxoCaixaPage';
 import { CotacoesFornecedorPage } from './pages/faturamento/Cotacoes';
 import MetasVendasPage from './pages/vendas/MetasVendasPage';
 import InteracoesPage from './pages/vendas/InteracoesPage';
+import InteracaoFormPage from './pages/vendas/InteracaoFormPage';
 import InventariosPage from './pages/estoque/InventariosPage';
+import InventarioFormPage from './pages/estoque/InventarioFormPage';
 import InventarioDetail from './pages/estoque/InventarioDetail';
 import FunilVendasPage from './pages/vendas/FunilVendasPage';
+import OportunidadeFormPage from './pages/vendas/OportunidadeFormPage';
 import PedidosCompraList from './pages/compras/PedidosCompraList';
 import PedidoCompraDetail from './pages/compras/PedidoCompraDetail';
 
@@ -201,10 +215,12 @@ function App() {
         {/* Vendas & CRM */}
         <Route path="/vendas-crm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="vendas-crm" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/funil" element={<ProtectedRoute><Layout><FunilVendasPage /></Layout></ProtectedRoute>} />
+        <Route path="/vendas-crm/funil/novo" element={<ProtectedRoute><Layout><OportunidadeFormPage /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/pedidos" element={<ProtectedRoute><Layout><PedidosVendaList /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/pedidos/:id" element={<ProtectedRoute><Layout><PedidoVendaDetail /></Layout></ProtectedRoute>} />
         <Route path="/vendas-crm/metas" element={<ProtectedRoute><MetasVendasPage /></ProtectedRoute>} />
         <Route path="/vendas-crm/interacoes" element={<ProtectedRoute><Layout><InteracoesPage /></Layout></ProtectedRoute>} />
+        <Route path="/vendas-crm/interacoes/novo" element={<ProtectedRoute><Layout><InteracaoFormPage /></Layout></ProtectedRoute>} />
 
         {/* Compras */}
         <Route path="/compras" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><ModuleHub moduleKey="compras" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
@@ -256,11 +272,17 @@ function App() {
         <Route path="/cadastros/servicos" element={<ProtectedRoute><Layout><ServicosList /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/servicos/:id" element={<ProtectedRoute><Layout><ServicosDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/grupos-produtos" element={<ProtectedRoute><Layout><GruposProdutosPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/grupos-produtos/:id" element={<ProtectedRoute><Layout><GruposProdutosDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/unidades-medida" element={<ProtectedRoute><Layout><UnidadesMedidaPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/unidades-medida/:id" element={<ProtectedRoute><Layout><UnidadesMedidaDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/tabelas-preco" element={<ProtectedRoute><Layout><TabelasPrecoPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/tabelas-preco/:id" element={<ProtectedRoute><Layout><TabelasPrecoDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/categorias-financeiras" element={<ProtectedRoute><Layout><CategoriasFinanceirasPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/categorias-financeiras/:id" element={<ProtectedRoute><Layout><CategoriasFinanceirasDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/centros-custo" element={<ProtectedRoute><Layout><CentrosCustoPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/centros-custo/:id" element={<ProtectedRoute><Layout><CentrosCustoDetail /></Layout></ProtectedRoute>} />
         <Route path="/cadastros/condicoes-pagamento" element={<ProtectedRoute><Layout><CondicoesPagamentoPage /></Layout></ProtectedRoute>} />
+        <Route path="/cadastros/condicoes-pagamento/:id" element={<ProtectedRoute><Layout><CondicoesPagamentoDetail /></Layout></ProtectedRoute>} />
 
         {/* Estoque */}
         <Route path="/estoque" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><ModuleHub moduleKey="estoque" /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
@@ -270,6 +292,7 @@ function App() {
         <Route path="/estoque/locais" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><LocaisPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/instrucoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><EstoqueInstrucoes /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/inventario" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><InventariosPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/estoque/inventario/novo" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><InventarioFormPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/estoque/inventario/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="estoque" requiredAction="view"><InventarioDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* ─── Frota ──────────────────────────────────────────────────── */}
@@ -281,7 +304,11 @@ function App() {
         <Route path="/frota/ordens-servico" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoList /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/ordens-servico/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><OrdensServicoDetail /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/abastecimentos" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><AbastecimentosPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/abastecimentos/novo" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><AbastecimentoFormPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/abastecimentos/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><AbastecimentoFormPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/frota/manutencoes" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ManutencoesFrotaPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/manutencoes/novo" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ManutencaoFrotaFormPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
+        <Route path="/frota/manutencoes/:id" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="frota" requiredAction="view"><ManutencaoFrotaFormPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
 
         {/* Contabilidade */}
         <Route path="/contabilidade/plano-contas" element={<ProtectedRoute><Layout><PlanoContasPage /></Layout></ProtectedRoute>} />
@@ -293,7 +320,13 @@ function App() {
 
         {/* Configurações */}
         <Route path="/configuracoes/usuarios" element={<ProtectedRoute><Layout><UsuariosPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/usuarios/novo" element={<ProtectedRoute><Layout><UsuarioFormPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/usuarios/:id" element={<ProtectedRoute><Layout><UsuarioFormPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/filiais" element={<ProtectedRoute><Layout><FiliaisPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/filiais/empresas/novo" element={<ProtectedRoute><Layout><EmpresaFormPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/filiais/empresas/:id" element={<ProtectedRoute><Layout><EmpresaFormPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/filiais/filiais/novo" element={<ProtectedRoute><Layout><FilialFormPage /></Layout></ProtectedRoute>} />
+        <Route path="/configuracoes/filiais/filiais/:id" element={<ProtectedRoute><Layout><FilialFormPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/faturamento" element={<ProtectedRoute><Layout><FaturamentoConfigPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/nfse" element={<ProtectedRoute><Layout><NfseConfigPage /></Layout></ProtectedRoute>} />
         <Route path="/configuracoes/permissoes" element={<ProtectedRoute><Layout><PermissoesPage /></Layout></ProtectedRoute>} />

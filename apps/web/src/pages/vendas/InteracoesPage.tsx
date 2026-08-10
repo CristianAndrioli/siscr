@@ -1,31 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BaseListPage from '../../components/common/BaseListPage';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import Alert from '../../components/common/Alert';
 import { PessoaBusca } from '../../components/PessoaBusca';
 import { exportRowsToCsv } from '../../utils/exportCsv';
-import { formatApiError } from '../../utils/helpers';
 import {
   pessoaInteracoesService, TIPO_INTERACAO_LABEL,
-  type Interacao, type InteracaoForm, type InteracaoTipo,
+  type Interacao,
 } from '../../services/pessoaInteracoes';
 
-const hoje = () => new Date().toISOString().slice(0, 10);
-const emptyForm = (): InteracaoForm => ({ pessoaId: '', tipo: 'ligacao', data: hoje(), descricao: '' });
-
 export default function InteracoesPage() {
+  const navigate = useNavigate();
   const [interacoes, setInteracoes] = useState<Interacao[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filtroPessoaId, setFiltroPessoaId] = useState('');
   const [filtroPessoaNome, setFiltroPessoaNome] = useState('');
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<InteracaoForm>(emptyForm());
-  const [pessoaNome, setPessoaNome] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
   const [deleting, setDeleting] = useState<Interacao | null>(null);
 
   const load = useCallback(() => {
@@ -38,31 +30,6 @@ export default function InteracoesPage() {
   }, [filtroPessoaId]);
 
   useEffect(() => { load(); }, [load]);
-
-  const openNew = () => {
-    setForm(emptyForm());
-    setPessoaNome('');
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.pessoaId || !form.descricao.trim()) {
-      setFormError('Selecione a pessoa e descreva a interação.');
-      return;
-    }
-    setSaving(true);
-    setFormError('');
-    try {
-      await pessoaInteracoesService.create(form);
-      setModalOpen(false);
-      load();
-    } catch (err) {
-      setFormError(formatApiError(err, 'Erro ao registrar interação.'));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -97,7 +64,7 @@ export default function InteracoesPage() {
             placeholder="Filtrar por cliente/fornecedor…"
           />
         </div>
-        <Button variant="primary" onClick={openNew}>+ Nova interação</Button>
+        <Button variant="primary" onClick={() => navigate('/vendas-crm/interacoes/novo')}>+ Nova interação</Button>
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
@@ -140,48 +107,6 @@ export default function InteracoesPage() {
           </table>
         </div>
       )}
-
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Nova interação"
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave} loading={saving}>Registrar</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {formError && <Alert type="error" message={formError} className="mb-0" />}
-          <div>
-            <label className="input-label">Pessoa</label>
-            <PessoaBusca
-              value={form.pessoaId}
-              displayValue={pessoaNome}
-              onChange={(id, nome) => { setForm(f => ({ ...f, pessoaId: id })); setPessoaNome(nome); }}
-              placeholder="Buscar cliente ou fornecedor…"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="input-label">Tipo</label>
-              <select className="input" value={form.tipo} onChange={e => setForm(f => ({ ...f, tipo: e.target.value as InteracaoTipo }))}>
-                {Object.entries(TIPO_INTERACAO_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="input-label">Data</label>
-              <input type="date" className="input" value={form.data} onChange={e => setForm(f => ({ ...f, data: e.target.value }))} />
-            </div>
-          </div>
-          <div>
-            <label className="input-label">Descrição</label>
-            <textarea className="input h-auto py-2" rows={3} value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} placeholder="O que foi tratado…" />
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!deleting}

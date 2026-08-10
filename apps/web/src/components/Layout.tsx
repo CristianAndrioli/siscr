@@ -321,7 +321,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         )}
 
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 p-4 lg:p-6 bg-white dark:bg-slate-900 min-h-0">
           {children}
         </main>
       </div>

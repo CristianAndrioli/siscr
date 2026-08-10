@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BaseListPage from '../../components/common/BaseListPage';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
-import Input from '../../components/common/Input';
 import Alert from '../../components/common/Alert';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { exportRowsToCsv } from '../../utils/exportCsv';
@@ -10,22 +10,12 @@ import { formatApiError } from '../../utils/helpers';
 import {
   condicoesPagamentoService,
   type CondicaoPagamento,
-  type CondicaoPagamentoForm,
 } from '../../services/cadastros/condicoesPagamento';
 
-interface FormState {
-  codigo: string;
-  descricao: string;
-  ativo: boolean;
-}
-
-const EMPTY_FORM: FormState = { codigo: '', descricao: '', ativo: true };
-
-function formFromCondicao(c: CondicaoPagamento): FormState {
-  return { codigo: c.codigo, descricao: c.descricao, ativo: c.ativo === 1 };
-}
+const BASE = '/cadastros/condicoes-pagamento';
 
 export default function CondicoesPagamentoPage() {
+  const navigate = useNavigate();
   const [condicoes, setCondicoes] = useState<CondicaoPagamento[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -33,12 +23,6 @@ export default function CondicoesPagamentoPage() {
   const [success, setSuccess] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<CondicaoPagamento | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
   const [deleting, setDeleting] = useState<CondicaoPagamento | null>(null);
 
   const carregar = useCallback(async () => {
@@ -56,54 +40,6 @@ export default function CondicoesPagamentoPage() {
   }, [appliedSearch]);
 
   useEffect(() => { void carregar(); }, [carregar]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const openEdit = (c: CondicaoPagamento) => {
-    setEditing(c);
-    setForm(formFromCondicao(c));
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm(prev => ({ ...prev, [k]: v }));
-
-  const handleSave = async () => {
-    setFormError('');
-    if (!form.codigo.trim() || !form.descricao.trim()) {
-      setFormError('Preencha o código e a descrição.');
-      return;
-    }
-
-    const input: CondicaoPagamentoForm = {
-      codigo: form.codigo.trim(),
-      descricao: form.descricao.trim(),
-      ativo: form.ativo,
-    };
-
-    setSaving(true);
-    try {
-      if (editing) {
-        await condicoesPagamentoService.update(editing.id, input);
-        setSuccess('Condição de pagamento atualizada.');
-      } else {
-        await condicoesPagamentoService.create(input);
-        setSuccess('Condição de pagamento criada.');
-      }
-      setModalOpen(false);
-      await carregar();
-    } catch (e) {
-      setFormError(formatApiError(e, 'Erro ao salvar condição de pagamento.'));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -146,7 +82,7 @@ export default function CondicoesPagamentoPage() {
             Buscar
           </button>
         </form>
-        <Button variant="primary" onClick={openCreate}>+ Novo</Button>
+        <Button variant="primary" onClick={() => navigate(`${BASE}/novo`)}>+ Novo</Button>
       </div>
 
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
@@ -157,7 +93,7 @@ export default function CondicoesPagamentoPage() {
       ) : condicoes.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
           <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Nenhuma condição de pagamento cadastrada</p>
-          <Button variant="primary" size="sm" onClick={openCreate} className="mt-4">Criar primeira condição</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate(`${BASE}/novo`)} className="mt-4">Criar primeira condição</Button>
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden">
@@ -173,7 +109,11 @@ export default function CondicoesPagamentoPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {condicoes.map(c => (
-                <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <tr
+                  key={c.id}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
+                  onClick={() => navigate(`${BASE}/${c.id}`)}
+                >
                   <td className="px-4 py-2.5 text-sm font-mono text-slate-600 dark:text-slate-300">{c.codigo}</td>
                   <td className="px-4 py-2.5 text-sm text-slate-800 dark:text-slate-100">{c.descricao}</td>
                   <td className="px-4 py-2.5 text-sm text-right text-slate-600 dark:text-slate-300 font-mono">{c.num_parcelas ?? '—'}</td>
@@ -184,9 +124,9 @@ export default function CondicoesPagamentoPage() {
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Inativo</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex gap-1 justify-end">
-                      <button onClick={() => openEdit(c)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950 transition-colors" title="Editar">
+                      <button onClick={() => navigate(`${BASE}/${c.id}`)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950 transition-colors" title="Editar">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
@@ -207,54 +147,6 @@ export default function CondicoesPagamentoPage() {
           </div>
         </div>
       )}
-
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? `Editar condição — ${editing.descricao}` : 'Nova condição de pagamento'}
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave} loading={saving}>
-              {editing ? 'Salvar alterações' : 'Criar condição'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {formError && <Alert type="error" message={formError} className="mb-0" />}
-          <Input
-            label="Código"
-            name="condicao-codigo"
-            value={form.codigo}
-            onChange={e => set('codigo', e.target.value)}
-            required
-          />
-          <Input
-            label="Descrição"
-            name="condicao-descricao"
-            value={form.descricao}
-            onChange={e => set('descricao', e.target.value)}
-            placeholder="ex: À vista, 30/60/90 dias"
-            required
-          />
-          {!editing && (
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Ao criar, a condição é gerada com uma parcela única de 100%. O detalhamento de parcelas ficará disponível em uma fase futura.
-            </p>
-          )}
-          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.ativo}
-              onChange={e => set('ativo', e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-0"
-            />
-            <span className="text-sm text-slate-700 dark:text-slate-300">Condição ativa</span>
-          </label>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!deleting}

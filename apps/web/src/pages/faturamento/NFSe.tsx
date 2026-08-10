@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { notasService, type NotaFiscal, type NFStatus } from '../../services/faturamentoService';
 import { fmtBRL, fmtDate } from '../../utils/format';
+import PageContainer from '../../components/common/PageContainer';
 
 const fmtPct = (v?: number | null) => (v != null ? `${v}%` : '—');
 
@@ -74,7 +75,7 @@ export function NFSePage() {
     .reduce((s, n) => s + (n.valor_iss ?? 0), 0);
 
   return (
-    <div className="space-y-6">
+    <PageContainer variant="list" className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">NFS-e</h1>
@@ -262,7 +263,7 @@ export function NFSePage() {
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

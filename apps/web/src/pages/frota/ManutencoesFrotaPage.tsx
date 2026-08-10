@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BaseListPage from '../../components/common/BaseListPage';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
-import Input from '../../components/common/Input';
 import Alert from '../../components/common/Alert';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { exportRowsToCsv } from '../../utils/exportCsv';
@@ -13,8 +13,6 @@ import {
   TIPO_LABEL,
   STATUS_LABEL,
   type ManutencaoFrota,
-  type ManutencaoFrotaForm,
-  type ManutencaoTipo,
   type ManutencaoStatus,
 } from '../../services/manutencoesFrota';
 import { maquinasService, type Maquina } from '../../services/frota';
@@ -25,39 +23,8 @@ const STATUS_STYLE: Record<ManutencaoStatus, string> = {
   cancelada: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 
-interface FormState {
-  maquinaId: string;
-  tipo: ManutencaoTipo;
-  descricao: string;
-  dataPrevista: string;
-  status: ManutencaoStatus;
-  custo: string;
-  observacoes: string;
-}
-
-const EMPTY_FORM: FormState = {
-  maquinaId: '',
-  tipo: 'preventiva',
-  descricao: '',
-  dataPrevista: '',
-  status: 'pendente',
-  custo: '',
-  observacoes: '',
-};
-
-function formFromManutencao(m: ManutencaoFrota): FormState {
-  return {
-    maquinaId: m.maquina_id,
-    tipo: m.tipo,
-    descricao: m.descricao,
-    dataPrevista: m.data_prevista ?? '',
-    status: m.status,
-    custo: m.custo != null ? String(m.custo) : '',
-    observacoes: m.observacoes ?? '',
-  };
-}
-
 export default function ManutencoesFrotaPage() {
+  const navigate = useNavigate();
   const [manutencoes, setManutencoes] = useState<ManutencaoFrota[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -67,12 +34,6 @@ export default function ManutencoesFrotaPage() {
   const [maquinas, setMaquinas] = useState<Maquina[]>([]);
   const [maquinaFiltro, setMaquinaFiltro] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<ManutencaoFrota | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
   const [deleting, setDeleting] = useState<ManutencaoFrota | null>(null);
 
   const carregar = useCallback(async () => {
@@ -101,62 +62,10 @@ export default function ManutencoesFrotaPage() {
         const m = await maquinasService.list({ limit: 200 });
         setMaquinas(m.maquinas);
       } catch {
-        // seletor fica vazio; erro de listagem principal já é reportado
+        // seletor fica vazio
       }
     })();
   }, []);
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const openEdit = (m: ManutencaoFrota) => {
-    setEditing(m);
-    setForm(formFromManutencao(m));
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm(prev => ({ ...prev, [k]: v }));
-
-  const handleSave = async () => {
-    setFormError('');
-    if (!form.maquinaId || !form.descricao.trim()) {
-      setFormError('Preencha a máquina e a descrição.');
-      return;
-    }
-
-    const input: ManutencaoFrotaForm = {
-      maquinaId: form.maquinaId,
-      tipo: form.tipo,
-      descricao: form.descricao.trim(),
-      dataPrevista: form.dataPrevista || null,
-      status: form.status,
-      custo: form.custo ? Number(form.custo) : null,
-      observacoes: form.observacoes.trim() || null,
-    };
-
-    setSaving(true);
-    try {
-      if (editing) {
-        await manutencoesFrotaService.update(editing.id, input);
-        setSuccess('Manutenção atualizada.');
-      } else {
-        await manutencoesFrotaService.create(input);
-        setSuccess('Manutenção cadastrada.');
-      }
-      setModalOpen(false);
-      await carregar();
-    } catch (e) {
-      setFormError(formatApiError(e, 'Erro ao salvar manutenção.'));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -208,7 +117,7 @@ export default function ManutencoesFrotaPage() {
             <option value="cancelada">Cancelada</option>
           </select>
         </div>
-        <Button variant="primary" onClick={openCreate}>+ Nova manutenção</Button>
+        <Button variant="primary" onClick={() => navigate('/frota/manutencoes/novo')}>+ Nova manutenção</Button>
       </div>
 
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
@@ -219,7 +128,7 @@ export default function ManutencoesFrotaPage() {
       ) : manutencoes.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
           <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Nenhuma manutenção cadastrada</p>
-          <Button variant="primary" size="sm" onClick={openCreate} className="mt-4">Criar primeira manutenção</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate('/frota/manutencoes/novo')} className="mt-4">Criar primeira manutenção</Button>
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden">
@@ -248,7 +157,7 @@ export default function ManutencoesFrotaPage() {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex gap-1 justify-end">
-                      <button onClick={() => openEdit(m)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950 transition-colors" title="Editar">
+                      <button onClick={() => navigate(`/frota/manutencoes/${m.id}`)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950 transition-colors" title="Editar">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
@@ -269,108 +178,6 @@ export default function ManutencoesFrotaPage() {
           </div>
         </div>
       )}
-
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? 'Editar manutenção' : 'Nova manutenção'}
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave} loading={saving}>
-              {editing ? 'Salvar alterações' : 'Criar manutenção'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {formError && <Alert type="error" message={formError} className="mb-0" />}
-
-          <div>
-            <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Máquina<span className="text-red-500 ml-1">*</span>
-            </label>
-            <select
-              value={form.maquinaId}
-              onChange={e => set('maquinaId', e.target.value)}
-              className="block w-full h-9 px-3 rounded-lg border text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:border-brand-500 focus:ring-brand-500/20"
-            >
-              <option value="">Selecione…</option>
-              {maquinas.map(m => (
-                <option key={m.id} value={m.id}>{m.nome}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-1.5">Tipo</label>
-              <select
-                value={form.tipo}
-                onChange={e => set('tipo', e.target.value as ManutencaoTipo)}
-                className="block w-full h-9 px-3 rounded-lg border text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:border-brand-500 focus:ring-brand-500/20"
-              >
-                <option value="preventiva">Preventiva</option>
-                <option value="corretiva">Corretiva</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-1.5">Status</label>
-              <select
-                value={form.status}
-                onChange={e => set('status', e.target.value as ManutencaoStatus)}
-                className="block w-full h-9 px-3 rounded-lg border text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:border-brand-500 focus:ring-brand-500/20"
-              >
-                <option value="pendente">Pendente</option>
-                <option value="concluida">Concluída</option>
-                <option value="cancelada">Cancelada</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-              Descrição<span className="text-red-500 ml-1">*</span>
-            </label>
-            <textarea
-              value={form.descricao}
-              onChange={e => set('descricao', e.target.value)}
-              rows={2}
-              className="block w-full px-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:border-brand-500 focus:ring-brand-500/20"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Data prevista"
-              name="manutencao-data-prevista"
-              type="date"
-              value={form.dataPrevista}
-              onChange={e => set('dataPrevista', e.target.value)}
-            />
-            <Input
-              label="Custo (R$)"
-              name="manutencao-custo"
-              type="number"
-              step="0.01"
-              value={form.custo}
-              onChange={e => set('custo', e.target.value)}
-              placeholder="Opcional"
-            />
-          </div>
-
-          <div>
-            <label className="block text-[13px] font-medium text-slate-700 dark:text-slate-300 mb-1.5">Observações</label>
-            <textarea
-              value={form.observacoes}
-              onChange={e => set('observacoes', e.target.value)}
-              rows={3}
-              className="block w-full px-3 py-2 rounded-lg border text-sm text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:border-brand-500 focus:ring-brand-500/20"
-            />
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!deleting}

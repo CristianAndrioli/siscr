@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BaseListPage from '../../components/common/BaseListPage';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
-import Input from '../../components/common/Input';
-import Select from '../../components/common/Select';
 import Alert from '../../components/common/Alert';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { exportRowsToCsv } from '../../utils/exportCsv';
@@ -11,38 +10,15 @@ import { formatApiError } from '../../utils/helpers';
 import {
   tabelasPrecoService,
   type TabelaPreco,
-  type TabelaPrecoForm,
   type TabelaPrecoTipoAjuste,
 } from '../../services/cadastros/tabelasPreco';
+
+const BASE = '/cadastros/tabelas-preco';
 
 const TIPO_AJUSTE_LABEL: Record<TabelaPrecoTipoAjuste, string> = {
   percentual: 'Percentual (%)',
   fixo: 'Valor fixo (R$)',
 };
-
-interface FormState {
-  nome: string;
-  tipoAjuste: TabelaPrecoTipoAjuste;
-  valorAjuste: string;
-  vigenciaInicio: string;
-  vigenciaFim: string;
-  ativo: boolean;
-}
-
-const EMPTY_FORM: FormState = {
-  nome: '', tipoAjuste: 'percentual', valorAjuste: '', vigenciaInicio: '', vigenciaFim: '', ativo: true,
-};
-
-function formFromTabela(t: TabelaPreco): FormState {
-  return {
-    nome: t.nome,
-    tipoAjuste: t.tipo_ajuste,
-    valorAjuste: t.valor_ajuste != null ? String(t.valor_ajuste) : '',
-    vigenciaInicio: t.vigencia_inicio ? t.vigencia_inicio.slice(0, 10) : '',
-    vigenciaFim: t.vigencia_fim ? t.vigencia_fim.slice(0, 10) : '',
-    ativo: t.ativo === 1,
-  };
-}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -51,6 +27,7 @@ function fmtDate(iso: string | null): string {
 }
 
 export default function TabelasPrecoPage() {
+  const navigate = useNavigate();
   const [tabelas, setTabelas] = useState<TabelaPreco[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -58,12 +35,6 @@ export default function TabelasPrecoPage() {
   const [success, setSuccess] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<TabelaPreco | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
   const [deleting, setDeleting] = useState<TabelaPreco | null>(null);
 
   const carregar = useCallback(async () => {
@@ -81,66 +52,6 @@ export default function TabelasPrecoPage() {
   }, [appliedSearch]);
 
   useEffect(() => { void carregar(); }, [carregar]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const openEdit = (t: TabelaPreco) => {
-    setEditing(t);
-    setForm(formFromTabela(t));
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm(prev => ({ ...prev, [k]: v }));
-
-  const handleSave = async () => {
-    setFormError('');
-    if (!form.nome.trim()) {
-      setFormError('Preencha o nome da tabela.');
-      return;
-    }
-    const valor = form.valorAjuste.trim() ? Number(form.valorAjuste.replace(',', '.')) : undefined;
-    if (valor !== undefined && Number.isNaN(valor)) {
-      setFormError('Informe um valor de ajuste numérico válido.');
-      return;
-    }
-    if (form.vigenciaInicio && form.vigenciaFim && form.vigenciaFim < form.vigenciaInicio) {
-      setFormError('A vigência final não pode ser anterior à vigência inicial.');
-      return;
-    }
-
-    const input: TabelaPrecoForm = {
-      nome: form.nome.trim(),
-      tipoAjuste: form.tipoAjuste,
-      valorAjuste: valor,
-      vigenciaInicio: form.vigenciaInicio || null,
-      vigenciaFim: form.vigenciaFim || null,
-      ativo: form.ativo,
-    };
-
-    setSaving(true);
-    try {
-      if (editing) {
-        await tabelasPrecoService.update(editing.id, input);
-        setSuccess('Tabela de preço atualizada.');
-      } else {
-        await tabelasPrecoService.create(input);
-        setSuccess('Tabela de preço criada.');
-      }
-      setModalOpen(false);
-      await carregar();
-    } catch (e) {
-      setFormError(formatApiError(e, 'Erro ao salvar tabela de preço.'));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -186,7 +97,7 @@ export default function TabelasPrecoPage() {
             Buscar
           </button>
         </form>
-        <Button variant="primary" onClick={openCreate}>+ Novo</Button>
+        <Button variant="primary" onClick={() => navigate(`${BASE}/novo`)}>+ Novo</Button>
       </div>
 
       {success && <Alert type="success" message={success} onClose={() => setSuccess('')} />}
@@ -197,7 +108,7 @@ export default function TabelasPrecoPage() {
       ) : tabelas.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
           <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Nenhuma tabela de preço cadastrada</p>
-          <Button variant="primary" size="sm" onClick={openCreate} className="mt-4">Criar primeira tabela</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate(`${BASE}/novo`)} className="mt-4">Criar primeira tabela</Button>
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-card overflow-hidden">
@@ -214,7 +125,11 @@ export default function TabelasPrecoPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {tabelas.map(t => (
-                <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                <tr
+                  key={t.id}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
+                  onClick={() => navigate(`${BASE}/${t.id}`)}
+                >
                   <td className="px-4 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100">{t.nome}</td>
                   <td className="px-4 py-2.5 text-sm text-slate-600 dark:text-slate-300">
                     {TIPO_AJUSTE_LABEL[t.tipo_ajuste] ?? t.tipo_ajuste}
@@ -235,9 +150,9 @@ export default function TabelasPrecoPage() {
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Inativo</span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-2.5 text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex gap-1 justify-end">
-                      <button onClick={() => openEdit(t)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950 transition-colors" title="Editar">
+                      <button onClick={() => navigate(`${BASE}/${t.id}`)} className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 dark:hover:text-brand-400 dark:hover:bg-brand-950 transition-colors" title="Editar">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
@@ -258,74 +173,6 @@ export default function TabelasPrecoPage() {
           </div>
         </div>
       )}
-
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? `Editar tabela — ${editing.nome}` : 'Nova tabela de preço'}
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave} loading={saving}>
-              {editing ? 'Salvar alterações' : 'Criar tabela'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {formError && <Alert type="error" message={formError} className="mb-0" />}
-          <Input
-            label="Nome"
-            name="tabela-nome"
-            value={form.nome}
-            onChange={e => set('nome', e.target.value)}
-            placeholder="ex: Tabela padrão, Atacado, Black Friday"
-            required
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Tipo de ajuste"
-              name="tabela-tipo-ajuste"
-              value={form.tipoAjuste}
-              onChange={e => set('tipoAjuste', e.target.value as TabelaPrecoTipoAjuste)}
-              options={Object.entries(TIPO_AJUSTE_LABEL).map(([value, label]) => ({ value, label }))}
-            />
-            <Input
-              label={form.tipoAjuste === 'percentual' ? 'Valor do ajuste (%)' : 'Valor do ajuste (R$)'}
-              name="tabela-valor-ajuste"
-              value={form.valorAjuste}
-              onChange={e => set('valorAjuste', e.target.value)}
-              placeholder="0"
-            />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Vigência início"
-              name="tabela-vigencia-inicio"
-              type="date"
-              value={form.vigenciaInicio}
-              onChange={e => set('vigenciaInicio', e.target.value)}
-            />
-            <Input
-              label="Vigência fim"
-              name="tabela-vigencia-fim"
-              type="date"
-              value={form.vigenciaFim}
-              onChange={e => set('vigenciaFim', e.target.value)}
-            />
-          </div>
-          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.ativo}
-              onChange={e => set('ativo', e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-brand-600 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-brand-500/30 focus:ring-offset-0"
-            />
-            <span className="text-sm text-slate-700 dark:text-slate-300">Tabela ativa</span>
-          </label>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!deleting}

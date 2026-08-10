@@ -46,7 +46,7 @@ export default function Tabs({ tabs, defaultTab, className = '' }: TabsProps) {
   return (
     <div className={className}>
       {/* Cabeçalho das abas — rolável no mobile */}
-      <div className="border-b border-slate-200 dark:border-slate-800 overflow-x-auto">
+      <div className="border-b border-slate-200 dark:border-slate-800 overflow-x-auto overflow-y-hidden">
         <nav className="-mb-px flex gap-6 whitespace-nowrap" aria-label="Tabs">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;

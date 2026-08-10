@@ -64,7 +64,11 @@ export default function DetailView({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
                 {fields.map((field) => {
                   const value = data[field.key];
-                  const displayValue = field.render ? field.render(value) : (value ?? '—');
+                  const displayValue: ReactNode = field.render
+                    ? field.render(value)
+                    : value == null || value === ''
+                      ? '—'
+                      : String(value);
                   return (
                     <div key={field.key} className="border-b border-slate-100 dark:border-slate-800 pb-2.5">
                       <label className="block text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">

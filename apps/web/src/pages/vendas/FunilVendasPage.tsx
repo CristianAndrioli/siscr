@@ -1,17 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import BaseListPage from '../../components/common/BaseListPage';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import Alert from '../../components/common/Alert';
-import { PessoaBusca } from '../../components/PessoaBusca';
-import { formatApiError } from '../../utils/helpers';
 import { fmtBRL } from '../../utils/format';
 import {
   oportunidadesService, ESTAGIO_LABEL, ESTAGIOS_KANBAN,
-  type Oportunidade, type OportunidadeForm, type Estagio,
+  type Oportunidade, type Estagio,
 } from '../../services/oportunidades';
-
-const emptyForm = (): OportunidadeForm => ({ titulo: '', valorEstimado: 0, probabilidade: 50 });
 
 const COLUNA_CLS: Record<Estagio, string> = {
   novo: 'border-t-slate-400',
@@ -23,15 +20,10 @@ const COLUNA_CLS: Record<Estagio, string> = {
 };
 
 export default function FunilVendasPage() {
+  const navigate = useNavigate();
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState<OportunidadeForm>(emptyForm());
-  const [pessoaNome, setPessoaNome] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
   const [deleting, setDeleting] = useState<Oportunidade | null>(null);
 
   const dragIdRef = useRef<string | null>(null);
@@ -47,31 +39,6 @@ export default function FunilVendasPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  const openNew = () => {
-    setForm(emptyForm());
-    setPessoaNome('');
-    setFormError('');
-    setModalOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.titulo.trim()) {
-      setFormError('Informe um título para a oportunidade.');
-      return;
-    }
-    setSaving(true);
-    setFormError('');
-    try {
-      await oportunidadesService.create(form);
-      setModalOpen(false);
-      load();
-    } catch (err) {
-      setFormError(formatApiError(err, 'Erro ao criar oportunidade.'));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleDelete = async () => {
     if (!deleting) return;
@@ -96,7 +63,6 @@ export default function FunilVendasPage() {
       motivoPerda = resposta;
     }
 
-    // Atualização otimista — a tela é um Kanban, precisa responder ao drop imediatamente.
     setOportunidades(prev => prev.map(o => o.id === id ? { ...o, estagio } : o));
     try {
       await oportunidadesService.mudarEstagio(id, estagio, motivoPerda);
@@ -119,7 +85,7 @@ export default function FunilVendasPage() {
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {oportunidades.length} oportunidade(s) · {fmtBRL(oportunidades.filter(o => !['ganho', 'perdido'].includes(o.estagio)).reduce((s, o) => s + o.valor_estimado, 0))} em aberto
         </p>
-        <Button variant="primary" onClick={openNew}>+ Nova oportunidade</Button>
+        <Button variant="primary" onClick={() => navigate('/vendas-crm/funil/novo')}>+ Nova oportunidade</Button>
       </div>
 
       {error && <Alert type="error" message={error} onClose={() => setError('')} />}
@@ -192,51 +158,6 @@ export default function FunilVendasPage() {
           })}
         </div>
       )}
-
-      <Modal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="Nova oportunidade"
-        size="sm"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button variant="primary" onClick={handleSave} loading={saving}>Criar</Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {formError && <Alert type="error" message={formError} className="mb-0" />}
-          <div>
-            <label className="input-label">Título</label>
-            <input className="input" value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} placeholder="Ex.: Fornecimento de peças — Obra Norte" />
-          </div>
-          <div>
-            <label className="input-label">Cliente (opcional)</label>
-            <PessoaBusca
-              value={form.pessoaId ?? ''}
-              displayValue={pessoaNome}
-              onChange={(id, nome) => { setForm(f => ({ ...f, pessoaId: id || undefined })); setPessoaNome(nome); }}
-              tipoCadastro="cliente"
-              placeholder="Buscar cliente…"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="input-label">Valor estimado</label>
-              <input type="number" min="0" step="0.01" className="input" value={form.valorEstimado} onChange={e => setForm(f => ({ ...f, valorEstimado: Number(e.target.value) || 0 }))} />
-            </div>
-            <div>
-              <label className="input-label">Probabilidade (%)</label>
-              <input type="number" min="0" max="100" className="input" value={form.probabilidade} onChange={e => setForm(f => ({ ...f, probabilidade: Number(e.target.value) || 0 }))} />
-            </div>
-          </div>
-          <div>
-            <label className="input-label">Previsão de fechamento</label>
-            <input type="date" className="input" value={form.dataPrevistaFechamento ?? ''} onChange={e => setForm(f => ({ ...f, dataPrevistaFechamento: e.target.value || undefined }))} />
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         isOpen={!!deleting}

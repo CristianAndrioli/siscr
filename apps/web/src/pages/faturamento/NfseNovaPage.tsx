@@ -6,6 +6,7 @@ import { notasService } from '../../services/faturamentoService';
 import { fmtBRL } from '../../utils/format';
 import CurrencyInput from '../../components/common/CurrencyInput';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
+import PageContainer from '../../components/common/PageContainer';
 
 interface Servico {
   id: string;
@@ -96,7 +97,7 @@ export default function NfseNovaPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-16">
+    <PageContainer variant="form" className="space-y-6 pb-16">
       <div>
         <Link
           to="/faturamento/nfse"
@@ -271,6 +272,6 @@ export default function NfseNovaPage() {
           Configurar emissão
         </Link>
       </div>
-    </div>
+    </PageContainer>
   );
 }

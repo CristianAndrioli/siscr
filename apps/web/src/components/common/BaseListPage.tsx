@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { icons, Icon } from '../icons';
+import PageContainer from './PageContainer';
 
 interface BaseListPageProps {
   title: string;
@@ -21,7 +22,7 @@ interface BaseListPageProps {
  */
 export default function BaseListPage({ title, description, badge, dev, onExport, children }: BaseListPageProps) {
   return (
-    <div className="space-y-5 animate-fade-up">
+    <PageContainer variant="list" className="space-y-5">
       {dev && (
         <div
           role="status"
@@ -51,6 +52,6 @@ export default function BaseListPage({ title, description, badge, dev, onExport,
       </div>
 
       {children}
-    </div>
+    </PageContainer>
   );
 }
