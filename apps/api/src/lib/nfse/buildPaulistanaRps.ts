@@ -4,6 +4,12 @@ function money(v: number): string {
   return (Math.round((Number.isFinite(v) ? v : 0) * 100) / 100).toFixed(2)
 }
 
+/** Valor em centavos, 15 dígitos, sem ponto (assinatura RPS Paulistana). */
+function centavos15(v: number): string {
+  const cents = Math.round((Number.isFinite(v) ? v : 0) * 100)
+  return String(Math.max(0, cents)).padStart(15, '0')
+}
+
 export type BuildPaulistanaRpsInput = {
   idAttr: string
   cnpjPrestador: string
@@ -18,27 +24,81 @@ export type BuildPaulistanaRpsInput = {
   discriminacao: string
   cpfCnpjTomador: string
   nomeTomador: string
+  /** Assinatura posicional SHA1+RSA do RPS (Base64). Obrigatória na Prefeitura. */
+  assinaturaRps: string
   /** Ambiente 2 → TesteEnvioLoteRPS (mesmo endpoint de produção). */
   ambiente: 1 | 2
 }
 
+export type AssinaturaRpsFields = {
+  imPrestador: string
+  serieRps: string
+  numeroRps: number
+  dataEmissao: string
+  tributacaoRps?: string
+  statusRps?: string
+  issRetido?: boolean
+  valorServicos: number
+  valorDeducoes?: number
+  codigoServico: string
+  cpfCnpjTomador: string
+}
+
 /**
- * PedidoEnvioLoteRPS (layout v2 / reforma 2026 — campos mínimos ISS).
+ * Cadeia ASCII da assinatura do RPS (layout v1 — 86 posições sem intermediário).
+ * Manual Paulistana §4.3.2.
+ */
+export function buildAssinaturaRpsStringV1(fields: AssinaturaRpsFields): string {
+  const im = onlyDigits(fields.imPrestador).padStart(8, '0').slice(-8)
+  const serie = String(fields.serieRps || '1').slice(0, 5).padEnd(5, ' ')
+  const numero = String(Math.max(1, Math.floor(fields.numeroRps))).padStart(12, '0')
+  const data = onlyDigits(fields.dataEmissao).slice(0, 8) // AAAAMMDD
+  const tributacao = (fields.tributacaoRps || 'T').slice(0, 1)
+  const status = (fields.statusRps || 'N').slice(0, 1)
+  const issRetido = fields.issRetido ? 'S' : 'N'
+  const valorServ = centavos15(fields.valorServicos)
+  const valorDed = centavos15(fields.valorDeducoes ?? 0)
+  const codServ = onlyDigits(fields.codigoServico).padStart(5, '0').slice(-5)
+  const tomDoc = onlyDigits(fields.cpfCnpjTomador)
+  let indTom = '3'
+  if (tomDoc.length === 11) indTom = '1'
+  else if (tomDoc.length === 14) indTom = '2'
+  const docTom = tomDoc.padStart(14, '0').slice(-14)
+
+  return (
+    im +
+    serie +
+    numero +
+    data +
+    tributacao +
+    status +
+    issRetido +
+    valorServ +
+    valorDed +
+    codServ +
+    indTom +
+    docTom
+  )
+}
+
+/**
+ * PedidoEnvioLoteRPS layout v1 (estável no WS síncrono atual).
  * Assinatura envelopada sobre o PedidoEnvioLoteRPS (Id).
  *
  * Layout Paulistana: https://nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx
  */
 export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): string {
   const cnpj = onlyDigits(input.cnpjPrestador)
-  const im = xmlEscape(String(input.imPrestador || '').trim())
+  const im = onlyDigits(input.imPrestador).padStart(8, '0').slice(-8)
   const serie = xmlEscape(String(input.serieRps || '1').slice(0, 5))
   const nRps = String(Math.max(1, Math.floor(input.numeroRps)))
-  const codServ = onlyDigits(input.codigoServico).slice(0, 5) || '01001'
+  const codServ = onlyDigits(input.codigoServico).padStart(5, '0').slice(-5) || '01001'
   const tomDoc = onlyDigits(input.cpfCnpjTomador)
   const isCpf = tomDoc.length === 11
   const dt = xmlEscape(input.dataEmissao.slice(0, 10))
-  // Alíquota Paulistana: fração (5% → 0.05) em alguns layouts; usamos percentual / 100
+  // Alíquota Paulistana: fração (5% → 0.05)
   const aliq = money(input.aliquotaIss / 100)
+  const assinatura = xmlEscape(input.assinaturaRps || '')
 
   const tomador =
     tomDoc.length >= 11
@@ -46,25 +106,9 @@ export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): st
          <RazaoSocialTomador>${xmlEscape(input.nomeTomador || 'TOMADOR')}</RazaoSocialTomador>`
       : ''
 
-  // Campos IBSCBS mínimos exigidos no schema v2 (reforma 2026)
-  const ibscbs = `
-    <IBSCBS>
-      <finNFSe>0</finNFSe>
-      <indFinal>0</indFinal>
-      <cIndOp>100501</cIndOp>
-      <indDest>0</indDest>
-      <valores>
-        <trib>
-          <gIBSCBS>
-            <cClassTrib>000001</cClassTrib>
-          </gIBSCBS>
-        </trib>
-      </valores>
-    </IBSCBS>`
-
   const rps = `
     <RPS>
-      <Assinatura></Assinatura>
+      <Assinatura>${assinatura}</Assinatura>
       <ChaveRPS>
         <InscricaoPrestador>${im}</InscricaoPrestador>
         <SerieRPS>${serie}</SerieRPS>
@@ -87,23 +131,33 @@ export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): st
       ${tomador}
       <Discriminacao>${xmlEscape(input.discriminacao).slice(0, 2000)}</Discriminacao>
       <ValorISS>${money(input.valorIss)}</ValorISS>
-      <cLocPrestacao>3550308</cLocPrestacao>
-      ${ibscbs}
     </RPS>`
 
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<PedidoEnvioLoteRPS xmlns="http://www.prefeitura.sp.gov.br/nfe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Id="${input.idAttr}">` +
-    `<Cabecalho Versao="2" xmlns="">` +
+    `<Cabecalho Versao="1" xmlns="">` +
     `<CPFCNPJRemetente><CNPJ>${cnpj}</CNPJ></CPFCNPJRemetente>` +
-    `<transacao>true</transacao>` +
+    `<transacao>false</transacao>` +
     `<dtInicio>${dt}</dtInicio>` +
     `<dtFim>${dt}</dtFim>` +
     `<QtdRPS>1</QtdRPS>` +
+    `<ValorTotalServicos>${money(input.valorServicos)}</ValorTotalServicos>` +
+    `<ValorTotalDeducoes>0.00</ValorTotalDeducoes>` +
     `</Cabecalho>` +
     `<Lote xmlns="">${rps}</Lote>` +
     `</PedidoEnvioLoteRPS>`
   )
+}
+
+/**
+ * SOAPAction do ASMX Paulistana (não é o nome do método SOAP).
+ * Ref.: clientes estáveis (ex. nfse-sp) e WSDL LoteNFe.
+ */
+export function paulistanaSoapAction(teste: boolean): string {
+  const action = teste ? 'testeenvio' : 'envioLoteRPS'
+  // ASP.NET exige aspas no header SOAPAction
+  return `"http://www.prefeitura.sp.gov.br/nfe/ws/${action}"`
 }
 
 export function wrapPaulistanaSoap(mensagemXml: string, teste: boolean): string {
@@ -121,7 +175,7 @@ export function wrapPaulistanaSoap(mensagemXml: string, teste: boolean): string 
     `xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
     `<soap:Body>` +
     `<${method} xmlns="http://www.prefeitura.sp.gov.br/nfe">` +
-    `<VersaoSchema>2</VersaoSchema>` +
+    `<VersaoSchema>1</VersaoSchema>` +
     `<MensagemXML>${escaped}</MensagemXML>` +
     `</${method}>` +
     `</soap:Body>` +

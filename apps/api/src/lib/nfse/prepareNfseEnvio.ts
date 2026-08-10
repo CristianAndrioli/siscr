@@ -7,9 +7,12 @@ import { decryptA1Bundle } from '../certBlob'
 import { formatDhEmiSp } from '../nfe/formatDhEmi'
 import { onlyDigits } from '../nfe/xmlEscape'
 import { buildDpsXml } from './buildDpsXml'
-import { buildPaulistanaPedidoLoteRps } from './buildPaulistanaRps'
+import {
+  buildAssinaturaRpsStringV1,
+  buildPaulistanaPedidoLoteRps,
+} from './buildPaulistanaRps'
 import { getNfseAdapter, resolveNfseAdapterKind } from './index'
-import { signXmlEnvelopedWithA1 } from './signNfseXml'
+import { signPaulistanaRpsAssinaturaWithA1, signXmlEnvelopedWithA1 } from './signNfseXml'
 
 export type PrepareNfseResult = {
   xmlPath: string
@@ -146,6 +149,33 @@ export async function prepareNfseEnvio(
   const idSeed = `${cMun}${cnpj}${serieCfg.padStart(5, '0')}${String(numero).padStart(15, '0')}`
   let unsigned: string
   let idAttr: string
+  const tomadorDoc = onlyDigits(str(pessoa?.cpf_cnpj))
+  const tomadorNome = str(pessoa?.nome) || 'TOMADOR'
+
+  const a1KeyFilial = filialId ? str(filial?.a1_r2_object_key) : ''
+  const a1KeyEmpresa = str(empresa.a1_r2_object_key)
+  const a1ObjectKey = a1KeyFilial || a1KeyEmpresa
+  const decryptScope = a1KeyFilial ? `filial:${filialId}` : empresaId
+
+  let pfxBytes: ArrayBuffer | null = null
+  let pfxPassword = ''
+
+  if (a1ObjectKey && env.CERT_BLOB_SECRET?.trim() && env.R2_STORAGE) {
+    const certObj = await env.R2_STORAGE.get(a1ObjectKey)
+    if (!certObj) throw new Error('Arquivo do certificado A1 não encontrado no armazenamento.')
+    const bundle = await decryptA1Bundle(
+      env.CERT_BLOB_SECRET,
+      tenantId,
+      decryptScope,
+      await certObj.arrayBuffer(),
+    )
+    pfxBytes = bundle.pfxBytes
+    pfxPassword = bundle.password
+  } else if (!options.devMode) {
+    throw new Error(
+      'Certificado A1 obrigatório para gerar NFS-e. Envie o .pfx em Configurações → Empresas/Filiais.',
+    )
+  }
 
   if (kind === 'nacional') {
     idAttr = `DPS${idSeed}`
@@ -157,8 +187,8 @@ export async function prepareNfseEnvio(
       cMun,
       cnpjPrestador: cnpj,
       imPrestador: im,
-      cpfCnpjTomador: onlyDigits(str(pessoa?.cpf_cnpj)),
-      nomeTomador: str(pessoa?.nome) || 'TOMADOR',
+      cpfCnpjTomador: tomadorDoc,
+      nomeTomador: tomadorNome,
       codigoServico,
       descricaoServico: descricao,
       valorServico,
@@ -167,6 +197,19 @@ export async function prepareNfseEnvio(
     })
   } else {
     idAttr = `Lote${idSeed.slice(0, 40)}`
+    let assinaturaRps = ''
+    if (pfxBytes) {
+      const cadeia = buildAssinaturaRpsStringV1({
+        imPrestador: im,
+        serieRps: serieCfg,
+        numeroRps: numero,
+        dataEmissao: dh,
+        valorServicos: valorServico,
+        codigoServico,
+        cpfCnpjTomador: tomadorDoc,
+      })
+      assinaturaRps = await signPaulistanaRpsAssinaturaWithA1(cadeia, pfxBytes, pfxPassword)
+    }
     unsigned = buildPaulistanaPedidoLoteRps({
       idAttr,
       cnpjPrestador: cnpj,
@@ -179,8 +222,9 @@ export async function prepareNfseEnvio(
       valorServicos: valorServico,
       valorIss,
       discriminacao: descricao,
-      cpfCnpjTomador: onlyDigits(str(pessoa?.cpf_cnpj)),
-      nomeTomador: str(pessoa?.nome) || 'TOMADOR',
+      cpfCnpjTomador: tomadorDoc,
+      nomeTomador: tomadorNome,
+      assinaturaRps,
       ambiente,
     })
   }
@@ -188,31 +232,14 @@ export async function prepareNfseEnvio(
   let signedXml = unsigned
   let signed = false
 
-  const a1KeyFilial = filialId ? str(filial?.a1_r2_object_key) : ''
-  const a1KeyEmpresa = str(empresa.a1_r2_object_key)
-  const a1ObjectKey = a1KeyFilial || a1KeyEmpresa
-  const decryptScope = a1KeyFilial ? `filial:${filialId}` : empresaId
-
-  if (a1ObjectKey && env.CERT_BLOB_SECRET?.trim() && env.R2_STORAGE) {
-    const certObj = await env.R2_STORAGE.get(a1ObjectKey)
-    if (!certObj) throw new Error('Arquivo do certificado A1 não encontrado no armazenamento.')
-    const bundle = await decryptA1Bundle(
-      env.CERT_BLOB_SECRET,
-      tenantId,
-      decryptScope,
-      await certObj.arrayBuffer(),
-    )
+  if (pfxBytes) {
     signedXml = await signXmlEnvelopedWithA1(
       unsigned,
       kind === 'nacional' ? `DPS${idSeed}` : idAttr,
-      bundle.pfxBytes,
-      bundle.password,
+      pfxBytes,
+      pfxPassword,
     )
     signed = true
-  } else if (!options.devMode) {
-    throw new Error(
-      'Certificado A1 obrigatório para gerar NFS-e. Envie o .pfx em Configurações → Empresas/Filiais.',
-    )
   }
 
   if (!env.R2_STORAGE) throw new Error('R2_STORAGE não configurado.')

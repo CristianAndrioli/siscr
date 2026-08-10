@@ -136,10 +136,11 @@ export default function NfseDetail() {
     if (!nota) return;
     setBusyTx(true);
     try {
-      if (nota.status === 'rascunho') {
-        const prep = await notasService.prepararNfse(nota.id, { force: false });
-        notify(prep.message, 'info');
-      }
+      // Sempre regenera antes de transmitir (Assinatura RPS + layout precisam estar atuais).
+      const prep = await notasService.prepararNfse(nota.id, {
+        force: Boolean(nota.xml_path) || nota.status === 'pendente_emissao',
+      });
+      notify(prep.message, 'info');
       const r = await notasService.transmitirNfse(nota.id);
       notify(
         `${r.message} Protocolo: ${r.protocolo ?? '—'}. Próximo passo: Faturar no ERP.`,

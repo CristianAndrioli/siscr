@@ -52,6 +52,24 @@ function findElementById(root: Element, idAttr: string): Element {
 }
 
 /**
+ * Assinatura posicional do RPS Paulistana: RSA-SHA1 da cadeia ASCII (Base64).
+ * O WebCrypto aplica SHA-1 + PKCS#1 v1.5 numa única operação (evita hash-de-hash).
+ */
+export async function signPaulistanaRpsAssinaturaWithA1(
+  cadeiaAscii: string,
+  pfxBytes: ArrayBuffer,
+  password: string,
+): Promise<string> {
+  const { privateKey } = await pfxToWebCryptoRsaSha1(pfxBytes, password)
+  const signatureBuf = await crypto.subtle.sign(
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
+    privateKey,
+    new TextEncoder().encode(cadeiaAscii),
+  )
+  return bytesToBase64(signatureBuf)
+}
+
+/**
  * Assina o documento XML envelopando Signature no elemento raiz.
  * O digest é calculado sobre o elemento com atributo Id = `idAttr`.
  */
