@@ -42,7 +42,7 @@ const COLUMNS: SmartColumn<Pessoa>[] = [
 
 export function PessoasList() {
   const navigate = useNavigate();
-  const { reportError, notify } = useErrorNotification();
+  const { reportError } = useErrorNotification();
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(() => loadGridListPage(GRID_ID));
@@ -50,7 +50,6 @@ export function PessoasList() {
     normalizeGridPageSize(loadGridPreferences(GRID_ID)?.pageSize),
   );
   const [loading, setLoading] = useState(true);
-  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
@@ -91,67 +90,31 @@ export function PessoasList() {
     }
   };
 
-  const handleSeedDemo = async () => {
-    if (
-      !window.confirm(
-        'Importar clientes, fornecedores, produtos e serviços de demonstração? Pode ser feito uma vez por tenant.',
-      )
-    ) {
-      return;
-    }
-    setSeeding(true);
-    setError('');
-    try {
-      const r = await pessoasService.seedDemo();
-      notify(
-        `${r.message || 'Importado.'} Pessoas: ${r.pessoas}, produtos: ${r.produtos}, serviços: ${r.servicos}.`,
-        'success',
-      );
-      await load();
-    } catch (err) {
-      const msg = formatApiError(err, 'Erro ao importar dados de demonstração.');
-      setError(msg);
-      notify(msg, 'warning');
-    } finally {
-      setSeeding(false);
-    }
-  };
-
   return (
     <BaseListPage
       title="Pessoas"
       description="Clientes, fornecedores e funcionários"
       onExport={() => exportRowsToCsv('pessoas', smartColumnsToCsv(COLUMNS), pessoas)}
     >
-      <div className="flex flex-wrap gap-2">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPage(0);
-            setAppliedSearch(searchInput.trim());
-          }}
-          className="flex gap-2 flex-1 min-w-[240px]"
-        >
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Buscar por nome ou CPF/CNPJ..."
-            className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
-          <button type="submit" className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-            Buscar
-          </button>
-        </form>
-        <button
-          type="button"
-          onClick={() => void handleSeedDemo()}
-          disabled={seeding}
-          className="btn-secondary text-sm disabled:opacity-50"
-        >
-          {seeding ? 'Importando…' : 'Importar dados demo'}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(0);
+          setAppliedSearch(searchInput.trim());
+        }}
+        className="flex gap-2"
+      >
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Buscar por nome ou CPF/CNPJ..."
+          className="flex-1 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+        <button type="submit" className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          Buscar
         </button>
-      </div>
+      </form>
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg text-sm">{error}</div>
