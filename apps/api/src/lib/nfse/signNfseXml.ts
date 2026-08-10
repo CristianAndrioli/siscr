@@ -51,6 +51,20 @@ function findElementById(root: Element, idAttr: string): Element {
   return found
 }
 
+function rootCloseTag(root: Element, body: string): { tag: string; idx: number } {
+  const qName = root.prefix ? `${root.prefix}:${root.localName}` : root.localName
+  const preferred = `</${qName}>`
+  let idx = body.lastIndexOf(preferred)
+  if (idx >= 0) return { tag: preferred, idx }
+  // Fallback sem prefixo / com prefixo diferente
+  const re = new RegExp(`</(?:[\\w.-]+:)?${root.localName}\\s*>`, 'g')
+  let m: RegExpExecArray | null
+  let last: RegExpExecArray | null = null
+  while ((m = re.exec(body)) !== null) last = m
+  if (!last) throw new Error(`XML sem fechamento de ${root.localName}.`)
+  return { tag: last[0], idx: last.index }
+}
+
 /**
  * Assinatura posicional do RPS Paulistana: RSA-SHA1 da cadeia ASCII (Base64).
  * O WebCrypto aplica SHA-1 + PKCS#1 v1.5 numa única operação (evita hash-de-hash).
@@ -71,11 +85,13 @@ export async function signPaulistanaRpsAssinaturaWithA1(
 
 /**
  * Assina o documento XML envelopando Signature no elemento raiz.
- * O digest é calculado sobre o elemento com atributo Id = `idAttr`.
+ *
+ * - `idAttr` string: Reference URI="#id" (DPS / NF-e style).
+ * - `idAttr` null: Reference URI="" sobre a raiz (Paulistana — XSD sem atributo Id).
  */
 export async function signXmlEnvelopedWithA1(
   unsignedXml: string,
-  idAttr: string,
+  idAttr: string | null,
   pfxBytes: ArrayBuffer,
   password: string,
 ): Promise<string> {
@@ -90,15 +106,16 @@ export async function signXmlEnvelopedWithA1(
   const root = doc.documentElement
   if (!root) throw new Error('XML inválido: sem elemento raiz.')
 
-  const target = findElementById(root, idAttr)
+  const target = idAttr ? findElementById(root, idAttr) : root
   const digestCanon = c14nElement(target)
   const digestValue = bytesToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(digestCanon)))
 
+  const refUri = idAttr ? `#${idAttr}` : ''
   const signedInfoForSign =
     `<SignedInfo xmlns="${DS_NS}">` +
     `<CanonicalizationMethod Algorithm="${C14N_ALG}"/>` +
     `<SignatureMethod Algorithm="${RSA_SHA1}"/>` +
-    `<Reference URI="#${idAttr}">` +
+    `<Reference URI="${refUri}">` +
     `<Transforms>` +
     `<Transform Algorithm="${ENV_ALG}"/>` +
     `<Transform Algorithm="${C14N_ALG}"/>` +
@@ -122,7 +139,7 @@ export async function signXmlEnvelopedWithA1(
     `<SignedInfo>` +
     `<CanonicalizationMethod Algorithm="${C14N_ALG}"/>` +
     `<SignatureMethod Algorithm="${RSA_SHA1}"/>` +
-    `<Reference URI="#${idAttr}">` +
+    `<Reference URI="${refUri}">` +
     `<Transforms>` +
     `<Transform Algorithm="${ENV_ALG}"/>` +
     `<Transform Algorithm="${C14N_ALG}"/>` +
@@ -136,11 +153,7 @@ export async function signXmlEnvelopedWithA1(
     `</Signature>`
 
   const body = stripXmlDecl(unsignedXml)
-  const closeTag = `</${root.localName}>`
-  const idx = body.lastIndexOf(closeTag)
-  if (idx < 0) {
-    throw new Error(`XML sem fechamento ${closeTag}.`)
-  }
+  const { idx } = rootCloseTag(root, body)
   const signed = body.slice(0, idx) + signature + body.slice(idx)
   return `<?xml version="1.0" encoding="UTF-8"?>${signed}`
 }

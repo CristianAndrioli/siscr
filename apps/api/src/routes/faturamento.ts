@@ -6,12 +6,17 @@ import { auditUserId } from '../lib/audit'
 import { parseListPagination } from '../lib/listPagination'
 import { prepareNfeEnvio } from '../lib/nfe/prepareNfeEnvio'
 import { buildDanfePreviewHtml } from '../lib/nfe/danfePreviewHtml'
+import { buildNfsePreviewHtml } from '../lib/nfse/nfsePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import { validateNfeXmlDocumento } from '../lib/nfe/validateNfeXmlDocumento'
 import { enviarNfeAutorizacao } from '../lib/nfe/autorizacaoNfe'
 import { assertNfeQuotaAvailable, incrementNfeUsoMes } from '../lib/nfe/nfeQuota'
 import { prepareNfseEnvio } from '../lib/nfse/prepareNfseEnvio'
 import { getNfseAdapter } from '../lib/nfse'
+import {
+  formatNfseXmlValidationErrors,
+  validatePaulistanaPedidoXml,
+} from '../lib/nfse/validatePaulistanaPedidoXml'
 import { decryptA1Bundle } from '../lib/certBlob'
 import { onlyDigits } from '../lib/nfe/xmlEscape'
 import { appendNotaEventoLog } from '../lib/notaEventoLog'
@@ -891,6 +896,29 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
     )
   }
 
+  if (adapter.kind === 'paulistana') {
+    const schemaCheck = validatePaulistanaPedidoXml(xmlAssinado)
+    if (!schemaCheck.ok) {
+      const detail = formatNfseXmlValidationErrors(schemaCheck.errors)
+      await appendNotaEventoLog(c.env.DB_SHARED, {
+        tenantId: tenant.tenantId,
+        notaId: id,
+        routePrefix: '/faturamento/nfse',
+        friendlyMessage: `XML rejeitado na confrontação local: ${schemaCheck.errors[0]?.message || 'inválido'}`,
+        technical: detail,
+        context: 'Confrontação NFS-e (antes da prefeitura)',
+      })
+      return c.json(
+        {
+          error: `XML incompatível com o layout Paulistana (confrontação local). Regenere o XML. ${detail}`,
+          code: 'NFSE_XML_INVALID',
+          errors: schemaCheck.errors,
+        },
+        400,
+      )
+    }
+  }
+
   let a1ObjectKey: string | null = null
   let decryptScope = nota.empresa_id || ''
   if (nota.filial_id && nota.filial_a1_key) {
@@ -1032,7 +1060,8 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
 })
 
 /**
- * Confronta o XML armazenado com regras do leiaute 4.00 (sem transmitir à SEFAZ).
+ * Confronta o XML armazenado com regras de leiaute (NF-e 4.00 ou NFS-e Paulistana),
+ * sem transmitir à SEFAZ/prefeitura.
  */
 app.post('/notas/:id/validar-xml', async (c) => {
   const tenant = c.get('tenant')
@@ -1047,13 +1076,13 @@ app.post('/notas/:id/validar-xml', async (c) => {
     .first<{ id: string; tipo: string; xml_path: string | null; chave_acesso: string | null }>()
 
   if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
-  if (nota.tipo !== 'nfe') {
-    return c.json({ error: 'Validação de leiaute disponível apenas para NF-e.' }, 400)
+  if (nota.tipo !== 'nfe' && nota.tipo !== 'nfse') {
+    return c.json({ error: 'Validação de leiaute disponível para NF-e e NFS-e.' }, 400)
   }
   if (!nota.xml_path) {
     return c.json(
       {
-        error: 'Gere o XML antes de validar (Preparar XML).',
+        error: 'Gere o XML antes de validar (Preparar XML/DPS).',
         ok: false,
         errors: [{ path: '/', message: 'XML ainda não gerado.' }],
       },
@@ -1065,8 +1094,30 @@ app.post('/notas/:id/validar-xml', async (c) => {
   const obj = await c.env.R2_STORAGE.get(nota.xml_path)
   if (!obj) return c.json({ error: 'Arquivo XML não encontrado no armazenamento.' }, 404)
   const xml = await obj.text()
-  const result = validateNfeXmlDocumento(xml)
   const hasSig = /<(?:[\w.-]+:)?Signature\b/i.test(xml)
+
+  if (nota.tipo === 'nfse') {
+    const result = validatePaulistanaPedidoXml(xml)
+    if (!hasSig) {
+      result.errors.push({
+        path: 'PedidoEnvioLoteRPS/Signature',
+        message: 'Assinatura digital XML-DSig ausente — necessária para transmitir à prefeitura.',
+      })
+      result.ok = false
+    }
+    return c.json({
+      ok: result.ok,
+      layoutVersion: 'paulistana-v1',
+      chaveAcesso: nota.chave_acesso,
+      signed: hasSig,
+      errors: result.errors,
+      message: result.ok
+        ? 'XML conforme Paulistana v1 (confrontação local).'
+        : `Encontrado(s) ${result.errors.length} problema(s) no layout Paulistana v1.`,
+    })
+  }
+
+  const result = validateNfeXmlDocumento(xml)
   if (!hasSig) {
     result.errors.push({
       path: '/NFe/Signature',
@@ -1300,27 +1351,47 @@ app.post('/notas/:id/transmitir', async (c) => {
   }
 })
 
-// GET XML (mantido para futura integração)
+// GET XML (NF-e / NFS-e)
 app.get('/notas/:id/xml', async (c) => {
   const tenant = c.get('tenant')
   const id = c.req.param('id')
 
   const nota = await c.env.DB_SHARED
-    .prepare('SELECT xml_path, chave_acesso FROM notas_fiscais WHERE id = ? AND tenant_id = ?')
+    .prepare(
+      `SELECT xml_path, chave_acesso, tipo, numero, serie, protocolo_autorizacao
+       FROM notas_fiscais WHERE id = ? AND tenant_id = ?`,
+    )
     .bind(id, tenant.tenantId)
-    .first<{ xml_path: string; chave_acesso: string }>()
+    .first<{
+      xml_path: string | null
+      chave_acesso: string | null
+      tipo: string
+      numero: number | null
+      serie: string | null
+      protocolo_autorizacao: string | null
+    }>()
 
-  if (!nota?.xml_path) return c.json({ error: 'XML não disponível.' }, 404)
+  if (!nota?.xml_path) return c.json({ error: 'XML não disponível. Gere o XML/DPS primeiro.' }, 404)
 
   if (!c.env.R2_STORAGE) return c.json({ error: 'Armazenamento não configurado.' }, 503)
   const object = await c.env.R2_STORAGE.get(nota.xml_path)
   if (!object) return c.json({ error: 'Arquivo XML não encontrado.' }, 404)
 
   const xml = await object.text()
+  const n = String(Math.max(0, Number(nota.numero) || 0)).padStart(6, '0')
+  const serie = (nota.serie || '1').replace(/[^\w.-]/g, '').slice(0, 10) || '1'
+  let filename = `nota-${id}.xml`
+  if (nota.chave_acesso) {
+    filename = `${nota.chave_acesso}.xml`
+  } else if (nota.tipo === 'nfse') {
+    const proto = (nota.protocolo_autorizacao || '').replace(/[^\w.-]/g, '').slice(0, 24)
+    filename = proto ? `NFSe-${n}-${serie}-${proto}.xml` : `NFSe-${n}-${serie}.xml`
+  }
+
   return new Response(xml, {
     headers: {
-      'Content-Type': 'application/xml',
-      'Content-Disposition': `attachment; filename="${nota.chave_acesso}.xml"`,
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
     },
   })
 })
@@ -1347,7 +1418,7 @@ app.get('/notas/:id/verificacao-assinatura', async (c) => {
   return c.json(r)
 })
 
-/** HTML imprimível — prévia estilo DANFE para testes (não é o leiaute oficial em PDF). */
+/** HTML imprimível — prévia estilo DANFE (NF-e) ou DANFSe (NFS-e). */
 app.get('/notas/:id/danfe-preview', async (c) => {
   const tenant = c.get('tenant')
   const id = c.req.param('id')
@@ -1366,10 +1437,11 @@ app.get('/notas/:id/danfe-preview', async (c) => {
     .first<Record<string, unknown>>()
 
   if (!nota) return c.json({ error: 'Nota não encontrada.' }, 404)
-  if (String(nota.tipo) !== 'nfe') return c.json({ error: 'Prévia disponível apenas para NF-e.' }, 400)
 
-  const chave = nota.chave_acesso == null ? '' : String(nota.chave_acesso)
-  if (!chave) return c.json({ error: 'Gere o XML primeiro para obter a chave de acesso.' }, 400)
+  const tipo = String(nota.tipo || '')
+  if (tipo !== 'nfe' && tipo !== 'nfse') {
+    return c.json({ error: 'Prévia disponível para NF-e e NFS-e.' }, 400)
+  }
 
   const empresaId = nota.empresa_id == null ? '' : String(nota.empresa_id)
   if (!empresaId) return c.json({ error: 'Nota sem empresa.' }, 400)
@@ -1390,6 +1462,68 @@ app.get('/notas/:id/danfe-preview', async (c) => {
       .first<Record<string, unknown>>()
   }
 
+  const str = (v: unknown) => (v == null ? '' : String(v))
+  const num = (v: unknown, d = 0) => {
+    if (v == null) return d
+    const n = Number(v)
+    return Number.isFinite(n) ? n : d
+  }
+
+  const emitenteBase = {
+    razaoSocial: str(empresa.razao_social) || 'Emitente',
+    cnpj: str(empresa.cnpj),
+    logradouro: filial ? str(filial.logradouro) || str(empresa.logradouro) : str(empresa.logradouro),
+    numero: filial ? str(filial.numero) || str(empresa.numero) : str(empresa.numero),
+    bairro: filial ? str(filial.bairro) || str(empresa.bairro) : str(empresa.bairro),
+    cidade: filial ? str(filial.cidade) || str(empresa.cidade) : str(empresa.cidade),
+    uf: filial ? str(filial.uf) || str(empresa.uf) : str(empresa.uf),
+    cep: filial ? str(filial.cep) || str(empresa.cep) : str(empresa.cep),
+  }
+
+  if (tipo === 'nfse') {
+    if (!nota.xml_path) {
+      return c.json({ error: 'Gere o XML/DPS primeiro para abrir a prévia.' }, 400)
+    }
+    const im =
+      (filial ? str(filial.inscricao_municipal) : '') || str(empresa.inscricao_municipal)
+    const destNome = str(nota.destinatario_nome)
+    const html = buildNfsePreviewHtml({
+      numero: String(num(nota.numero, 0)).padStart(6, '0'),
+      serie: str(nota.serie) || '1',
+      ambiente: String(num(nota.ambiente, 2)),
+      protocolo: str(nota.protocolo_autorizacao) || null,
+      dataEmissao: str(nota.data_emissao) || null,
+      dataAutorizacao: str(nota.data_autorizacao) || null,
+      codigoServico: str(nota.codigo_servico) || str(empresa.nfse_codigo_servico_padrao) || null,
+      descricaoServico: str(nota.descricao_servico) || 'Prestação de serviços',
+      aliquotaIss: nota.aliquota_iss == null ? null : num(nota.aliquota_iss, 0),
+      valorIss: nota.valor_iss == null ? null : num(nota.valor_iss, 0),
+      valorServicos: num(nota.valor_total, 0),
+      emitente: { ...emitenteBase, im: im || null },
+      tomador: destNome
+        ? {
+            nome: destNome,
+            doc: str(nota.destinatario_doc),
+            logradouro: str(nota.dest_logradouro),
+            numero: str(nota.dest_numero),
+            bairro: str(nota.dest_bairro),
+            cidade: str(nota.dest_cidade),
+            uf: str(nota.dest_uf),
+            cep: str(nota.dest_cep),
+          }
+        : null,
+    })
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'private, max-age=60',
+      },
+    })
+  }
+
+  const chave = nota.chave_acesso == null ? '' : String(nota.chave_acesso)
+  if (!chave) return c.json({ error: 'Gere o XML primeiro para obter a chave de acesso.' }, 400)
+
   const { results: itensRows } = await c.env.DB_SHARED
     .prepare(
       `SELECT ni.*, pr.codigo as produto_codigo
@@ -1401,25 +1535,6 @@ app.get('/notas/:id/danfe-preview', async (c) => {
     .all()
 
   const itensList = (itensRows ?? []) as Record<string, unknown>[]
-
-  const str = (v: unknown) => (v == null ? '' : String(v))
-  const num = (v: unknown, d = 0) => {
-    if (v == null) return d
-    const n = Number(v)
-    return Number.isFinite(n) ? n : d
-  }
-
-  const emitente = {
-    razaoSocial: str(empresa.razao_social) || 'Emitente',
-    cnpj: str(empresa.cnpj),
-    ie: str(empresa.inscricao_estadual),
-    logradouro: filial ? str(filial.logradouro) || str(empresa.logradouro) : str(empresa.logradouro),
-    numero: filial ? str(filial.numero) || str(empresa.numero) : str(empresa.numero),
-    bairro: filial ? str(filial.bairro) || str(empresa.bairro) : str(empresa.bairro),
-    cidade: filial ? str(filial.cidade) || str(empresa.cidade) : str(empresa.cidade),
-    uf: filial ? str(filial.uf) || str(empresa.uf) : str(empresa.uf),
-    cep: filial ? str(filial.cep) || str(empresa.cep) : str(empresa.cep),
-  }
 
   const destNome = str(nota.destinatario_nome)
   const dest = destNome
@@ -1452,7 +1567,10 @@ app.get('/notas/:id/danfe-preview', async (c) => {
     ambiente: String(num(nota.ambiente, 2)),
     chaveAcesso: chave,
     dataEmissao: str(nota.data_emissao) || null,
-    emitente,
+    emitente: {
+      ...emitenteBase,
+      ie: str(empresa.inscricao_estadual),
+    },
     destinatario: dest,
     itens,
     valorTotal: num(nota.valor_total, 0),

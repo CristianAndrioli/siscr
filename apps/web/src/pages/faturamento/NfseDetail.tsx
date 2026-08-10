@@ -50,6 +50,7 @@ export default function NfseDetail() {
   const [loading, setLoading] = useState(true);
   const [busyPrep, setBusyPrep] = useState(false);
   const [busyTx, setBusyTx] = useState(false);
+  const [xmlToolsBusy, setXmlToolsBusy] = useState(false);
 
   const [notaLogs, setNotaLogs] = useState<ErrorLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -164,6 +165,44 @@ export default function NfseDetail() {
       await load();
     } finally {
       setBusyTx(false);
+    }
+  };
+
+  const handleDownloadXml = async () => {
+    if (!nota) return;
+    setXmlToolsBusy(true);
+    try {
+      const blob = await notasService.downloadXml(nota.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const n = String(nota.numero ?? 0).padStart(6, '0');
+      const serie = nota.serie || '1';
+      a.download = `NFSe-${n}-${serie}.xml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify('Download do XML iniciado.', 'info');
+    } catch (err: unknown) {
+      reportError('Erro ao baixar XML da NFS-e.', err, 'Faturamento NFS-e');
+      void loadNotaLogs();
+    } finally {
+      setXmlToolsBusy(false);
+    }
+  };
+
+  const handleDanfePreview = async () => {
+    if (!nota) return;
+    setXmlToolsBusy(true);
+    try {
+      const blob = await notasService.danfePreviewBlob(nota.id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    } catch (err: unknown) {
+      reportError('Erro ao abrir prévia DANFSe.', err, 'Faturamento NFS-e');
+      void loadNotaLogs();
+    } finally {
+      setXmlToolsBusy(false);
     }
   };
 
@@ -365,6 +404,44 @@ export default function NfseDetail() {
             <span className="font-semibold">Obs: </span>
             {nota.observacoes}
           </p>
+        )}
+
+        {(nota.xml_path ||
+          nota.status === 'pendente_emissao' ||
+          nota.status === 'autorizada' ||
+          nota.status === 'emitida') && (
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 text-xs space-y-2">
+            <p className="font-semibold text-slate-600 dark:text-slate-300">XML / documento auxiliar</p>
+            {nota.xml_path && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 break-all font-mono">
+                {nota.xml_path}
+              </p>
+            )}
+            {nota.protocolo_autorizacao && (
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                Protocolo/nº prefeitura:{' '}
+                <span className="font-mono font-medium">{nota.protocolo_autorizacao}</span>
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => void handleDownloadXml()}
+                disabled={xmlToolsBusy}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Baixar XML
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDanfePreview()}
+                disabled={xmlToolsBusy}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+              >
+                Prévia DANFSe
+              </button>
+            </div>
+          </div>
         )}
 
         {nota.motivo_cancelamento && (

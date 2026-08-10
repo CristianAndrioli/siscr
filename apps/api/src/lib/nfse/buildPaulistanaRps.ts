@@ -11,7 +11,6 @@ function centavos15(v: number): string {
 }
 
 export type BuildPaulistanaRpsInput = {
-  idAttr: string
   cnpjPrestador: string
   imPrestador: string
   serieRps: string
@@ -82,10 +81,10 @@ export function buildAssinaturaRpsStringV1(fields: AssinaturaRpsFields): string 
 }
 
 /**
- * PedidoEnvioLoteRPS layout v1 (estável no WS síncrono atual).
- * Assinatura envelopada sobre o PedidoEnvioLoteRPS (Id).
+ * PedidoEnvioLoteRPS layout v1 alinhado ao WS síncrono (sem atributo Id — XSD não declara).
+ * Assinatura XML-DSig com Reference URI="" (documento raiz).
  *
- * Layout Paulistana: https://nfe.prefeitura.sp.gov.br/ws/lotenfe.asmx
+ * Estrutura: Cabecalho + RPS* (sem wrapper Lote) — igual clientes estáveis (nfse-sp).
  */
 export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): string {
   const cnpj = onlyDigits(input.cnpjPrestador)
@@ -102,41 +101,37 @@ export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): st
 
   const tomador =
     tomDoc.length >= 11
-      ? `<CPFCNPJTomador>${isCpf ? `<CPF>${tomDoc}</CPF>` : `<CNPJ>${tomDoc}</CNPJ>`}</CPFCNPJTomador>
-         <RazaoSocialTomador>${xmlEscape(input.nomeTomador || 'TOMADOR')}</RazaoSocialTomador>`
+      ? `<CPFCNPJTomador>${isCpf ? `<CPF>${tomDoc}</CPF>` : `<CNPJ>${tomDoc}</CNPJ>`}</CPFCNPJTomador>` +
+        `<RazaoSocialTomador>${xmlEscape(input.nomeTomador || 'TOMADOR')}</RazaoSocialTomador>`
       : ''
 
-  const rps = `
-    <RPS>
-      <Assinatura>${assinatura}</Assinatura>
-      <ChaveRPS>
-        <InscricaoPrestador>${im}</InscricaoPrestador>
-        <SerieRPS>${serie}</SerieRPS>
-        <NumeroRPS>${nRps}</NumeroRPS>
-      </ChaveRPS>
-      <TipoRPS>RPS</TipoRPS>
-      <DataEmissao>${dt}</DataEmissao>
-      <StatusRPS>N</StatusRPS>
-      <TributacaoRPS>T</TributacaoRPS>
-      <ValorServicos>${money(input.valorServicos)}</ValorServicos>
-      <ValorDeducoes>0.00</ValorDeducoes>
-      <ValorPIS>0.00</ValorPIS>
-      <ValorCOFINS>0.00</ValorCOFINS>
-      <ValorINSS>0.00</ValorINSS>
-      <ValorIR>0.00</ValorIR>
-      <ValorCSLL>0.00</ValorCSLL>
-      <CodigoServico>${codServ}</CodigoServico>
-      <Aliquota>${aliq}</Aliquota>
-      <ISSRetido>false</ISSRetido>
-      ${tomador}
-      <Discriminacao>${xmlEscape(input.discriminacao).slice(0, 2000)}</Discriminacao>
-      <ValorISS>${money(input.valorIss)}</ValorISS>
-    </RPS>`
+  const rps =
+    `<RPS>` +
+    `<Assinatura>${assinatura}</Assinatura>` +
+    `<ChaveRPS>` +
+    `<InscricaoPrestador>${im}</InscricaoPrestador>` +
+    `<SerieRPS>${serie}</SerieRPS>` +
+    `<NumeroRPS>${nRps}</NumeroRPS>` +
+    `</ChaveRPS>` +
+    `<TipoRPS>RPS</TipoRPS>` +
+    `<DataEmissao>${dt}</DataEmissao>` +
+    `<StatusRPS>N</StatusRPS>` +
+    `<TributacaoRPS>T</TributacaoRPS>` +
+    `<ValorServicos>${money(input.valorServicos)}</ValorServicos>` +
+    `<ValorDeducoes>0.00</ValorDeducoes>` +
+    `<CodigoServico>${codServ}</CodigoServico>` +
+    `<AliquotaServicos>${aliq}</AliquotaServicos>` +
+    `<ISSRetido>false</ISSRetido>` +
+    tomador +
+    `<Discriminacao>${xmlEscape(input.discriminacao).slice(0, 2000)}</Discriminacao>` +
+    `</RPS>`
 
+  // Prefixo p1 no raiz (padrão Paulistana); filhos sem prefixo (elementFormDefault=unqualified).
+  // Sem atributo Id — o XSD v1 não declara e a Prefeitura rejeita com 1001.
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<PedidoEnvioLoteRPS xmlns="http://www.prefeitura.sp.gov.br/nfe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Id="${input.idAttr}">` +
-    `<Cabecalho Versao="1" xmlns="">` +
+    `<p1:PedidoEnvioLoteRPS xmlns:p1="http://www.prefeitura.sp.gov.br/nfe">` +
+    `<Cabecalho Versao="1">` +
     `<CPFCNPJRemetente><CNPJ>${cnpj}</CNPJ></CPFCNPJRemetente>` +
     `<transacao>false</transacao>` +
     `<dtInicio>${dt}</dtInicio>` +
@@ -145,8 +140,8 @@ export function buildPaulistanaPedidoLoteRps(input: BuildPaulistanaRpsInput): st
     `<ValorTotalServicos>${money(input.valorServicos)}</ValorTotalServicos>` +
     `<ValorTotalDeducoes>0.00</ValorTotalDeducoes>` +
     `</Cabecalho>` +
-    `<Lote xmlns="">${rps}</Lote>` +
-    `</PedidoEnvioLoteRPS>`
+    rps +
+    `</p1:PedidoEnvioLoteRPS>`
   )
 }
 
@@ -167,9 +162,8 @@ function cdataSafe(xml: string): string {
 
 export function wrapPaulistanaSoap(mensagemXml: string, teste: boolean): string {
   const method = teste ? 'TesteEnvioLoteRPS' : 'EnvioLoteRPS'
-  // WSDL ASMX: elemento envoltório é `{Método}Request` (não o nome do método).
-  // MensagemXML em CDATA — sem isso o parser SOAP trata o Pedido como filhos e
-  // a string fica vazia → erro 1102 "Mensagem XML de Pedido sem conteúdo".
+  // WSDL ASMX: elemento envoltório é `{Método}Request`.
+  // MensagemXML em CDATA — evita 1102 (parser SOAP esvazia a string).
   const body = cdataSafe(mensagemXml)
   return (
     `<?xml version="1.0" encoding="utf-8"?>` +

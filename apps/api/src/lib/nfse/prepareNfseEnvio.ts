@@ -13,6 +13,10 @@ import {
 } from './buildPaulistanaRps'
 import { getNfseAdapter, resolveNfseAdapterKind } from './index'
 import { signPaulistanaRpsAssinaturaWithA1, signXmlEnvelopedWithA1 } from './signNfseXml'
+import {
+  formatNfseXmlValidationErrors,
+  validatePaulistanaPedidoXml,
+} from './validatePaulistanaPedidoXml'
 
 export type PrepareNfseResult = {
   xmlPath: string
@@ -148,7 +152,7 @@ export async function prepareNfseEnvio(
 
   const idSeed = `${cMun}${cnpj}${serieCfg.padStart(5, '0')}${String(numero).padStart(15, '0')}`
   let unsigned: string
-  let idAttr: string
+  let signIdAttr: string | null = null
   const tomadorDoc = onlyDigits(str(pessoa?.cpf_cnpj))
   const tomadorNome = str(pessoa?.nome) || 'TOMADOR'
 
@@ -178,7 +182,7 @@ export async function prepareNfseEnvio(
   }
 
   if (kind === 'nacional') {
-    idAttr = `DPS${idSeed}`
+    signIdAttr = `DPS${idSeed}`
     unsigned = buildDpsXml({
       idInfDps: idSeed,
       serie: serieCfg,
@@ -196,7 +200,6 @@ export async function prepareNfseEnvio(
       valorIss,
     })
   } else {
-    idAttr = `Lote${idSeed.slice(0, 40)}`
     let assinaturaRps = ''
     if (pfxBytes) {
       const cadeia = buildAssinaturaRpsStringV1({
@@ -211,7 +214,6 @@ export async function prepareNfseEnvio(
       assinaturaRps = await signPaulistanaRpsAssinaturaWithA1(cadeia, pfxBytes, pfxPassword)
     }
     unsigned = buildPaulistanaPedidoLoteRps({
-      idAttr,
       cnpjPrestador: cnpj,
       imPrestador: im,
       serieRps: serieCfg,
@@ -227,18 +229,25 @@ export async function prepareNfseEnvio(
       assinaturaRps,
       ambiente,
     })
+    // Paulistana: URI vazia (sem atributo Id no Pedido)
+    signIdAttr = null
+
+    // Em modo prod (com A1) a Assinatura RPS já está preenchida — confronta antes de gravar.
+    if (pfxBytes) {
+      const preCheck = validatePaulistanaPedidoXml(unsigned)
+      if (!preCheck.ok) {
+        throw new Error(
+          `XML Paulistana inválido (confrontação local): ${formatNfseXmlValidationErrors(preCheck.errors)}`,
+        )
+      }
+    }
   }
 
   let signedXml = unsigned
   let signed = false
 
   if (pfxBytes) {
-    signedXml = await signXmlEnvelopedWithA1(
-      unsigned,
-      kind === 'nacional' ? `DPS${idSeed}` : idAttr,
-      pfxBytes,
-      pfxPassword,
-    )
+    signedXml = await signXmlEnvelopedWithA1(unsigned, signIdAttr, pfxBytes, pfxPassword)
     signed = true
   }
 

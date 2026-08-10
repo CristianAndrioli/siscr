@@ -104,6 +104,7 @@ export interface NotaFiscal {
   valor_total: number;
   status: NFStatus;
   chave_acesso?: string;
+  xml_path?: string | null;
   empresa_id?: string;
   data_emissao?: string;
   motivo_cancelamento?: string;
