@@ -143,6 +143,22 @@ export function validatePaulistanaPedidoXml(xml: string): NfseXmlValidationResul
     }
   }
 
+  const sig = firstChild(root, 'Signature')
+  if (sig) {
+    const signedInfo = firstChild(sig, 'SignedInfo')
+    const ref = signedInfo ? firstChild(signedInfo, 'Reference') : null
+    if (ref) {
+      const uri = ref.getAttribute('URI')
+      if (uri && uri.startsWith('#')) {
+        push(
+          errors,
+          'Signature/SignedInfo/Reference/@URI',
+          'Paulistana v1 deve usar Reference URI="" (sem Id no Pedido). URI com # indica layout antigo — regenere o XML.',
+        )
+      }
+    }
+  }
+
   return { ok: errors.length === 0, errors }
 }
 

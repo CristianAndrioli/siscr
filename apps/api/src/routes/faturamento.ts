@@ -17,6 +17,7 @@ import {
   formatNfseXmlValidationErrors,
   validatePaulistanaPedidoXml,
 } from '../lib/nfse/validatePaulistanaPedidoXml'
+import { verificarAssinaturaPaulistanaXml } from '../lib/nfse/verifyPaulistanaSignature'
 import { decryptA1Bundle } from '../lib/certBlob'
 import { onlyDigits } from '../lib/nfe/xmlEscape'
 import { appendNotaEventoLog } from '../lib/notaEventoLog'
@@ -913,6 +914,27 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
           error: `XML incompatível com o layout Paulistana (confrontação local). Regenere o XML. ${detail}`,
           code: 'NFSE_XML_INVALID',
           errors: schemaCheck.errors,
+        },
+        400,
+      )
+    }
+
+    const sigCheck = await verificarAssinaturaPaulistanaXml(xmlAssinado)
+    if (!sigCheck.valida) {
+      await appendNotaEventoLog(c.env.DB_SHARED, {
+        tenantId: tenant.tenantId,
+        notaId: id,
+        routePrefix: '/faturamento/nfse',
+        friendlyMessage: `Assinatura XML inválida (local): ${sigCheck.mensagem}`,
+        technical: sigCheck.mensagem,
+        context: 'Confrontação NFS-e assinatura (antes da prefeitura)',
+      })
+      return c.json(
+        {
+          error:
+            'Assinatura XML-DSig inválida na confrontação local (Prefeitura rejeitaria com 1057). Clique em Regerar XML/DPS e tente de novo.',
+          code: 'NFSE_SIGNATURE_INVALID',
+          detail: sigCheck.mensagem,
         },
         400,
       )

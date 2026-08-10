@@ -17,6 +17,7 @@ import {
   formatNfseXmlValidationErrors,
   validatePaulistanaPedidoXml,
 } from './validatePaulistanaPedidoXml'
+import { verificarAssinaturaPaulistanaXml } from './verifyPaulistanaSignature'
 
 export type PrepareNfseResult = {
   xmlPath: string
@@ -249,6 +250,14 @@ export async function prepareNfseEnvio(
   if (pfxBytes) {
     signedXml = await signXmlEnvelopedWithA1(unsigned, signIdAttr, pfxBytes, pfxPassword)
     signed = true
+    if (kind === 'paulistana') {
+      const sigCheck = await verificarAssinaturaPaulistanaXml(signedXml)
+      if (!sigCheck.valida) {
+        throw new Error(
+          `Assinatura XML-DSig inválida após gerar (${sigCheck.mensagem}). Não envie à Prefeitura — corrija a assinatura (evita rejeição 1057).`,
+        )
+      }
+    }
   }
 
   if (!env.R2_STORAGE) throw new Error('R2_STORAGE não configurado.')

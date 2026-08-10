@@ -3,7 +3,7 @@
  * Reutiliza a mesma extração de chave do A1 usada na NF-e.
  */
 
-import { Parse, XmlDsigC14NTransform } from 'xmldsigjs'
+import { Parse, SignedXml, XmlDsigC14NTransform } from 'xmldsigjs'
 import { ensureXmlCoreNodeDependencies } from '../nfe/xmlCoreWorkerDeps'
 import { pfxToWebCryptoRsaSha1 } from '../nfe/signNfeXml'
 
@@ -56,7 +56,6 @@ function rootCloseTag(root: Element, body: string): { tag: string; idx: number }
   const preferred = `</${qName}>`
   let idx = body.lastIndexOf(preferred)
   if (idx >= 0) return { tag: preferred, idx }
-  // Fallback sem prefixo / com prefixo diferente
   const re = new RegExp(`</(?:[\\w.-]+:)?${root.localName}\\s*>`, 'g')
   let m: RegExpExecArray | null
   let last: RegExpExecArray | null = null
@@ -86,8 +85,8 @@ export async function signPaulistanaRpsAssinaturaWithA1(
 /**
  * Assina o documento XML envelopando Signature no elemento raiz.
  *
- * - `idAttr` string: Reference URI="#id" (DPS / NF-e style).
- * - `idAttr` null: Reference URI="" sobre a raiz (Paulistana — XSD sem atributo Id).
+ * - `idAttr` string: Reference URI="#id" (DPS).
+ * - `idAttr` null: Reference URI="" via xmldsigjs.SignedXml (Paulistana).
  */
 export async function signXmlEnvelopedWithA1(
   unsignedXml: string,
@@ -102,15 +101,46 @@ export async function signXmlEnvelopedWithA1(
     throw new Error('Certificado A1 sem X509Certificate para KeyInfo.')
   }
 
+  // Paulistana: URI vazia — biblioteca calcula digest com enveloped+c14n corretamente
+  // (evita rejeição 1057 por digest manual divergente).
+  if (idAttr == null) {
+    const doc = Parse(unsignedXml)
+    if (!doc.documentElement) throw new Error('XML inválido: sem elemento raiz.')
+    const signedXml = new SignedXml()
+    await signedXml.Sign(
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-1' },
+      privateKey,
+      doc,
+      {
+        x509: [leafCert],
+        references: [
+          {
+            hash: 'SHA-1',
+            uri: '',
+            transforms: ['enveloped', 'c14n'],
+          },
+        ],
+      },
+    )
+    let out = signedXml.toString()
+    if (!/^\uFEFF?\s*<\?xml/i.test(out)) {
+      out = `<?xml version="1.0" encoding="UTF-8"?>${out}`
+    }
+    // Compacta apenas quebras introduzidas pelo serializador (não altera conteúdo de texto).
+    // Paulistana é sensível a CRLF/indentação pós-assinatura.
+    out = out.replace(/\r\n/g, '\n')
+    return out
+  }
+
   const doc = Parse(unsignedXml)
   const root = doc.documentElement
   if (!root) throw new Error('XML inválido: sem elemento raiz.')
 
-  const target = idAttr ? findElementById(root, idAttr) : root
+  const target = findElementById(root, idAttr)
   const digestCanon = c14nElement(target)
   const digestValue = bytesToBase64(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(digestCanon)))
 
-  const refUri = idAttr ? `#${idAttr}` : ''
+  const refUri = `#${idAttr}`
   const signedInfoForSign =
     `<SignedInfo xmlns="${DS_NS}">` +
     `<CanonicalizationMethod Algorithm="${C14N_ALG}"/>` +
