@@ -22,6 +22,31 @@ function decodeXmlEntities(s: string): string {
     .replace(/&amp;/g, '&')
 }
 
+type PaulistanaIssue = { codigo: string; descricao: string }
+
+/**
+ * Coleta <Erro> e <Alerta> do RetornoEnvioLoteRPS (podem ser vários).
+ * pickXmlTag sozinho pega só o primeiro <Codigo> e mascara o contexto.
+ */
+function collectPaulistanaIssues(xml: string): { erros: PaulistanaIssue[]; alertas: PaulistanaIssue[] } {
+  const erros: PaulistanaIssue[] = []
+  const alertas: PaulistanaIssue[] = []
+  const blockRe = /<(?:[\w.-]+:)?(Erro|Alerta)\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?\1>/gi
+  let m: RegExpExecArray | null
+  while ((m = blockRe.exec(xml)) !== null) {
+    const kind = m[1].toLowerCase()
+    const body = m[2]
+    const codigo = pickXmlTag(body, 'Codigo') || ''
+    const descricao =
+      pickXmlTag(body, 'Descricao') || pickXmlTag(body, 'Mensagem') || ''
+    if (!codigo && !descricao) continue
+    const issue = { codigo, descricao }
+    if (kind === 'erro') erros.push(issue)
+    else alertas.push(issue)
+  }
+  return { erros, alertas }
+}
+
 /** Extrai mensagem útil de SOAP Fault / HTML ASP.NET / corpo bruto. */
 function extractPaulistanaErro(text: string, httpStatus: number): string {
   const fault =
@@ -51,9 +76,18 @@ function extractPaulistanaErro(text: string, httpStatus: number): string {
   return `HTTP ${httpStatus}`
 }
 
+function formatIssue(i: PaulistanaIssue): string {
+  if (i.codigo && i.descricao) return `${i.codigo}: ${i.descricao}`
+  return i.descricao || i.codigo || 'Retorno Paulistana'
+}
+
 /**
  * Adapter São Paulo capital — Nota Fiscal Paulistana (SOAP LoteNFe).
  * Homologação: mesmo endpoint + TesteEnvioLoteRPS (não há URL separada).
+ *
+ * Importante: TesteEnvioLoteRPS frequentemente devolve Cabecalho/Sucesso=true
+ * mesmo com <Alerta> (ex.: 307 código não cadastrado no prestador). Isso NÃO
+ * é autorização — só Sucesso sem Erro/Alerta (ou com NumeroNFe real) autoriza.
  */
 export const paulistanaAdapter: NfseMunicipalAdapter = {
   kind: 'paulistana',
@@ -82,17 +116,34 @@ export const paulistanaAdapter: NfseMunicipalAdapter = {
       pickXmlTag(decoded, 'NumeroNFe') ||
       pickXmlTag(decoded, 'NumeroNfe') ||
       pickXmlTag(text, 'NumeroNFe')
-    const cod = pickXmlTag(decoded, 'Codigo') || pickXmlTag(text, 'Codigo') || String(res.status)
+    const { erros, alertas } = collectPaulistanaIssues(decoded)
+    const firstIssue = erros[0] || alertas[0]
+
+    const sucessoOk = sucesso?.toLowerCase() === 'true'
+    // Produção: precisa de NFS-e gerada. Homologação (teste): aceita Sucesso sem número,
+    // mas nunca com Erro ou Alerta (307 etc. vinham como "autorizada" + protocolo TESTE).
+    const autorizada =
+      sucessoOk &&
+      erros.length === 0 &&
+      alertas.length === 0 &&
+      (Boolean(numeroNfe) || teste)
+
+    const cod =
+      firstIssue?.codigo ||
+      (autorizada ? (teste ? 'TESTE' : '100') : null) ||
+      pickXmlTag(decoded, 'Codigo') ||
+      pickXmlTag(text, 'Codigo') ||
+      String(res.status)
     const desc =
+      (firstIssue ? formatIssue(firstIssue) : null) ||
+      (autorizada
+        ? teste
+          ? 'Lote de teste aceito pela Prefeitura (TesteEnvioLoteRPS).'
+          : 'RPS convertido / NFS-e autorizada pela Prefeitura.'
+        : null) ||
       pickXmlTag(decoded, 'Descricao') ||
       pickXmlTag(decoded, 'Mensagem') ||
       (res.ok ? 'Retorno Paulistana' : extractPaulistanaErro(text, res.status))
-
-    // TesteEnvioLoteRPS: Sucesso=true sem NFS-e real — tratamos como ok operacional em homologação
-    const autorizada =
-      sucesso?.toLowerCase() === 'true' ||
-      Boolean(numeroNfe) ||
-      (teste && res.ok && !/false/i.test(sucesso || ''))
 
     return {
       autorizada,

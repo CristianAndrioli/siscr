@@ -296,8 +296,9 @@ export function NfseConfigPage() {
                 placeholder="Ex: 02800"
               />
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Em São Paulo use o código da lista da Prefeitura (4–5 dígitos), não o item da LC 116
-                (01.01). Consulte o CCM / portal da Nota Fiscal Paulistana.
+                Em São Paulo use o código da lista da Prefeitura (4–5 dígitos) cadastrado no CCM da
+                IM, não o item da LC 116 (01.01). Erro 306 = código inexistente; 307 = não liberado
+                para o prestador — confira no portal da Nota Fiscal Paulistana.
               </p>
             </div>
 

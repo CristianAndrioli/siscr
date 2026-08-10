@@ -297,11 +297,116 @@ export default function NfseDetail() {
     nota.status !== 'cancelada' &&
     Boolean(nota.protocolo_autorizacao || nota.status === 'autorizada');
 
+  const retornoPrefeituraRejeicao = (cstat: string | null | undefined) =>
+    /^(306|307|1\d{3}|2\d{3}|5\d{2})$/.test(String(cstat || '').trim());
+
   const tabs: Tab[] = (() => {
     if (!nota) return [];
 
+    const temRetornoPrefeitura = Boolean(
+      nota.protocolo_autorizacao ||
+        nota.chave_acesso ||
+        nota.cstat_ultimo ||
+        nota.xmotivo_ultimo ||
+        nota.transmissao_erro ||
+        nota.data_autorizacao,
+    );
+    const retornoRejeitado =
+      Boolean(nota.transmissao_erro) ||
+      (retornoPrefeituraRejeicao(nota.cstat_ultimo) && !nota.protocolo_autorizacao) ||
+      (nota.protocolo_autorizacao === 'TESTE' &&
+        retornoPrefeituraRejeicao(nota.cstat_ultimo));
+
+    const retornoPrefeituraCard = temRetornoPrefeitura ? (
+      <div
+        className={`rounded-xl border px-4 py-3 text-sm space-y-1.5 ${
+          retornoRejeitado
+            ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40'
+            : 'border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40'
+        }`}
+      >
+        <p
+          className={`font-semibold ${
+            retornoRejeitado
+              ? 'text-amber-900 dark:text-amber-200'
+              : 'text-sky-900 dark:text-sky-200'
+          }`}
+        >
+          {retornoRejeitado ? 'Retorno da prefeitura (rejeição/alerta)' : 'Retorno da prefeitura'}
+        </p>
+        {nota.protocolo_autorizacao && (
+          <p
+            className={`font-mono text-xs ${
+              retornoRejeitado
+                ? 'text-amber-800 dark:text-amber-300'
+                : 'text-sky-800 dark:text-sky-300'
+            }`}
+          >
+            Protocolo/nº: {nota.protocolo_autorizacao}
+          </p>
+        )}
+        {nota.data_autorizacao && (
+          <p
+            className={`text-xs ${
+              retornoRejeitado
+                ? 'text-amber-700 dark:text-amber-400'
+                : 'text-sky-700 dark:text-sky-400'
+            }`}
+          >
+            Recebido em {fmtDate(nota.data_autorizacao)}
+            {nota.data_autorizacao.includes('T')
+              ? ` · ${new Date(nota.data_autorizacao).toLocaleTimeString('pt-BR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}`
+              : ''}
+          </p>
+        )}
+        {(nota.cstat_ultimo || nota.xmotivo_ultimo) && (
+          <p
+            className={`text-xs ${
+              retornoRejeitado
+                ? 'text-amber-800 dark:text-amber-200 font-medium'
+                : 'text-sky-700 dark:text-sky-400'
+            }`}
+          >
+            {nota.cstat_ultimo ? `Código ${nota.cstat_ultimo}` : 'Retorno'}
+            {nota.xmotivo_ultimo ? ` — ${nota.xmotivo_ultimo}` : ''}
+          </p>
+        )}
+        {nota.transmissao_erro && (
+          <p className="text-xs text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
+        )}
+        {nota.chave_acesso && (
+          <p
+            className={`text-xs break-all font-mono ${
+              retornoRejeitado
+                ? 'text-amber-800 dark:text-amber-300'
+                : 'text-sky-800 dark:text-sky-300'
+            }`}
+          >
+            Chave: {nota.chave_acesso}
+          </p>
+        )}
+        {nota.protocolo_autorizacao === 'TESTE' &&
+          /^(306|307)$/.test(String(nota.cstat_ultimo || '').trim()) && (
+            <p className="text-xs text-amber-800 dark:text-amber-200 pt-0.5">
+              Homologação retornou alerta de cadastro — o código municipal precisa estar liberado no
+              CCM do prestador na Prefeitura (não use LC 116).
+            </p>
+          )}
+        {!retornoRejeitado && nota.protocolo_autorizacao && nota.status !== 'emitida' && (
+          <p className="text-xs text-sky-800 dark:text-sky-300 pt-1">
+            Próximo passo: <strong>Faturar no ERP</strong> (parcelas no Contas a Receber).
+          </p>
+        )}
+      </div>
+    ) : null;
+
     const detalhes = (
       <div className="space-y-5">
+        {retornoPrefeituraCard}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-1">
             <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
@@ -368,36 +473,6 @@ export default function NfseDetail() {
             </span>
           </div>
         </div>
-
-        {(nota.protocolo_autorizacao || nota.chave_acesso || nota.cstat_ultimo) && (
-          <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-1 text-sm">
-            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-              Autorização municipal
-            </p>
-            {nota.protocolo_autorizacao && (
-              <p className="text-slate-700 dark:text-slate-200">
-                Protocolo/nº:{' '}
-                <span className="font-mono">{nota.protocolo_autorizacao}</span>
-              </p>
-            )}
-            {nota.chave_acesso && (
-              <p className="text-slate-700 dark:text-slate-200 text-xs break-all">
-                Chave: <span className="font-mono">{nota.chave_acesso}</span>
-              </p>
-            )}
-            {nota.data_autorizacao && (
-              <p className="text-xs text-slate-500">
-                Autorizada em {fmtDate(nota.data_autorizacao)}
-              </p>
-            )}
-            {nota.cstat_ultimo && (
-              <p className="text-xs text-slate-500">
-                {nota.cstat_ultimo}
-                {nota.xmotivo_ultimo ? `: ${nota.xmotivo_ultimo}` : ''}
-              </p>
-            )}
-          </div>
-        )}
 
         {nota.observacoes && (
           <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2">
@@ -540,16 +615,58 @@ export default function NfseDetail() {
           </button>
         </div>
 
-        {nota.transmissao_erro && (
-          <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm">
-            <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wide">
+        {temRetornoPrefeitura && (
+          <div
+            className={`rounded-xl border px-4 py-3 text-sm space-y-1 ${
+              retornoRejeitado
+                ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40'
+                : 'border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40'
+            }`}
+          >
+            <p
+              className={`text-xs font-semibold uppercase tracking-wide ${
+                retornoRejeitado
+                  ? 'text-amber-800 dark:text-amber-200'
+                  : 'text-sky-800 dark:text-sky-200'
+              }`}
+            >
               Último retorno da prefeitura (campo da nota)
             </p>
-            <p className="mt-1 text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
-            {nota.cstat_ultimo && (
-              <p className="mt-1 text-xs font-mono text-amber-800 dark:text-amber-300">
-                {nota.cstat_ultimo}
+            {nota.protocolo_autorizacao && (
+              <p
+                className={`font-mono text-xs ${
+                  retornoRejeitado
+                    ? 'text-amber-900 dark:text-amber-100'
+                    : 'text-sky-900 dark:text-sky-100'
+                }`}
+              >
+                Protocolo/nº: {nota.protocolo_autorizacao}
+              </p>
+            )}
+            {(nota.cstat_ultimo || nota.xmotivo_ultimo) && (
+              <p
+                className={`text-xs ${
+                  retornoRejeitado
+                    ? 'text-amber-900 dark:text-amber-100'
+                    : 'text-sky-800 dark:text-sky-200'
+                }`}
+              >
+                {nota.cstat_ultimo ? `Código ${nota.cstat_ultimo}` : 'Retorno'}
                 {nota.xmotivo_ultimo ? ` — ${nota.xmotivo_ultimo}` : ''}
+              </p>
+            )}
+            {nota.transmissao_erro && (
+              <p className="text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
+            )}
+            {nota.data_autorizacao && (
+              <p
+                className={`text-xs ${
+                  retornoRejeitado
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : 'text-sky-700 dark:text-sky-400'
+                }`}
+              >
+                Recebido em {fmtDate(nota.data_autorizacao)}
               </p>
             )}
           </div>
