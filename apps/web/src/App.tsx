@@ -12,6 +12,7 @@ import NFVendaPage from './pages/faturamento/NFVenda';
 import NfeVendaDetail from './pages/faturamento/NfeVendaDetail';
 import NfeNovaWizardPage from './pages/faturamento/NfeNovaWizard';
 import NFSePage from './pages/faturamento/NFSe';
+import NfseNovaPage from './pages/faturamento/NfseNovaPage';
 import NfseDetail from './pages/faturamento/NfseDetail';
 import { NcmConfigPage } from './pages/faturamento/NcmConfigPage';
 import Perfil from './pages/Perfil';
@@ -221,6 +222,7 @@ function App() {
         <Route path="/faturamento/nf-venda/:id" element={<ProtectedRoute><Layout><NfeVendaDetail /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/ncm" element={<ProtectedRoute><Layout><ProtectedRouteWithPermission requiredModule="faturamento" requiredAction="view"><NcmConfigPage /></ProtectedRouteWithPermission></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nfse" element={<ProtectedRoute><Layout><NFSePage /></Layout></ProtectedRoute>} />
+        <Route path="/faturamento/nfse/nova" element={<ProtectedRoute><Layout><NfseNovaPage /></Layout></ProtectedRoute>} />
         <Route path="/faturamento/nfse/:id" element={<ProtectedRoute><Layout><NfseDetail /></Layout></ProtectedRoute>} />
 
         {/* Entrada (NF-e compra) */}

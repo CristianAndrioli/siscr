@@ -1,11 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { notasService, type NotaFiscal, type NFStatus } from '../../services/faturamentoService';
-import { PessoaBusca } from '../../components/PessoaBusca';
-import api from '../../services/api';
 import { fmtBRL, fmtDate } from '../../utils/format';
-import CurrencyInput from '../../components/common/CurrencyInput';
-import { useErrorNotification } from '../../context/ErrorNotificationContext';
 
 const fmtPct = (v?: number | null) => (v != null ? `${v}%` : '—');
 
@@ -26,35 +22,14 @@ const STATUS_LABEL: Record<NFStatus, string> = {
   inutilizada: 'Inutilizada',
 };
 
-interface Servico {
-  id: string;
-  descricao: string;
-  preco: number;
-}
-
 export function NFSePage() {
   const navigate = useNavigate();
-  const { reportError } = useErrorNotification();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notas, setNotas] = useState<NotaFiscal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
-  const [showNew, setShowNew] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [modalError, setModalError] = useState('');
-  const [servicos, setServicos] = useState<Servico[]>([]);
-  const [destinatarioId, setDestinatarioId] = useState('');
-  const [destinatarioNome, setDestinatarioNome] = useState('');
-  const [form, setForm] = useState({
-    descricaoServico: '',
-    codigoServico: '',
-    aliquotaIss: 2,
-    observacoes: '',
-    desconto: 0,
-    valor: 0,
-  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,81 +55,6 @@ export function NFSePage() {
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams, navigate]);
-
-  useEffect(() => {
-    if (showNew && servicos.length === 0) {
-      api
-        .get('/tenant/cadastros/servicos')
-        .then((r) => setServicos(r.data.servicos ?? []))
-        .catch(() => {});
-    }
-  }, [showNew, servicos.length]);
-
-  const openNew = () => {
-    setForm({
-      descricaoServico: '',
-      codigoServico: '',
-      aliquotaIss: 2,
-      observacoes: '',
-      desconto: 0,
-      valor: 0,
-    });
-    setDestinatarioId('');
-    setDestinatarioNome('');
-    setModalError('');
-    setShowNew(true);
-  };
-
-  const fillFromServico = (id: string) => {
-    const s = servicos.find((x) => x.id === id);
-    if (s) setForm((f) => ({ ...f, descricaoServico: s.descricao, valor: s.preco ?? 0 }));
-  };
-
-  const valorIss = form.valor * (form.aliquotaIss / 100);
-  const totalFinal = form.valor - form.desconto;
-
-  const handleSave = async () => {
-    if (!form.descricaoServico.trim()) {
-      setModalError('Informe a descrição do serviço.');
-      return;
-    }
-    if (form.valor <= 0) {
-      setModalError('Informe o valor do serviço.');
-      return;
-    }
-    setSaving(true);
-    setModalError('');
-    try {
-      const created = await notasService.create({
-        tipo: 'nfse',
-        destinatarioId: destinatarioId || undefined,
-        descricaoServico: form.descricaoServico,
-        codigoServico: form.codigoServico || undefined,
-        aliquotaIss: form.aliquotaIss,
-        observacoes: form.observacoes || undefined,
-        desconto: form.desconto,
-        itens: [
-          {
-            descricao: form.descricaoServico,
-            quantidade: 1,
-            valorUnitario: form.valor,
-            desconto: form.desconto,
-            unidade: 'SV',
-          },
-        ],
-      });
-      setShowNew(false);
-      navigate(`/faturamento/nfse/${created.id}`);
-    } catch (err) {
-      reportError('Erro ao salvar NFS-e.', err, 'Faturamento NFS-e');
-      setModalError(
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-          'Erro ao salvar.',
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const filtered = notas.filter((n) => {
     const matchBusca =
@@ -189,15 +89,15 @@ export function NFSePage() {
           >
             Configurar emissão
           </Link>
-          <button
-            onClick={openNew}
+          <Link
+            to="/faturamento/nfse/nova"
             className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
             Nova NFS-e
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -224,7 +124,7 @@ export function NFSePage() {
             <Link to="/configuracoes/nfse" className="underline font-medium">
               Configurar IM, ambiente e série
             </Link>{' '}
-            antes da primeira emissão.
+            antes da primeira emissão. Clique na nota para abrir a tela completa.
           </p>
         </div>
       </div>
@@ -362,181 +262,6 @@ export function NFSePage() {
           </div>
         )}
       </div>
-
-      {showNew && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-lg my-6 space-y-5 p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                Nova NFS-e (Rascunho)
-              </h2>
-              <button
-                onClick={() => setShowNew(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-3 py-2 rounded-lg text-sm">
-                {modalError}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Tomador (cliente)
-                </label>
-                <PessoaBusca
-                  value={destinatarioId}
-                  displayValue={destinatarioNome}
-                  onChange={(id, nome) => {
-                    setDestinatarioId(id);
-                    setDestinatarioNome(nome);
-                  }}
-                  placeholder="Buscar tomador por nome ou CPF/CNPJ..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Serviço cadastrado (opcional)
-                </label>
-                <select
-                  onChange={(e) => fillFromServico(e.target.value)}
-                  defaultValue=""
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="">Selecionar serviço para preencher automaticamente...</option>
-                  {servicos.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.descricao}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Descrição do Serviço <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  value={form.descricaoServico}
-                  onChange={(e) => setForm((f) => ({ ...f, descricaoServico: e.target.value }))}
-                  rows={3}
-                  placeholder="Descrição detalhada do serviço prestado..."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                    Cód. Serviço (LC 116)
-                  </label>
-                  <input
-                    value={form.codigoServico}
-                    onChange={(e) => setForm((f) => ({ ...f, codigoServico: e.target.value }))}
-                    placeholder="Ex: 01.01"
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                    Alíquota ISS (%)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={form.aliquotaIss}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, aliquotaIss: parseFloat(e.target.value) || 0 }))
-                    }
-                    className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                    Valor do Serviço (R$) <span className="text-red-500">*</span>
-                  </label>
-                  <CurrencyInput
-                    value={form.valor}
-                    onChange={(v) => setForm((f) => ({ ...f, valor: v }))}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                    Desconto (R$)
-                  </label>
-                  <CurrencyInput
-                    value={form.desconto}
-                    onChange={(v) => setForm((f) => ({ ...f, desconto: v }))}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4 space-y-1.5 text-sm">
-                <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                  <span>Valor do serviço:</span>
-                  <span>{fmtBRL(form.valor)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                  <span>ISS ({form.aliquotaIss}%):</span>
-                  <span className="text-amber-600 dark:text-amber-400">{fmtBRL(valorIss)}</span>
-                </div>
-                {form.desconto > 0 && (
-                  <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                    <span>Desconto:</span>
-                    <span>-{fmtBRL(form.desconto)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-slate-800 dark:text-slate-100 border-t border-slate-200 dark:border-slate-700 pt-1.5">
-                  <span>Total:</span>
-                  <span className="text-brand-600 dark:text-brand-400">{fmtBRL(totalFinal)}</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Observações
-                </label>
-                <input
-                  value={form.observacoes}
-                  onChange={(e) => setForm((f) => ({ ...f, observacoes: e.target.value }))}
-                  placeholder="Informações adicionais..."
-                  className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowNew(false)}
-                className="flex-1 px-4 py-2.5 text-sm border border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 px-4 py-2.5 text-sm bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Salvando...' : 'Salvar e abrir'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
