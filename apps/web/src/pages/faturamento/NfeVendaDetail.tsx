@@ -9,6 +9,11 @@ import {
 import { fmtBRL, fmtDate } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import Tabs, { type Tab } from '../../components/common/Tabs';
+import {
+  NotaFinanceiroTab,
+  type NotaFinanceiroConta,
+  type NotaFinanceiroLancamento,
+} from '../../components/faturamento/NotaFinanceiroTab';
 import type { ErrorLogEntry } from '../../utils/errorLogger';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
@@ -65,6 +70,10 @@ export default function NfeVendaDetail() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsTotal, setLogsTotal] = useState(0);
 
+  const [contasReceber, setContasReceber] = useState<NotaFinanceiroConta[]>([]);
+  const [lancamentos, setLancamentos] = useState<NotaFinanceiroLancamento[]>([]);
+  const [finLoading, setFinLoading] = useState(false);
+
   const [modal, setModal] = useState<'faturar' | 'cancel' | null>(null);
   const [motivoCancel, setMotivoCancel] = useState('');
   const [saving, setSaving] = useState(false);
@@ -104,6 +113,21 @@ export default function NfeVendaDetail() {
       setLogsTotal(0);
     } finally {
       setLogsLoading(false);
+    }
+  }, [id]);
+
+  const loadFinanceiro = useCallback(async () => {
+    if (!id) return;
+    setFinLoading(true);
+    try {
+      const r = await notasService.listFinanceiro(id);
+      setContasReceber(r.contasReceber);
+      setLancamentos(r.lancamentos);
+    } catch {
+      setContasReceber([]);
+      setLancamentos([]);
+    } finally {
+      setFinLoading(false);
     }
   }, [id]);
 
@@ -337,6 +361,7 @@ export default function NfeVendaDetail() {
         setFaturarDone(true);
         notify('Faturamento ERP concluído (estoque e financeiro).', 'success');
         await load();
+        void loadFinanceiro();
       } catch (err) {
         reportError('Erro ao faturar NF-e.', err, 'Faturamento NF-e');
         void loadNotaLogs();
@@ -687,6 +712,19 @@ export default function NfeVendaDetail() {
     return [
       { id: 'detalhes', label: 'Detalhes', content: detalhes },
       {
+        id: 'financeiro',
+        label: 'Financeiro',
+        count: contasReceber.length + lancamentos.length || undefined,
+        content: (
+          <NotaFinanceiroTab
+            loading={finLoading}
+            contasReceber={contasReceber}
+            lancamentos={lancamentos}
+            onRefresh={() => void loadFinanceiro()}
+          />
+        ),
+      },
+      {
         id: 'logs',
         label: 'Logs',
         count: logsTotal > 0 ? logsTotal : undefined,
@@ -699,6 +737,10 @@ export default function NfeVendaDetail() {
   useEffect(() => {
     if (nota?.id) void loadNotaLogs();
   }, [nota?.id, loadNotaLogs]);
+
+  useEffect(() => {
+    if (nota?.id) void loadFinanceiro();
+  }, [nota?.id, loadFinanceiro]);
 
   if (loading) {
     return (

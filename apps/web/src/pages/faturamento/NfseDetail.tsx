@@ -4,6 +4,11 @@ import { notasService, type NotaFiscal, type NFStatus } from '../../services/fat
 import { fmtBRL, fmtDate } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import Tabs, { type Tab } from '../../components/common/Tabs';
+import {
+  NotaFinanceiroTab,
+  type NotaFinanceiroConta,
+  type NotaFinanceiroLancamento,
+} from '../../components/faturamento/NotaFinanceiroTab';
 import type { ErrorLogEntry } from '../../utils/errorLogger';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
@@ -56,6 +61,10 @@ export default function NfseDetail() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsTotal, setLogsTotal] = useState(0);
 
+  const [contasReceber, setContasReceber] = useState<NotaFinanceiroConta[]>([]);
+  const [lancamentos, setLancamentos] = useState<NotaFinanceiroLancamento[]>([]);
+  const [finLoading, setFinLoading] = useState(false);
+
   const [modal, setModal] = useState<'faturar' | 'cancel' | null>(null);
   const [motivoCancel, setMotivoCancel] = useState('');
   const [saving, setSaving] = useState(false);
@@ -104,6 +113,22 @@ export default function NfseDetail() {
     }
   }, [id, reportError]);
 
+  const loadFinanceiro = useCallback(async () => {
+    if (!id) return;
+    setFinLoading(true);
+    try {
+      const r = await notasService.listFinanceiro(id);
+      setContasReceber(r.contasReceber);
+      setLancamentos(r.lancamentos);
+    } catch (err) {
+      setContasReceber([]);
+      setLancamentos([]);
+      reportError('Erro ao carregar financeiro da NFS-e.', err, 'Faturamento NFS-e');
+    } finally {
+      setFinLoading(false);
+    }
+  }, [id, reportError]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -111,6 +136,10 @@ export default function NfseDetail() {
   useEffect(() => {
     if (nota?.id) void loadNotaLogs();
   }, [nota?.id, loadNotaLogs]);
+
+  useEffect(() => {
+    if (nota?.id) void loadFinanceiro();
+  }, [nota?.id, loadFinanceiro]);
 
   const handlePreparar = async (force = false) => {
     if (!nota) return;
@@ -262,6 +291,7 @@ export default function NfseDetail() {
         setFaturarDone(true);
         notify('Faturamento ERP concluído (financeiro).', 'success');
         await load();
+        void loadFinanceiro();
       } catch (err: unknown) {
         setFaturarSteps((prev) =>
           prev.map((s) => (s.status === 'running' ? { ...s, status: 'error' } : s)),
@@ -718,6 +748,19 @@ export default function NfseDetail() {
 
     return [
       { id: 'detalhes', label: 'Detalhes', content: detalhes },
+      {
+        id: 'financeiro',
+        label: 'Financeiro',
+        count: contasReceber.length + lancamentos.length || undefined,
+        content: (
+          <NotaFinanceiroTab
+            loading={finLoading}
+            contasReceber={contasReceber}
+            lancamentos={lancamentos}
+            onRefresh={() => void loadFinanceiro()}
+          />
+        ),
+      },
       {
         id: 'logs',
         label: 'Logs',

@@ -248,6 +248,40 @@ export const notasService = {
       limit: Number(res.data.limit ?? 100),
     };
   },
+  listFinanceiro: async (
+    id: string,
+  ): Promise<{
+    contasReceber: Array<{
+      id: string
+      codigo?: number | null
+      descricao: string
+      valor: number
+      vencimento: string
+      status: string
+      parcela?: number | null
+      total_parcelas?: number | null
+      valor_pago?: number | null
+      data_pagamento?: string | null
+      categoria?: string | null
+      cliente?: string | null
+      created_at?: string
+    }>
+    lancamentos: Array<{
+      id: string
+      numero?: number | null
+      data_lancamento: string
+      historico: string
+      origem_tipo?: string | null
+      status: string
+      created_at?: string
+    }>
+  }> => {
+    const res = await api.get(`${BASE}/notas/${id}/financeiro`);
+    return {
+      contasReceber: res.data.contasReceber ?? [],
+      lancamentos: res.data.lancamentos ?? [],
+    };
+  },
   create: async (data: {
     tipo: NFTipo;
     empresaId?: string;

@@ -234,6 +234,50 @@ app.get('/notas/:id/eventos', async (c) => {
   return c.json({ events: results, total, page, limit, notaId: id, tipo: nota.tipo })
 })
 
+/** Contas a receber e lançamentos contábeis vinculados à nota. */
+app.get('/notas/:id/financeiro', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+
+  const nota = await c.env.DB_SHARED
+    .prepare(`SELECT id, tipo, status FROM notas_fiscais WHERE id = ? AND tenant_id = ?`)
+    .bind(id, tenant.tenantId)
+    .first<{ id: string; tipo: string; status: string }>()
+  if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
+
+  const { results: contasReceber } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT cr.id, cr.codigo, cr.descricao, cr.valor, cr.vencimento, cr.status,
+              cr.parcela, cr.total_parcelas, cr.valor_pago, cr.data_pagamento,
+              cr.categoria, cr.created_at, p.nome AS cliente
+       FROM contas_receber cr
+       LEFT JOIN pessoas p ON p.id = cr.pessoa_id
+       WHERE cr.tenant_id = ? AND cr.nota_fiscal_id = ?
+       ORDER BY cr.parcela ASC, cr.vencimento ASC`,
+    )
+    .bind(tenant.tenantId, id)
+    .all()
+
+  const { results: lancamentos } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT lc.id, lc.numero, lc.data_lancamento, lc.historico, lc.origem_tipo,
+              lc.status, lc.created_at
+       FROM lancamentos_contabeis lc
+       WHERE lc.tenant_id = ? AND lc.origem_id = ?
+       ORDER BY lc.data_lancamento DESC, lc.numero DESC`,
+    )
+    .bind(tenant.tenantId, id)
+    .all()
+
+  return c.json({
+    notaId: id,
+    tipo: nota.tipo,
+    statusNota: nota.status,
+    contasReceber: contasReceber ?? [],
+    lancamentos: lancamentos ?? [],
+  })
+})
+
 const nfItemSchema = z.object({
   produtoId: z.string().uuid().optional(),
   servicoId: z.string().uuid().optional(),
