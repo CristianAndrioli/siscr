@@ -9,7 +9,7 @@ import {
 import { fmtBRL, fmtDate } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import Tabs, { type Tab } from '../../components/common/Tabs';
-import { fetchErrorLog, type ErrorLogEntry } from '../../utils/errorLogger';
+import type { ErrorLogEntry } from '../../utils/errorLogger';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
   rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -96,12 +96,8 @@ export default function NfeVendaDetail() {
     if (!id) return;
     setLogsLoading(true);
     try {
-      const page = await fetchErrorLog({
-        page: 0,
-        limit: 50,
-        urlContains: `/faturamento/nf-venda/${id}`,
-      });
-      setNotaLogs(page.errors);
+      const page = await notasService.listEventos(id, { page: 0, limit: 50 });
+      setNotaLogs(page.events);
       setLogsTotal(page.total);
     } catch {
       setNotaLogs([]);

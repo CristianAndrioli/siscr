@@ -4,7 +4,7 @@ import { notasService, type NotaFiscal, type NFStatus } from '../../services/fat
 import { fmtBRL, fmtDate } from '../../utils/format';
 import { useErrorNotification } from '../../context/ErrorNotificationContext';
 import Tabs, { type Tab } from '../../components/common/Tabs';
-import { fetchErrorLog, type ErrorLogEntry } from '../../utils/errorLogger';
+import type { ErrorLogEntry } from '../../utils/errorLogger';
 
 const STATUS_STYLE: Record<NFStatus, string> = {
   rascunho: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -87,26 +87,22 @@ export default function NfseDetail() {
     if (!id) return;
     setLogsLoading(true);
     try {
-      const page = await fetchErrorLog({
-        page: 0,
-        limit: 100,
-        urlContains: `/faturamento/nfse/${id}`,
-      });
-      // API já ordena por created_at DESC; reforça no client.
-      const sorted = [...page.errors].sort((a, b) => {
+      const page = await notasService.listEventos(id, { page: 0, limit: 100 });
+      const sorted = [...page.events].sort((a, b) => {
         const ta = Date.parse(a.created_at || a.timestamp || '') || 0;
         const tb = Date.parse(b.created_at || b.timestamp || '') || 0;
         return tb - ta;
       });
       setNotaLogs(sorted);
       setLogsTotal(page.total);
-    } catch {
+    } catch (err) {
       setNotaLogs([]);
       setLogsTotal(0);
+      reportError('Erro ao carregar histórico da NFS-e.', err, 'Faturamento NFS-e');
     } finally {
       setLogsLoading(false);
     }
-  }, [id]);
+  }, [id, reportError]);
 
   useEffect(() => {
     load();
@@ -374,9 +370,14 @@ export default function NfseDetail() {
             {nota.xmotivo_ultimo ? ` — ${nota.xmotivo_ultimo}` : ''}
           </p>
         )}
-        {nota.transmissao_erro && (
-          <p className="text-xs text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
-        )}
+        {nota.transmissao_erro &&
+          !(
+            nota.cstat_ultimo &&
+            nota.xmotivo_ultimo &&
+            nota.transmissao_erro.includes(String(nota.xmotivo_ultimo))
+          ) && (
+            <p className="text-xs text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
+          )}
         {nota.chave_acesso && (
           <p
             className={`text-xs break-all font-mono ${
@@ -655,9 +656,14 @@ export default function NfseDetail() {
                 {nota.xmotivo_ultimo ? ` — ${nota.xmotivo_ultimo}` : ''}
               </p>
             )}
-            {nota.transmissao_erro && (
-              <p className="text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
-            )}
+            {nota.transmissao_erro &&
+              !(
+                nota.cstat_ultimo &&
+                nota.xmotivo_ultimo &&
+                nota.transmissao_erro.includes(String(nota.xmotivo_ultimo))
+              ) && (
+                <p className="text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
+              )}
             {nota.data_autorizacao && (
               <p
                 className={`text-xs ${

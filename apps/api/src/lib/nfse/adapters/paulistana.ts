@@ -76,11 +76,6 @@ function extractPaulistanaErro(text: string, httpStatus: number): string {
   return `HTTP ${httpStatus}`
 }
 
-function formatIssue(i: PaulistanaIssue): string {
-  if (i.codigo && i.descricao) return `${i.codigo}: ${i.descricao}`
-  return i.descricao || i.codigo || 'Retorno Paulistana'
-}
-
 /**
  * Adapter São Paulo capital — Nota Fiscal Paulistana (SOAP LoteNFe).
  * Homologação: mesmo endpoint + TesteEnvioLoteRPS (não há URL separada).
@@ -135,7 +130,7 @@ export const paulistanaAdapter: NfseMunicipalAdapter = {
       pickXmlTag(text, 'Codigo') ||
       String(res.status)
     const desc =
-      (firstIssue ? formatIssue(firstIssue) : null) ||
+      (firstIssue?.descricao || null) ||
       (autorizada
         ? teste
           ? 'Lote de teste aceito pela Prefeitura (TesteEnvioLoteRPS).'

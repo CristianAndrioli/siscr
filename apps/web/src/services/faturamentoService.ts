@@ -220,6 +220,34 @@ export const notasService = {
     const res = await api.get(`${BASE}/notas/${id}`);
     return res.data.nota;
   },
+  /** Eventos de transmissão / rejeição gravados para a aba Logs da nota. */
+  listEventos: async (
+    id: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<{
+    events: Array<{
+      id: string
+      timestamp: string
+      friendly_message: string
+      technical?: string | null
+      url?: string | null
+      context?: string | null
+      created_at: string
+    }>
+    total: number
+    page: number
+    limit: number
+  }> => {
+    const res = await api.get(`${BASE}/notas/${id}/eventos`, {
+      params: { page: params?.page ?? 0, limit: params?.limit ?? 100 },
+    });
+    return {
+      events: res.data.events ?? [],
+      total: Number(res.data.total ?? 0),
+      page: Number(res.data.page ?? 0),
+      limit: Number(res.data.limit ?? 100),
+    };
+  },
   create: async (data: {
     tipo: NFTipo;
     empresaId?: string;

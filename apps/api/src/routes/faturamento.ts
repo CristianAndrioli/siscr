@@ -197,6 +197,43 @@ app.get('/notas/:id', async (c) => {
   return c.json({ nota: { ...nota, itens } })
 })
 
+/** Histórico de eventos/transmissões da nota (error_logs vinculados à URL da tela). */
+app.get('/notas/:id/eventos', async (c) => {
+  const tenant = c.get('tenant')
+  const id = c.req.param('id')
+
+  const nota = await c.env.DB_SHARED
+    .prepare(`SELECT id, tipo FROM notas_fiscais WHERE id = ? AND tenant_id = ?`)
+    .bind(id, tenant.tenantId)
+    .first<{ id: string; tipo: string }>()
+  if (!nota) return c.json({ error: 'Nota fiscal não encontrada.' }, 404)
+
+  const { limit, offset, page } = parseListPagination(c)
+  // Match por id da nota (cobre /faturamento/nfse/:id e /faturamento/nf-venda/:id).
+  const like = `%${id}%`
+
+  const countRow = await c.env.DB_SHARED
+    .prepare(
+      `SELECT COUNT(*) as c FROM error_logs WHERE tenant_id = ? AND url LIKE ?`,
+    )
+    .bind(tenant.tenantId, like)
+    .first<{ c: number }>()
+  const total = Number(countRow?.c ?? 0)
+
+  const { results } = await c.env.DB_SHARED
+    .prepare(
+      `SELECT id, timestamp, friendly_message, technical, url, context, created_at
+       FROM error_logs
+       WHERE tenant_id = ? AND url LIKE ?
+       ORDER BY created_at DESC, timestamp DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .bind(tenant.tenantId, like, limit, offset)
+    .all()
+
+  return c.json({ events: results, total, page, limit, notaId: id, tipo: nota.tipo })
+})
+
 const nfItemSchema = z.object({
   produtoId: z.string().uuid().optional(),
   servicoId: z.string().uuid().optional(),
