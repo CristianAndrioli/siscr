@@ -14,6 +14,7 @@ import { prepareNfseEnvio } from '../lib/nfse/prepareNfseEnvio'
 import { getNfseAdapter } from '../lib/nfse'
 import { decryptA1Bundle } from '../lib/certBlob'
 import { onlyDigits } from '../lib/nfe/xmlEscape'
+import { appendNotaEventoLog } from '../lib/notaEventoLog'
 import {
   fetchBrasilApiNcmJson,
   fetchClassifNcmJson,
@@ -970,6 +971,17 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
       )
       .run()
 
+    await appendNotaEventoLog(c.env.DB_SHARED, {
+      tenantId: tenant.tenantId,
+      notaId: id,
+      routePrefix: '/faturamento/nfse',
+      friendlyMessage: r.autorizada
+        ? `NFS-e autorizada (${r.cStat}): ${r.xMotivo || 'OK'}`
+        : `NFS-e ${r.cStat}: ${r.xMotivo}`,
+      technical: (r.xmlRetorno || '').replace(/\s+/g, ' ').slice(0, 3500),
+      context: r.autorizada ? 'Prefeitura NFS-e (autorizada)' : 'Prefeitura NFS-e (rejeição)',
+    })
+
     if (!r.autorizada) {
       return c.json(
         {
@@ -1007,6 +1019,14 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
       )
       .bind(tent, msg.slice(0, 500), now, id, tenant.tenantId)
       .run()
+    await appendNotaEventoLog(c.env.DB_SHARED, {
+      tenantId: tenant.tenantId,
+      notaId: id,
+      routePrefix: '/faturamento/nfse',
+      friendlyMessage: msg.slice(0, 500),
+      technical: msg,
+      context: 'Prefeitura NFS-e (exceção)',
+    })
     return c.json({ error: msg }, 400)
   }
 })

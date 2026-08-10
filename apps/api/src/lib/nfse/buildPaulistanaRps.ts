@@ -160,24 +160,27 @@ export function paulistanaSoapAction(teste: boolean): string {
   return `"http://www.prefeitura.sp.gov.br/nfe/ws/${action}"`
 }
 
+/** Evita fechar o CDATA prematuramente se o XML contiver a sequência. */
+function cdataSafe(xml: string): string {
+  return xml.replace(/]]>/g, ']]]]><![CDATA[>')
+}
+
 export function wrapPaulistanaSoap(mensagemXml: string, teste: boolean): string {
   const method = teste ? 'TesteEnvioLoteRPS' : 'EnvioLoteRPS'
-  // MensagemXML como string escapada (contrato clássico do ASMX Paulistana)
-  const escaped = mensagemXml
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  // WSDL ASMX: elemento envoltório é `{Método}Request` (não o nome do método).
+  // MensagemXML em CDATA — sem isso o parser SOAP trata o Pedido como filhos e
+  // a string fica vazia → erro 1102 "Mensagem XML de Pedido sem conteúdo".
+  const body = cdataSafe(mensagemXml)
   return (
     `<?xml version="1.0" encoding="utf-8"?>` +
     `<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ` +
     `xmlns:xsd="http://www.w3.org/2001/XMLSchema" ` +
     `xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
     `<soap:Body>` +
-    `<${method} xmlns="http://www.prefeitura.sp.gov.br/nfe">` +
+    `<${method}Request xmlns="http://www.prefeitura.sp.gov.br/nfe">` +
     `<VersaoSchema>1</VersaoSchema>` +
-    `<MensagemXML>${escaped}</MensagemXML>` +
-    `</${method}>` +
+    `<MensagemXML><![CDATA[${body}]]></MensagemXML>` +
+    `</${method}Request>` +
     `</soap:Body>` +
     `</soap:Envelope>`
   )

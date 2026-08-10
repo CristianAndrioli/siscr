@@ -9,6 +9,13 @@ import {
   createProdutoService,
   createServicoService,
 } from '../services/cadastros/factory'
+import {
+  DEMO_EMAIL_SUFFIX,
+  DEMO_PESSOAS,
+  DEMO_PRODUTOS,
+  DEMO_SERVICOS,
+  DEMO_SKU_PREFIX,
+} from '../lib/cadastros/demoCadastros'
 import type {
   PessoaCreateInput,
 } from '../services/cadastros/PessoaService'
@@ -265,6 +272,93 @@ app.delete('/servicos/:id', async (c) => {
   const svc = createServicoService(c.env.DB_SHARED, tenant.tenantId)
   await svc.delete(c.req.param('id'))
   return c.json({ message: 'Removido com sucesso.' })
+})
+
+/**
+ * Importa clientes, fornecedores, produtos e serviços de demonstração (idempotente).
+ */
+app.post('/seed', async (c) => {
+  const tenant = c.get('tenant')
+  const userId = auditUserId(c)
+
+  const jaTem = await c.env.DB_SHARED
+    .prepare(
+      `SELECT COUNT(*) as c FROM pessoas
+       WHERE tenant_id = ? AND email LIKE ?`,
+    )
+    .bind(tenant.tenantId, `%${DEMO_EMAIL_SUFFIX}`)
+    .first<{ c: number }>()
+
+  if ((jaTem?.c ?? 0) > 0) {
+    return c.json(
+      {
+        error:
+          'Dados de demonstração já foram importados neste tenant. Remova os registros @demo.siscr.local / SKU DEMO-* para reimportar.',
+      },
+      409,
+    )
+  }
+
+  const empresa = await c.env.DB_SHARED
+    .prepare(`SELECT id FROM empresas WHERE tenant_id = ? ORDER BY created_at LIMIT 1`)
+    .bind(tenant.tenantId)
+    .first<{ id: string }>()
+
+  const empresaId = empresa?.id
+  const pessoaSvc = createPessoaService(c.env.DB_SHARED, tenant.tenantId)
+  const produtoSvc = createProdutoService(c.env.DB_SHARED, tenant.tenantId)
+  const servicoSvc = createServicoService(c.env.DB_SHARED, tenant.tenantId)
+
+  let pessoas = 0
+  let produtos = 0
+  let servicos = 0
+
+  for (const p of DEMO_PESSOAS) {
+    await pessoaSvc.create(
+      {
+        ...p,
+        empresaId,
+      },
+      userId,
+    )
+    pessoas += 1
+  }
+
+  for (const p of DEMO_PRODUTOS) {
+    await produtoSvc.create(
+      {
+        ...p,
+        ativo: true,
+        empresaId,
+      },
+      userId,
+    )
+    produtos += 1
+  }
+
+  for (const s of DEMO_SERVICOS) {
+    await servicoSvc.create(
+      {
+        ...s,
+        ativo: true,
+        empresaId,
+      },
+      userId,
+    )
+    servicos += 1
+  }
+
+  return c.json(
+    {
+      ok: true,
+      message: 'Cadastros de demonstração importados.',
+      pessoas,
+      produtos,
+      servicos,
+      marcadores: { email: DEMO_EMAIL_SUFFIX, sku: DEMO_SKU_PREFIX },
+    },
+    201,
+  )
 })
 
 export default app

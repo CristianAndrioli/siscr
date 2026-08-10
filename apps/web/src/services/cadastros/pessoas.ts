@@ -112,4 +112,15 @@ export const pessoasService = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`/tenant/cadastros/pessoas/${id}`);
   },
+
+  seedDemo: async (): Promise<{
+    ok: boolean;
+    pessoas: number;
+    produtos: number;
+    servicos: number;
+    message?: string;
+  }> => {
+    const response = await api.post('/tenant/cadastros/seed');
+    return response.data;
+  },
 };

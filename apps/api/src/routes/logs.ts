@@ -70,7 +70,7 @@ app.get('/errors', async (c) => {
       SELECT id, timestamp, friendly_message, technical, url, context, created_at
       FROM error_logs
       ${where}
-      ORDER BY timestamp DESC
+      ORDER BY created_at DESC, timestamp DESC
       LIMIT ? OFFSET ?
     `,
     )

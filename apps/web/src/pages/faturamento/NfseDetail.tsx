@@ -88,10 +88,16 @@ export default function NfseDetail() {
     try {
       const page = await fetchErrorLog({
         page: 0,
-        limit: 50,
+        limit: 100,
         urlContains: `/faturamento/nfse/${id}`,
       });
-      setNotaLogs(page.errors);
+      // API já ordena por created_at DESC; reforça no client.
+      const sorted = [...page.errors].sort((a, b) => {
+        const ta = Date.parse(a.created_at || a.timestamp || '') || 0;
+        const tb = Date.parse(b.created_at || b.timestamp || '') || 0;
+        return tb - ta;
+      });
+      setNotaLogs(sorted);
       setLogsTotal(page.total);
     } catch {
       setNotaLogs([]);
@@ -445,7 +451,7 @@ export default function NfseDetail() {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            Erros registrados nesta tela da nota ({logsTotal}).
+            Eventos e erros desta nota ({logsTotal}), do mais recente ao mais antigo.
           </p>
           <button
             type="button"
@@ -460,7 +466,7 @@ export default function NfseDetail() {
         {nota.transmissao_erro && (
           <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm">
             <p className="text-xs font-semibold text-amber-800 dark:text-amber-200 uppercase tracking-wide">
-              Último retorno da prefeitura (na nota)
+              Último retorno da prefeitura (campo da nota)
             </p>
             <p className="mt-1 text-amber-900 dark:text-amber-100">{nota.transmissao_erro}</p>
             {nota.cstat_ultimo && (
@@ -476,7 +482,7 @@ export default function NfseDetail() {
           <p className="text-sm text-slate-500 py-8 text-center">Carregando logs…</p>
         ) : notaLogs.length === 0 ? (
           <p className="text-sm text-slate-500 py-8 text-center border border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-            Nenhum erro de sistema vinculado a esta nota.
+            Nenhum evento registrado ainda. Transmita a nota para gravar o histórico aqui.
           </p>
         ) : (
           <ul className="space-y-2">
@@ -491,7 +497,7 @@ export default function NfseDetail() {
                       {log.friendly_message}
                     </p>
                     <time className="text-[11px] text-slate-500 whitespace-nowrap">
-                      {fmtLogWhen(log.timestamp || log.created_at)}
+                      {fmtLogWhen(log.created_at || log.timestamp)}
                     </time>
                   </div>
                   {log.context && (
