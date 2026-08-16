@@ -17,25 +17,22 @@ Masters iniciais (troca de senha obrigatória no primeiro login):
 
 ## Passos manuais no Cloudflare
 
-O código e o CI sobem o Pages `siscr-support`. Estes pontos **só o painel** resolve:
+O CI cria o projeto Pages `siscr-support` (branch de produção `staging`) se ainda não existir. Estes pontos **só o painel** resolve:
 
-1. **Criar o projeto Pages** (uma vez), se o primeiro deploy da Action falhar por projeto inexistente:
-   - Workers & Pages → Create → Pages → nome `siscr-support`
-   - Production branch: `staging`
-
-2. **Custom domain de staging** (não criar CNAME no DNS antes):
+1. **Custom domain de staging** (não criar CNAME no DNS antes):
    - `siscr-support` → Custom domains → Add → `suporte-staging.siscr.com.br`
    - O Cloudflare cria o registro na zona `siscr.com.br`
+   - Até lá o desk fica em `https://siscr-support.pages.dev`
 
-3. **Produção** (quando for a hora):
+2. **Produção** (quando for a hora):
    - Custom domain `suporte.siscr.com.br` no Pages de produção
    - De novo: **não** criar CNAME manual antes
 
-4. **Workers AI:** o binding `AI` vai no `wrangler.toml`. Se o deploy do Worker reclamar, ative Workers AI na conta (Workers → AI).
+3. **Workers AI:** o binding `AI` vai no `wrangler.toml`. Se o deploy do Worker reclamar, ative Workers AI na conta (Workers → AI).
 
-5. **Durable Objects:** sobem com o Worker; sem tela extra.
+4. **Durable Objects:** sobem com o Worker; sem tela extra.
 
-6. **Opcional:** Cloudflare Access em `suporte*.siscr.com.br` restringindo a e-mails do time.
+5. **Opcional:** Cloudflare Access em `suporte*.siscr.com.br` restringindo a e-mails do time.
 
 Não é necessário criar D1, KV, R2 ou Queue novos.
 
