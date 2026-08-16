@@ -28,7 +28,7 @@ class_name = "SupportTicketRoom"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["SupportTicketRoom"]
+new_sqlite_classes = ["SupportTicketRoom"]
 
 # ──────────────────────────────────────────────
 # D1 — Banco compartilhado (tenants, planos, billing)
