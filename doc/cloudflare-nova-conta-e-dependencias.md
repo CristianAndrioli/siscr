@@ -13,6 +13,7 @@ Este guia lista **dependências, recursos e arquivos** que precisam ser recriado
 | **Queues** | Tarefas assíncronas | Nome da fila em `wrangler.toml` + consumer |
 | **Cron Triggers** | Rotinas agendadas | `[triggers] crons` no `wrangler.toml` |
 | **Pages** | Frontend React (`apps/web/dist`) e mesa de suporte (`apps/support/dist`) | Projetos Pages + branch de deploy (`siscr-web`, `siscr-support`) |
+| **Email Service** | Transacional (verificação, senha, boas-vindas, ticket) | Binding `EMAIL` + domínio onboardado em Email Sending |
 
 Nada disso é “copiado” entre contas: **crie recursos novos** na conta destino e **substitua IDs e nomes** no repositório ou via variáveis de CI.
 
@@ -31,7 +32,8 @@ Nada disso é “copiado” entre contas: **crie recursos novos** na conta desti
 7. Aplicar migrações D1: `wrangler d1 migrations apply <nome-db> --remote --env staging` (a partir de `apps/api`).
 8. Deploy do Worker: `wrangler deploy --env staging` (ou produção).
 9. Criar projeto **Pages** (ou usar `wrangler pages project create`), configurar branch de deploy.
-10. Configurar **GitHub Actions** (ou outro CI) com secrets da nova conta.
+10. Onboard do domínio em **Compute → Email Service → Email Sending** (não use Email Routing se o MX da zona já aponta para outro provedor). O Cloudflare cria SPF/DKIM em `cf-bounce.<domínio>`.
+11. Configurar **GitHub Actions** (ou outro CI) com secrets da nova conta.
 
 ## 3. Secrets do Worker (não versionados)
 
@@ -41,6 +43,7 @@ Definir com `wrangler secret put <NOME> --env staging` (e `--env production` qua
 |--------|-----|
 | `BETTER_AUTH_SECRET` | Base de assinatura de sessão / tokens internos |
 | Binding `AI` | Workers AI (assistente de suporte) — declarado no `wrangler.toml`, sem secret |
+| Binding `EMAIL` | Cloudflare Email Service — `[[send_email]]` no `wrangler.toml`, sem secret |
 | `STRIPE_SECRET_KEY` | API Stripe |
 | `STRIPE_WEBHOOK_SECRET` | Validação do webhook em `/api/webhooks/stripe` |
 | `STRIPE_PRICE_BASICO`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE` | Price IDs dos planos (checkout) |

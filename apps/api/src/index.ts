@@ -8,6 +8,7 @@ import { tenantMiddleware } from './middleware/tenant'
 import { authMiddleware } from './middleware/auth'
 import { requireEmpresaMatrizMiddleware } from './middleware/requireEmpresaMatriz'
 import { requireTenantModule } from './middleware/moduleGuard'
+import type { SendEmailBinding } from './lib/email'
 
 import authRoutes from './routes/auth'
 import tenantRoutes from './routes/tenants'
@@ -84,8 +85,8 @@ export type Env = {
    * Habilita tenant por subdomínio: {slug}.app.suaempresa.com.br (API + CORS).
    */
   TENANT_HOST_BASE?: string
-  // E-mail — Resend (wrangler secret put RESEND_API_KEY)
-  RESEND_API_KEY?: string
+  // E-mail — Cloudflare Email Service (`[[send_email]]` no wrangler.toml)
+  EMAIL?: SendEmailBinding
   /** Remetente padrão, ex.: "SISCR <noreply@siscr.com.br>" */
   EMAIL_FROM?: string
 }

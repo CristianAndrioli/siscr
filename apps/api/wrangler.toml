@@ -16,10 +16,15 @@ NFE_DEV_MODE = "1"
 # Limite mensal de NF-e autorizadas (homolog/staging); produção pode sobrescrever
 NFE_QUOTA_MENSAL = "50"
 SUPPORT_DESK_URL = "http://localhost:5174"
+EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
 
 # Workers AI — nano assistente de suporte
 [ai]
 binding = "AI"
+
+# Cloudflare Email Service (transacional)
+[[send_email]]
+name = "EMAIL"
 
 # Chat ao vivo (uma sala Durable Object por ticket)
 [[durable_objects.bindings]]
@@ -123,6 +128,9 @@ queue = "siscr-tasks-staging"
 [env.staging.ai]
 binding = "AI"
 
+[[env.staging.send_email]]
+name = "EMAIL"
+
 [[env.staging.durable_objects.bindings]]
 name = "SUPPORT_TICKET_ROOMS"
 class_name = "SupportTicketRoom"
@@ -168,6 +176,9 @@ queue = "siscr-tasks-production"
 
 [env.production.ai]
 binding = "AI"
+
+[[env.production.send_email]]
+name = "EMAIL"
 
 [[env.production.durable_objects.bindings]]
 name = "SUPPORT_TICKET_ROOMS"

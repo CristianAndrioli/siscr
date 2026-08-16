@@ -11,7 +11,7 @@ app.post('/process', async (c) => {
   switch (task.type) {
     case 'notificar_vencimento':
       console.log(`[Queue] Notificando vencimento da conta ${task.contaId}`)
-      // TODO: integrar com Resend para envio de email
+      // TODO: enviar e-mail via Cloudflare Email Service (`env.EMAIL`)
       break
 
     case 'renovar_assinatura':

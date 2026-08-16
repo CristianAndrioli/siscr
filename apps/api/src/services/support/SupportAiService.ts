@@ -3,7 +3,7 @@ import type { SessionUser } from '../../middleware/auth'
 import { SupportTicketRepository } from '../../repositories/SupportTicketRepository'
 import { SupportAgentRepository } from '../../repositories/SupportAgentRepository'
 import { SUPPORT_AI_TOOL_DEFS, SupportAiTools } from './SupportAiTools'
-import { sendSupportTicketEmail } from '../../lib/email'
+import { hasEmailBinding, sendSupportTicketEmail, type SendEmailBinding } from '../../lib/email'
 
 const AI_MODELS = [
   '@cf/meta/llama-4-scout-17b-16e-instruct',
@@ -78,7 +78,7 @@ export class SupportAiService {
     env: {
       AI?: Ai
       DB_SHARED: D1Database
-      RESEND_API_KEY?: string
+      EMAIL?: SendEmailBinding
       EMAIL_FROM?: string
       SUPPORT_DESK_URL?: string
     },
@@ -136,7 +136,7 @@ export class SupportAiService {
     sessionId: string,
     subject: string,
     env: {
-      RESEND_API_KEY?: string
+      EMAIL?: SendEmailBinding
       EMAIL_FROM?: string
       SUPPORT_DESK_URL?: string
     },
@@ -191,13 +191,9 @@ export class SupportAiService {
     try {
       const agents = new SupportAgentRepository(this.db)
       const emails = await agents.listActiveEmails()
-      if (env.RESEND_API_KEY && emails.length > 0) {
+      if (hasEmailBinding(env) && emails.length > 0) {
         await sendSupportTicketEmail(
-          {
-            RESEND_API_KEY: env.RESEND_API_KEY,
-            EMAIL_FROM: env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>',
-            SUPPORT_DESK_URL: env.SUPPORT_DESK_URL ?? 'https://suporte-staging.siscr.com.br',
-          },
+          env,
           emails.map((e) => e.email),
           {
             subject: subject.trim().slice(0, 160) || 'Ajuda no SISCR',

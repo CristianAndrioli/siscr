@@ -32,7 +32,9 @@ O CI cria o projeto Pages `siscr-support` (branch de produção `staging`) se ai
 
 4. **Durable Objects:** sobem com o Worker; sem tela extra.
 
-5. **Opcional:** Cloudflare Access em `suporte*.siscr.com.br` restringindo a e-mails do time.
+5. **E-mail de chamado:** o Worker usa Cloudflare Email Service (`noreply@siscr.com.br`). No painel: **Compute → Email Service → Email Sending → Onboard Domain** em `siscr.com.br`. Não ative **Email Routing** se o MX da zona já for de outro provedor (Gmail etc.).
+
+6. **Opcional:** Cloudflare Access em `suporte*.siscr.com.br` restringindo a e-mails do time.
 
 Não é necessário criar D1, KV, R2 ou Queue novos.
 

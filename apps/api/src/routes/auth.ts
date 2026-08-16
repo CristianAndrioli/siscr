@@ -5,7 +5,7 @@ import type { Env } from '../index'
 import { PasswordHasher } from '../lib/password'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
 import { checkTenantSlugAvailability, resolveTenantSlug } from '../lib/tenantSlug'
-import { sendEmailVerification, sendPasswordResetEmail } from '../lib/email'
+import { hasEmailBinding, sendEmailVerification, sendPasswordResetEmail } from '../lib/email'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -317,7 +317,7 @@ app.post('/request-email-verification', async (c) => {
     return c.json({ error: 'Todos os campos são obrigatórios.' }, 400)
   }
 
-  if (!c.env.RESEND_API_KEY) {
+  if (!hasEmailBinding(c.env)) {
     return c.json({ error: 'Serviço de e-mail não configurado.' }, 503)
   }
 
@@ -327,10 +327,7 @@ app.post('/request-email-verification', async (c) => {
     expirationTtl: 60 * 60 * 24, // 24h
   })
 
-  await sendEmailVerification(
-    { RESEND_API_KEY: c.env.RESEND_API_KEY, EMAIL_FROM: c.env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>', FRONTEND_URL: c.env.FRONTEND_URL },
-    email, nome, token,
-  )
+  await sendEmailVerification(c.env, email, nome, token)
 
   return c.json({ message: 'E-mail de verificação enviado.' })
 })
@@ -444,7 +441,7 @@ app.get('/verify-email', async (c) => {
 app.post('/forgot-password', zValidator('json', z.object({ email: z.string().email() })), async (c) => {
   const { email } = c.req.valid('json')
 
-  if (!c.env.RESEND_API_KEY) {
+  if (!hasEmailBinding(c.env)) {
     return c.json({ message: 'Se o e-mail existir, você receberá as instruções em breve.' })
   }
 
@@ -457,10 +454,7 @@ app.post('/forgot-password', zValidator('json', z.object({ email: z.string().ema
     const token = crypto.randomUUID()
     await c.env.KV_SESSIONS.put(`password_reset:${user.id}:${token}`, '1', { expirationTtl: 3600 })
 
-    await sendPasswordResetEmail(
-      { RESEND_API_KEY: c.env.RESEND_API_KEY, EMAIL_FROM: c.env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>', FRONTEND_URL: c.env.FRONTEND_URL },
-      user.email, user.nome, user.id, token,
-    )
+    await sendPasswordResetEmail(c.env, user.email, user.nome, user.id, token)
   }
 
   // Sempre retorna 200 para não revelar se o e-mail existe

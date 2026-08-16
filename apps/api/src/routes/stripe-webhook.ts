@@ -3,7 +3,7 @@ import type { Env } from '../index'
 import { StripeWebhookVerifier } from '../lib/stripe/StripeWebhookVerifier'
 import { StripeEventIdempotency } from '../lib/stripe/StripeEventIdempotency'
 import { pendingSignupSchema } from './subscriptions'
-import { sendWelcomeEmail } from '../lib/email'
+import { hasEmailBinding, sendWelcomeEmail } from '../lib/email'
 
 /**
  * Webhook Stripe.
@@ -250,19 +250,9 @@ async function handleCheckoutCompleted(
   )
 
   // E-mail de boas-vindas (best-effort; falha aqui não aborta o webhook).
-  if (env.RESEND_API_KEY) {
+  if (hasEmailBinding(env)) {
     try {
-      await sendWelcomeEmail(
-        {
-          RESEND_API_KEY: env.RESEND_API_KEY,
-          EMAIL_FROM: env.EMAIL_FROM ?? 'SISCR <noreply@siscr.com.br>',
-          FRONTEND_URL: env.FRONTEND_URL,
-        },
-        pending.email,
-        pending.nome,
-        tenantSlug,
-        plan ?? pending.plan,
-      )
+      await sendWelcomeEmail(env, pending.email, pending.nome, tenantSlug, plan ?? pending.plan)
     } catch (emailErr) {
       console.error('[stripe-webhook] Falha ao enviar e-mail de boas-vindas:', emailErr)
     }

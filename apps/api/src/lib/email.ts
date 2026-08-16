@@ -1,34 +1,75 @@
 /**
- * Módulo de envio de e-mail via Resend.
- * Todas as funções recebem env como parâmetro para compatibilidade com Cloudflare Workers.
+ * Envio de e-mail transacional via Cloudflare Email Service (`env.EMAIL.send`).
+ * Sem API key de terceiro: o remetente precisa estar no domínio onboardado
+ * (Compute → Email Service → Email Sending → Onboard Domain).
  */
 
-interface EmailEnv {
-  RESEND_API_KEY: string
-  EMAIL_FROM: string
+export type EmailAddress = { email: string; name?: string }
+
+export type SendEmailBinding = {
+  send(message: {
+    to: string | EmailAddress | Array<string | EmailAddress>
+    from: string | EmailAddress
+    subject: string
+    html?: string
+    text?: string
+  }): Promise<{ messageId: string }>
+}
+
+export interface EmailEnv {
+  EMAIL?: SendEmailBinding
+  EMAIL_FROM?: string
   FRONTEND_URL?: string
   SUPPORT_DESK_URL?: string
 }
 
+const DEFAULT_FROM: EmailAddress = { name: 'SISCR', email: 'noreply@siscr.com.br' }
+
+export function hasEmailBinding(env: { EMAIL?: SendEmailBinding }): env is { EMAIL: SendEmailBinding } {
+  return typeof env.EMAIL?.send === 'function'
+}
+
+function parseFrom(raw?: string): EmailAddress {
+  if (!raw?.trim()) return DEFAULT_FROM
+  const named = raw.match(/^\s*(.+?)\s*<([^>]+)>\s*$/)
+  if (named) {
+    return { name: named[1]!.replace(/^["']|["']$/g, '').trim(), email: named[2]!.trim() }
+  }
+  return { email: raw.trim() }
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
 async function sendEmail(env: EmailEnv, to: string | string[], subject: string, html: string): Promise<void> {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: env.EMAIL_FROM,
+  if (!hasEmailBinding(env)) {
+    throw new Error('Binding EMAIL ausente. Configure [[send_email]] no wrangler.toml.')
+  }
+  try {
+    await env.EMAIL.send({
+      from: parseFrom(env.EMAIL_FROM),
       to,
       subject,
       html,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.text()
-    console.error('[Email] Falha ao enviar:', err)
-    throw new Error(`Resend error: ${res.status}`)
+      text: htmlToText(html),
+    })
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : ''
+    console.error('[Email] Falha ao enviar:', code || err)
+    throw err
   }
 }
 
