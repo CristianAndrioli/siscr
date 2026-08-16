@@ -92,6 +92,49 @@ importers:
         specifier: ^4.4.0
         version: 4.76.0(@cloudflare/workers-types@4.20260317.1)
 
+  apps/support:
+    dependencies:
+      axios:
+        specifier: ^1.13.2
+        version: 1.13.6
+      react:
+        specifier: ^19.1.1
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.1.1
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: ^7.9.5
+        version: 7.13.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.12.0
+      '@types/react':
+        specifier: ^19.1.16
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.1.9
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^4.2.1
+        version: 4.7.0(vite@5.4.21(@types/node@24.12.0))
+      autoprefixer:
+        specifier: ^10.4.21
+        version: 10.4.27(postcss@8.5.8)
+      postcss:
+        specifier: ^8.5.6
+        version: 8.5.8
+      tailwindcss:
+        specifier: ^3.4.1
+        version: 3.4.19(tsx@4.23.11)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^5.2.0
+        version: 5.4.21(@types/node@24.12.0)
+
   apps/web:
     dependencies:
       axios:

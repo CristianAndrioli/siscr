@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory'
 import type { Env } from '../index'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
 import type { ModuleMatrix } from '../lib/modulePermissions'
+import { readAccessToken } from '../lib/accessToken'
 
 export type SessionUser = {
   userId: string
@@ -42,13 +43,11 @@ declare module 'hono' {
  *   4) requireTenantModule  → valida permissão de módulo
  */
 export const authMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next) => {
-  const authHeader = c.req.header('Authorization')
+  const token = readAccessToken(c.req.header('Authorization'), c.req.query('token'))
 
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!token) {
     return c.json({ error: 'Token de autenticação não fornecido.' }, 401)
   }
-
-  const token = authHeader.slice(7)
 
   let sessionData = (await c.env.KV_SESSIONS.get(`session:${token}`, 'json')) as SessionUser | null
 

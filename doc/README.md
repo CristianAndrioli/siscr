@@ -12,6 +12,6 @@
 | [seguranca.md](./seguranca.md) | Práticas e requisitos de segurança. |
 | [plano-contabilidade-fiscal.md](./plano-contabilidade-fiscal.md) | Plano do módulo de contabilidade e obrigações fiscais. |
 | [integracoes-contabilidade.md](./integracoes-contabilidade.md) | Integração com escritórios contábeis: exportação ZIP, Distribuição DFe, APIs Domínio/Alterdata e o modelo de Conexões (named credentials). |
-| [redesign-frontend.mmd](./redesign-frontend.mmd) | Plano técnico do redesign do frontend (design system, componentes, páginas, responsividade). |
+| [suporte-desk.md](./suporte-desk.md) | Nano IA no ERP, mesa interna de suporte, DNS e passos manuais no Cloudflare. |
 
 Atualize estes arquivos quando alterar fluxos de autenticação, domínio ou infraestrutura.

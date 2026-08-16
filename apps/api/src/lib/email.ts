@@ -6,10 +6,11 @@
 interface EmailEnv {
   RESEND_API_KEY: string
   EMAIL_FROM: string
-  FRONTEND_URL: string
+  FRONTEND_URL?: string
+  SUPPORT_DESK_URL?: string
 }
 
-async function sendEmail(env: EmailEnv, to: string, subject: string, html: string): Promise<void> {
+async function sendEmail(env: EmailEnv, to: string | string[], subject: string, html: string): Promise<void> {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -128,4 +129,36 @@ export async function sendPasswordResetEmail(
     <p class="muted">Se você não solicitou a redefinição, ignore este e-mail. Sua senha permanece a mesma.</p>
   `)
   await sendEmail(env, to, 'Redefinição de senha — SISCR', html)
+}
+
+export async function sendSupportTicketEmail(
+  env: EmailEnv,
+  to: string[],
+  data: {
+    subject: string
+    ticketId: string
+    tenantNome: string
+    tenantSlug: string
+    userNome: string
+    userEmail: string
+  },
+): Promise<void> {
+  if (to.length === 0) return
+  const link = `${env.SUPPORT_DESK_URL ?? 'https://suporte-staging.siscr.com.br'}/tickets/${data.ticketId}`
+  const html = baseTemplate('Novo chamado SISCR', `
+    <h1>Novo chamado de suporte</h1>
+    <p><strong>${escapeHtml(data.subject)}</strong></p>
+    <p>Cliente: <strong>${escapeHtml(data.tenantNome)}</strong> (@${escapeHtml(data.tenantSlug)})</p>
+    <p>Usuário: ${escapeHtml(data.userNome)} (${escapeHtml(data.userEmail)})</p>
+    <a href="${link}" class="btn">Abrir no painel</a>
+  `)
+  await sendEmail(env, to, `[SISCR] ${data.subject}`, html)
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }

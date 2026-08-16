@@ -10,11 +10,25 @@ compatibility_flags = ["nodejs_compat"]
 ENVIRONMENT = "development"
 APP_URL = "http://localhost:8787"
 FRONTEND_URL = "http://localhost:5173"
-ALLOWED_ORIGINS = "http://localhost:5173"
+ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:5174"
 # "1" = permitir fluxo de XML NF-e sem certificado ICP (desenvolvimento). Produção: "0"
 NFE_DEV_MODE = "1"
 # Limite mensal de NF-e autorizadas (homolog/staging); produção pode sobrescrever
 NFE_QUOTA_MENSAL = "50"
+SUPPORT_DESK_URL = "http://localhost:5174"
+
+# Workers AI — nano assistente de suporte
+[ai]
+binding = "AI"
+
+# Chat ao vivo (uma sala Durable Object por ticket)
+[[durable_objects.bindings]]
+name = "SUPPORT_TICKET_ROOMS"
+class_name = "SupportTicketRoom"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["SupportTicketRoom"]
 
 # ──────────────────────────────────────────────
 # D1 — Banco compartilhado (tenants, planos, billing)
@@ -76,10 +90,11 @@ name = "siscr-api-staging"
 ENVIRONMENT = "staging"
 APP_URL = "https://api-staging.siscr.com.br"
 FRONTEND_URL = "https://staging.siscr.com.br"
-ALLOWED_ORIGINS = "https://staging.siscr.com.br,https://staging.siscr-web.pages.dev,https://siscr-web.pages.dev"
+ALLOWED_ORIGINS = "https://staging.siscr.com.br,https://staging.siscr-web.pages.dev,https://siscr-web.pages.dev,https://suporte-staging.siscr.com.br,http://localhost:5174"
 NFE_DEV_MODE = "0"
 NFE_QUOTA_MENSAL = "50"
 EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
+SUPPORT_DESK_URL = "https://suporte-staging.siscr.com.br"
 # Price IDs definidos via: wrangler secret put STRIPE_PRICE_BASICO --env staging
 # Nota: tenant identificado via ?tenant=slug ou header X-Tenant-Slug no staging
 
@@ -105,6 +120,13 @@ bucket_name = "siscr-storage-staging"
 binding = "QUEUE_TASKS"
 queue = "siscr-tasks-staging"
 
+[env.staging.ai]
+binding = "AI"
+
+[[env.staging.durable_objects.bindings]]
+name = "SUPPORT_TICKET_ROOMS"
+class_name = "SupportTicketRoom"
+
 # ──────────────────────────────────────────────
 # Ambiente: production
 # ──────────────────────────────────────────────
@@ -115,9 +137,10 @@ name = "siscr-api-production"
 ENVIRONMENT = "production"
 APP_URL = "https://api.siscr.com.br"
 FRONTEND_URL = "https://app.siscr.com.br"
-ALLOWED_ORIGINS = "https://app.siscr.com.br"
+ALLOWED_ORIGINS = "https://app.siscr.com.br,https://suporte.siscr.com.br"
 NFE_DEV_MODE = "0"
 EMAIL_FROM = "SISCR <noreply@siscr.com.br>"
+SUPPORT_DESK_URL = "https://suporte.siscr.com.br"
 # Subdomínio por tenant: {slug}.app.siscr.com.br — requer wildcard DNS *.app.siscr.com.br → Pages
 TENANT_HOST_BASE = "app.siscr.com.br"
 
@@ -142,3 +165,10 @@ bucket_name = "siscr-storage-production"
 [[env.production.queues.producers]]
 binding = "QUEUE_TASKS"
 queue = "siscr-tasks-production"
+
+[env.production.ai]
+binding = "AI"
+
+[[env.production.durable_objects.bindings]]
+name = "SUPPORT_TICKET_ROOMS"
+class_name = "SupportTicketRoom"

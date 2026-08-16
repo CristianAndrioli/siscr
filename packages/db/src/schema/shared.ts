@@ -404,3 +404,58 @@ export const notasFiscais = sqliteTable('notas_fiscais', {
   index('idx_nf_tenant').on(t.tenantId),
   index('idx_nf_status').on(t.status),
 ])
+
+// ─── Mesa de suporte (agentes internos + tickets) ──────────────
+export const supportAgents = sqliteTable('support_agents', {
+  id: text('id').primaryKey(),
+  nome: text('nome').notNull(),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').notNull().default('agent'),
+  ativo: integer('ativo', { mode: 'boolean' }).notNull().default(true),
+  mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+  createdBy: text('created_by'),
+  updatedAt: text('updated_at'),
+})
+
+export const supportAiSessions = sqliteTable('support_ai_sessions', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  userId: text('user_id').notNull(),
+  ticketId: text('ticket_id'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at'),
+})
+
+export const supportTickets = sqliteTable('support_tickets', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull(),
+  tenantSlug: text('tenant_slug').notNull(),
+  tenantNome: text('tenant_nome').notNull(),
+  createdByUserId: text('created_by_user_id'),
+  createdByNome: text('created_by_nome'),
+  createdByEmail: text('created_by_email'),
+  assignedAgentId: text('assigned_agent_id'),
+  kind: text('kind').notNull().default('support'),
+  source: text('source').notNull().default('ai'),
+  status: text('status').notNull().default('open'),
+  priority: text('priority').notNull().default('normal'),
+  subject: text('subject').notNull(),
+  parentTicketId: text('parent_ticket_id'),
+  aiSessionId: text('ai_session_id'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at'),
+})
+
+export const supportMessages = sqliteTable('support_messages', {
+  id: text('id').primaryKey(),
+  ticketId: text('ticket_id'),
+  sessionId: text('session_id'),
+  authorType: text('author_type').notNull(),
+  authorId: text('author_id'),
+  authorNome: text('author_nome'),
+  body: text('body').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+

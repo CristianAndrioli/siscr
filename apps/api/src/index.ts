@@ -38,6 +38,10 @@ import conexoesRoutes from './routes/conexoes'
 import cadastrosFinanceiroRoutes from './routes/cadastrosFinanceiro'
 import cadastrosProdutosAuxRoutes from './routes/cadastrosProdutosAux'
 import relatoriosRoutes from './routes/relatorios'
+import supportRoutes from './routes/support'
+import deskRoutes from './routes/desk'
+
+export { SupportTicketRoom } from './durable-objects/SupportTicketRoom'
 
 export type Env = {
   // D1 — banco compartilhado (tenants, planos, billing)
@@ -51,11 +55,16 @@ export type Env = {
   CERT_BLOB_SECRET?: string
   // Queues — tarefas assíncronas
   QUEUE_TASKS: Queue
+  // Workers AI (nano assistente de suporte)
+  AI?: Ai
+  // Chat ao vivo por ticket
+  SUPPORT_TICKET_ROOMS: DurableObjectNamespace
   // Variáveis de ambiente
   ENVIRONMENT: string
   APP_URL: string
   FRONTEND_URL: string
   ALLOWED_ORIGINS: string
+  SUPPORT_DESK_URL?: string
   // Secrets (definidos via wrangler secret put)
   BETTER_AUTH_SECRET: string
   STRIPE_SECRET_KEY: string
@@ -173,6 +182,14 @@ app.route('/api/tenant/preferences', preferencesRoutes)
 app.route('/api/tenant/contabilidade', contabilidadeRoutes)
 app.route('/api/tenant/conexoes', conexoesRoutes)
 app.route('/api/tenant/relatorios', relatoriosRoutes)
+
+// ─── Suporte do cliente (IA + tickets) — sessão ERP, sem guarda de módulo ──
+app.use('/api/support/*', tenantMiddleware)
+app.use('/api/support/*', authMiddleware)
+app.route('/api/support', supportRoutes)
+
+// ─── Mesa interna (agentes SISCR) — fora do pipeline tenant ────
+app.route('/api/desk', deskRoutes)
 
 // ─── Rotas internas (Cron + Queue handlers) ───────────────────
 app.route('/__cron', cronRoutes)

@@ -12,7 +12,7 @@ Este guia lista **dependências, recursos e arquivos** que precisam ser recriado
 | **R2** | Certificados A1, XMLs, artefatos | `bucket_name` + binding `R2_STORAGE` |
 | **Queues** | Tarefas assíncronas | Nome da fila em `wrangler.toml` + consumer |
 | **Cron Triggers** | Rotinas agendadas | `[triggers] crons` no `wrangler.toml` |
-| **Pages** | Frontend React (`apps/web/dist`) | Projeto Pages + branch de deploy |
+| **Pages** | Frontend React (`apps/web/dist`) e mesa de suporte (`apps/support/dist`) | Projetos Pages + branch de deploy (`siscr-web`, `siscr-support`) |
 
 Nada disso é “copiado” entre contas: **crie recursos novos** na conta destino e **substitua IDs e nomes** no repositório ou via variáveis de CI.
 
@@ -40,6 +40,7 @@ Definir com `wrangler secret put <NOME> --env staging` (e `--env production` qua
 | Secret | Uso |
 |--------|-----|
 | `BETTER_AUTH_SECRET` | Base de assinatura de sessão / tokens internos |
+| Binding `AI` | Workers AI (assistente de suporte) — declarado no `wrangler.toml`, sem secret |
 | `STRIPE_SECRET_KEY` | API Stripe |
 | `STRIPE_WEBHOOK_SECRET` | Validação do webhook em `/api/webhooks/stripe` |
 | `STRIPE_PRICE_BASICO`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE` | Price IDs dos planos (checkout) |

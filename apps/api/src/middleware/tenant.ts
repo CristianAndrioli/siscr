@@ -1,5 +1,6 @@
 import { createMiddleware } from 'hono/factory'
 import type { Env } from '../index'
+import { readAccessToken } from '../lib/accessToken'
 
 type TenantContext = {
   tenantId: string
@@ -18,11 +19,10 @@ export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, ne
   // 1. Header explícito tem prioridade
   let slug = c.req.header('X-Tenant-Slug')?.trim() || null
 
-  // 2. Fallback: extrair slug do Bearer token (sessão no KV)
+  // 2. Fallback: extrair slug do Bearer token (sessão no KV) — header ou ?token= (WebSocket)
   if (!slug) {
-    const authHeader = c.req.header('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
+    const token = readAccessToken(c.req.header('Authorization'), c.req.query('token'))
+    if (token) {
       const session = await c.env.KV_SESSIONS.get(`session:${token}`, 'json') as { tenantSlug?: string; tenantId?: string } | null
       if (session?.tenantSlug) {
         slug = session.tenantSlug

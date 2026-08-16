@@ -1,0 +1,50 @@
+# Mesa de suporte SISCR
+
+Painel interno em `apps/support`, API no Worker existente (`/api/desk` e `/api/support`), tabelas `support_*` no D1 compartilhado.
+
+## URLs
+
+| Ambiente | Desk | API |
+|----------|------|-----|
+| Dev | http://localhost:5174 | http://localhost:8787 |
+| Staging | https://suporte-staging.siscr.com.br | https://api-staging.siscr.com.br |
+| Produção | https://suporte.siscr.com.br | https://api.siscr.com.br |
+
+Masters iniciais (troca de senha obrigatória no primeiro login):
+
+- Cristian Andrioli — `cristian.andrioli@siscr.com`
+- Lucas Percisi — `lucas.percisi@siscr.com`
+
+## Passos manuais no Cloudflare
+
+O código e o CI sobem o Pages `siscr-support`. Estes pontos **só o painel** resolve:
+
+1. **Criar o projeto Pages** (uma vez), se o primeiro deploy da Action falhar por projeto inexistente:
+   - Workers & Pages → Create → Pages → nome `siscr-support`
+   - Production branch: `staging`
+
+2. **Custom domain de staging** (não criar CNAME no DNS antes):
+   - `siscr-support` → Custom domains → Add → `suporte-staging.siscr.com.br`
+   - O Cloudflare cria o registro na zona `siscr.com.br`
+
+3. **Produção** (quando for a hora):
+   - Custom domain `suporte.siscr.com.br` no Pages de produção
+   - De novo: **não** criar CNAME manual antes
+
+4. **Workers AI:** o binding `AI` vai no `wrangler.toml`. Se o deploy do Worker reclamar, ative Workers AI na conta (Workers → AI).
+
+5. **Durable Objects:** sobem com o Worker; sem tela extra.
+
+6. **Opcional:** Cloudflare Access em `suporte*.siscr.com.br` restringindo a e-mails do time.
+
+Não é necessário criar D1, KV, R2 ou Queue novos.
+
+## Dev local
+
+```bash
+pnpm install
+pnpm dev:api
+pnpm dev:support
+```
+
+O widget no ERP (`pnpm dev:web`) usa a mesma API.

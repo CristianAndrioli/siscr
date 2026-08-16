@@ -85,6 +85,7 @@ flowchart TB
 siscr/
 ├── apps/
 │   ├── web/                 # Frontend React → Cloudflare Pages
+│   ├── support/             # Mesa de suporte (time interno) → Pages
 │   └── api/                 # Backend Hono → Workers
 │       ├── src/
 │       │   ├── index.ts     # CORS, rotas públicas, montagem

@@ -74,10 +74,24 @@ jobs:
           workingDirectory: apps/api
           command: pages deploy ../../apps/web/dist --project-name=siscr-web --branch=staging
 
+      - name: Build Support desk
+        run: pnpm --filter=@siscr/support run build
+        env:
+          VITE_API_URL: https://api-staging.siscr.com.br
+
+      - name: Deploy Support desk to Cloudflare Pages (staging)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/api
+          command: pages deploy ../../apps/support/dist --project-name=siscr-support --branch=staging
+
       - name: Summary
         run: |
           echo "## Deploy Staging Concluido!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **API (Worker):** https://api-staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
           echo "- **Frontend (Pages):** https://staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
+          echo "- **Suporte (Pages):** https://suporte-staging.siscr.com.br" >> $GITHUB_STEP_SUMMARY
           echo "- **Ponte SEFAZ:** https://siscr-sefaz-bridge.lucaspercisi.workers.dev" >> $GITHUB_STEP_SUMMARY

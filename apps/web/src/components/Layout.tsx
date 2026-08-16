@@ -5,7 +5,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useTheme } from '../hooks/useTheme';
 import { useUserPreferences } from '../hooks/useUserPreferences';
 import OnboardingEmpresaGate from './OnboardingEmpresaGate';
-import WhatsAppSupportButton from './WhatsAppSupportButton';
+import SupportChatWidget from './SupportChatWidget';
 import CommandPalette from './commandPalette/CommandPalette';
 import { icons, Icon } from './icons';
 import { SIDEBAR_SECTIONS, type SidebarNavItem } from '../config/hubConfig';
@@ -326,7 +326,7 @@ export default function Layout({ children }: LayoutProps) {
         </main>
       </div>
 
-      <WhatsAppSupportButton />
+      <SupportChatWidget />
       <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
     </div>
   );
