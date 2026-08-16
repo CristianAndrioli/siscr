@@ -28,6 +28,7 @@ import {
 } from '../lib/stripe/stripeApi'
 import { overlayStripePlanPrices, resolvePriceIdForPlan } from '../lib/stripe/planCatalog'
 import { getFiscalDocUsoMes } from '../lib/fiscalDocQuota'
+import { getEmailUsoMes } from '../lib/email'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
   if (e instanceof Error && typeof (e as Error & { status?: number }).status === 'number') {
@@ -600,10 +601,15 @@ app.put('/usuarios/:id', zValidator('json', userUpdateSchema), async (c) => {
   const now = new Date().toISOString()
 
   const cur = await c.env.DB_SHARED
-    .prepare('SELECT role, custom_role_id FROM users WHERE id = ? AND tenant_id = ?')
+    .prepare('SELECT role, custom_role_id, ativo FROM users WHERE id = ? AND tenant_id = ?')
     .bind(id, tenant.tenantId)
-    .first<{ role: string; custom_role_id: string | null }>()
+    .first<{ role: string; custom_role_id: string | null; ativo: number }>()
   if (!cur) return c.json({ error: 'Usuário não encontrado.' }, 404)
+
+  if (data.ativo === true && cur.ativo !== 1) {
+    const limite = await checkCanCreateUsuario(c.env.DB_SHARED, tenant.tenantId)
+    if (limite) return c.json(limite, 403)
+  }
 
   const nextRole = data.role ?? cur.role
   let nextCustom: string | null =
@@ -816,6 +822,7 @@ app.get('/subscription', async (c) => {
   const plan = await resolvePlanForTenant(c.env.DB_SHARED, tenant.tenantId)
   const uso = await getTenantUsage(c.env.DB_SHARED, tenant.tenantId)
   const docsMes = await getFiscalDocUsoMes(c.env.DB_SHARED, tenant.tenantId)
+  const emailsMes = await getEmailUsoMes(c.env.DB_SHARED, tenant.tenantId)
 
   const { results: caracteristicas } = await c.env.DB_SHARED
     .prepare(
@@ -838,7 +845,7 @@ app.get('/subscription', async (c) => {
       max_usuarios: plan.max_usuarios,
       max_docs_fiscais_mes: plan.max_docs_fiscais_mes,
       max_emails_mes: plan.max_emails_mes,
-      uso: { ...uso, docs_fiscais_mes: docsMes },
+      uso: { ...uso, docs_fiscais_mes: docsMes, emails_mes: emailsMes },
       caracteristicas: caracteristicas ?? [],
     },
   })

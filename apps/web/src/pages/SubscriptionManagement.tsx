@@ -23,25 +23,39 @@ interface SubscriptionData {
     filiais: number;
     usuarios: number;
     docs_fiscais_mes?: number;
+    emails_mes?: number;
   };
   caracteristicas?: { rotulo: string; ordem: number }[];
 }
 
-function UsoBar({ label, uso, max }: { label: string; uso: number; max: number }) {
-  const pct = max <= 0 ? 0 : Math.min(100, Math.round((uso / max) * 100));
-  const full = uso >= max;
+function UsoBar({
+  label,
+  hint,
+  uso,
+  max,
+}: {
+  label: string;
+  hint?: string;
+  uso: number;
+  max: number;
+}) {
+  const pct = max <= 0 ? (uso > 0 ? 100 : 0) : Math.min(100, Math.round((uso / max) * 100));
+  const full = max <= 0 ? true : uso >= max;
   return (
     <div className="space-y-1.5">
-      <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
-        <span>{label}</span>
-        <span className={full ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}>
+      <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400 gap-3">
+        <span>
+          {label}
+          {hint && <span className="block font-normal text-[11px] text-slate-400 dark:text-slate-500">{hint}</span>}
+        </span>
+        <span className={`flex-none ${full ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
           {uso} / {max}
         </span>
       </div>
       <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${full ? 'bg-amber-500' : 'bg-brand-500'}`}
-          style={{ width: `${pct}%` }}
+          style={{ width: `${max <= 0 ? 100 : pct}%` }}
         />
       </div>
     </div>
@@ -157,7 +171,19 @@ export default function SubscriptionManagement() {
           'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
       })
     : null;
-  const isFree = !subscription?.stripe_customer_id || subscription?.plan_id === 'free';
+  const isFree =
+    (subscription?.plan_id_efetivo ?? subscription?.plan_id) === 'free' ||
+    (subscription?.preco_mensal ?? 0) <= 0;
+
+  const limitCards = subscription
+    ? [
+        { value: subscription.max_empresas, label: subscription.max_empresas === 1 ? 'Empresa' : 'Empresas' },
+        { value: subscription.max_filiais, label: 'Filiais' },
+        { value: subscription.max_usuarios, label: 'Usuários' },
+        { value: subscription.max_docs_fiscais_mes ?? 0, label: 'Notas / mês' },
+        { value: subscription.max_emails_mes ?? 0, label: 'E-mails / mês' },
+      ]
+    : [];
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -173,7 +199,7 @@ export default function SubscriptionManagement() {
         </Link>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-display">Assinatura</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-          Plano atual, limites do tenant e portal de cobrança (Stripe).
+          Uma assinatura por empresa. O plano limita CNPJ, filiais, usuários e notas (NF-e + NFS-e). E-mail é teto anti-abuso.
         </p>
       </div>
 
@@ -221,19 +247,14 @@ export default function SubscriptionManagement() {
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-6">
-              {[
-                { value: subscription.max_empresas, label: subscription.max_empresas !== 1 ? 'Empresas' : 'Empresa' },
-                { value: subscription.max_filiais, label: 'Filiais' },
-                { value: subscription.max_usuarios, label: 'Usuários' },
-              ].map(({ value, label }) => (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-3 mb-6">
+              {limitCards.map(({ value, label }) => (
                 <div
                   key={label}
                   className="text-center p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
                 >
                   <div className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">{value}</div>
                   <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">{label}</div>
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">limite do plano</div>
                 </div>
               ))}
             </div>
@@ -243,20 +264,21 @@ export default function SubscriptionManagement() {
                 <p className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
                   Uso atual
                 </p>
-                <UsoBar
-                  label="Empresas cadastradas"
-                  uso={subscription.uso.empresas}
-                  max={subscription.max_empresas}
-                />
+                <UsoBar label="Empresas (CNPJ)" uso={subscription.uso.empresas} max={subscription.max_empresas} />
                 <UsoBar label="Filiais" uso={subscription.uso.filiais} max={subscription.max_filiais} />
                 <UsoBar label="Usuários ativos" uso={subscription.uso.usuarios} max={subscription.max_usuarios} />
-                {typeof subscription.max_docs_fiscais_mes === 'number' && (
-                  <UsoBar
-                    label="Documentos fiscais neste mês"
-                    uso={subscription.uso.docs_fiscais_mes ?? 0}
-                    max={subscription.max_docs_fiscais_mes}
-                  />
-                )}
+                <UsoBar
+                  label="Documentos fiscais neste mês"
+                  hint="NF-e + NFS-e autorizados. Free não emite."
+                  uso={subscription.uso.docs_fiscais_mes ?? 0}
+                  max={subscription.max_docs_fiscais_mes ?? 0}
+                />
+                <UsoBar
+                  label="E-mails transacionais neste mês"
+                  hint="Teto anti-abuso (não é produto). Reset e verificação de senha não entram."
+                  uso={subscription.uso.emails_mes ?? 0}
+                  max={subscription.max_emails_mes ?? 0}
+                />
               </div>
             )}
 
@@ -276,22 +298,25 @@ export default function SubscriptionManagement() {
             )}
 
             {subscription.preco_mensal > 0 && (
-              <div className="flex items-baseline gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-2xl font-bold text-brand-600 dark:text-brand-400">
-                  {fmtBRL(subscription.preco_mensal)}
-                </span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">/mês</span>
-                {subscription.preco_anual > 0 && (
-                  <span className="text-xs text-slate-400 dark:text-slate-500 ml-2">
-                    ou {fmtBRL(subscription.preco_anual)}/ano
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-2xl font-bold text-brand-600 dark:text-brand-400">
+                    {fmtBRL(subscription.preco_mensal)}
                   </span>
-                )}
+                  <span className="text-sm text-slate-500 dark:text-slate-400">/mês</span>
+                  {subscription.preco_anual > 0 && (
+                    <span className="text-xs text-slate-400 dark:text-slate-500 ml-1">
+                      ou {fmtBRL(subscription.preco_anual)}/ano (2 meses grátis)
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Impostos inclusos. Trial de 14 dias na primeira assinatura paga.</p>
               </div>
             )}
 
             {subscription.subscription_expires_at && (
               <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                Válido até{' '}
+                Próximo ciclo / válido até{' '}
                 <span className="font-medium text-slate-700 dark:text-slate-300">
                   {formatDate(subscription.subscription_expires_at)}
                 </span>
@@ -310,12 +335,12 @@ export default function SubscriptionManagement() {
                   />
                 </svg>
               </div>
-              <p className="text-slate-600 dark:text-slate-300 text-sm mb-1 font-medium">Plano gratuito</p>
+              <p className="text-slate-600 dark:text-slate-300 text-sm mb-1 font-medium">Plano Free (demo)</p>
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-5 max-w-md mx-auto">
-                Faça upgrade para aumentar limites e desbloquear recursos avançados.
+                Sem cartão e sem emissão de NF-e / NFS-e. Assine o Básico ou superior para emitir notas no limite do plano.
               </p>
               <Link to="/plans" className="btn-primary px-8 py-3 inline-flex items-center gap-2 justify-center">
-                Ver planos e fazer upgrade
+                Ver planos e assinar
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
@@ -328,7 +353,7 @@ export default function SubscriptionManagement() {
               </p>
               <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Portal do Stripe</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-5 leading-relaxed">
-                Altere plano, forma de pagamento, baixe faturas ou cancele pela área segura do Stripe.
+                Troca de plano (sem segunda assinatura), cartão, faturas e cancelamento no fim do ciclo. Se o pagamento falhar, o ERP trava até regularizar.
               </p>
               <button
                 type="button"

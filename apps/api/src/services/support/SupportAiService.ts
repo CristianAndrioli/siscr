@@ -139,6 +139,7 @@ export class SupportAiService {
       EMAIL?: SendEmailBinding
       EMAIL_FROM?: string
       SUPPORT_DESK_URL?: string
+      DB_SHARED?: D1Database
     },
   ) {
     const session = await this.tickets.findSession(sessionId)
@@ -202,6 +203,7 @@ export class SupportAiService {
             tenantSlug: tenant?.slug ?? user.tenantSlug,
             userNome: user.nome,
             userEmail: user.email,
+            tenantId: user.tenantId,
           },
         )
       }

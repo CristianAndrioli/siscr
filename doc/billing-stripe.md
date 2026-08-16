@@ -89,6 +89,18 @@ Cota NF-e + NFS-e somada por plano: `apps/api/src/lib/fiscalDocQuota.ts`.
 5. Formas de pagamento no Dashboard (cartão; boleto se quiser; PIX invite-only no BR). **Não** hardcodar `payment_method_types` no Worker.
 6. **Não ligar Stripe Tax** — ISS sai na NFS-e da empresa SISCR (no início, emitir manualmente após `invoice.paid`).
 
+## Enforcement no código
+
+| Recurso | Onde barra | Observação |
+|---------|------------|------------|
+| Empresas | `POST /api/tenant/info/empresas` | `checkCanCreateEmpresa` |
+| Filiais | `POST .../empresas/:id/filiais` | `checkCanCreateFilial` |
+| Usuários | `POST /usuarios` e reativar (`PUT` `ativo: true`) | conta só `ativo = 1` |
+| NF-e / NFS-e | transmitir nota (`assertFiscalDocQuotaAvailable`) | Free = 0; soma NF-e + NFS-e no mês |
+| E-mail | teto anti-abuso após o send (ticket/boas-vindas) | **não** barra reset de senha nem verificação de e-mail |
+
+Uso aparece em `/subscription-management`.
+
 ## Checklist produção
 
 1. Live mode: recriar os 3 produtos + 6 Prices com os **mesmos lookup keys**, BRL, imposto incluso, `licensed`.

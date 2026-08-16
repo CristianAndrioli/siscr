@@ -4,6 +4,8 @@
  * (Compute → Email Service → Email Sending → Onboard Domain).
  */
 
+import { resolvePlanForTenant } from './planLimits'
+
 export type EmailAddress = { email: string; name?: string }
 
 export type SendEmailBinding = {
@@ -40,19 +42,51 @@ function parseFrom(raw?: string): EmailAddress {
   return { email: raw.trim() }
 }
 
-async function incrementEmailUsoMes(db: D1Database, tenantId: string): Promise<void> {
-  const now = new Date()
-  const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+function currentYm(d = new Date()): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+export class EmailQuotaExceededError extends Error {
+  readonly code = 'EMAIL_QUOTA_EXCEEDED'
+  constructor(
+    readonly used: number,
+    readonly limit: number,
+  ) {
+    super(`Cota mensal de e-mails atingida (${used}/${limit}).`)
+    this.name = 'EmailQuotaExceededError'
+  }
+}
+
+export async function getEmailUsoMes(db: D1Database, tenantId: string, ym = currentYm()): Promise<number> {
+  const row = await db
+    .prepare('SELECT qtd FROM email_envio_uso WHERE tenant_id = ? AND ym = ?')
+    .bind(tenantId, ym)
+    .first<{ qtd: number }>()
+  return row?.qtd ?? 0
+}
+
+async function incrementEmailUsoMes(db: D1Database, tenantId: string, n = 1): Promise<void> {
+  const ym = currentYm()
   await db
     .prepare(
       `INSERT INTO email_envio_uso (tenant_id, ym, qtd, updated_at)
-       VALUES (?, ?, 1, datetime('now'))
+       VALUES (?, ?, ?, datetime('now'))
        ON CONFLICT(tenant_id, ym) DO UPDATE SET
-         qtd = qtd + 1,
+         qtd = qtd + excluded.qtd,
          updated_at = datetime('now')`,
     )
-    .bind(tenantId, ym)
+    .bind(tenantId, ym, n)
     .run()
+}
+
+/** Teto anti-abuso. Não usar em verificação de e-mail nem reset de senha. */
+export async function assertEmailQuotaAvailable(db: D1Database, tenantId: string, n = 1): Promise<void> {
+  const plan = await resolvePlanForTenant(db, tenantId)
+  const limit = Math.max(0, plan.max_emails_mes)
+  const used = await getEmailUsoMes(db, tenantId)
+  if (used + n > limit) {
+    throw new EmailQuotaExceededError(used, limit)
+  }
 }
 
 function htmlToText(html: string): string {
@@ -169,7 +203,7 @@ export async function sendWelcomeEmail(
   await sendEmail(env, to, 'Bem-vindo ao SISCR!', html)
   if (tenantId && env.DB_SHARED) {
     try {
-      await incrementEmailUsoMes(env.DB_SHARED, tenantId)
+      await incrementEmailUsoMes(env.DB_SHARED, tenantId, 1)
     } catch (err) {
       console.error('[email] Falha ao registrar uso de e-mail:', err)
     }
@@ -198,7 +232,7 @@ export async function sendPasswordResetEmail(
 }
 
 export async function sendSupportTicketEmail(
-  env: EmailEnv,
+  env: EmailEnv & { DB_SHARED?: D1Database },
   to: string[],
   data: {
     subject: string
@@ -207,9 +241,19 @@ export async function sendSupportTicketEmail(
     tenantSlug: string
     userNome: string
     userEmail: string
+    tenantId?: string
   },
 ): Promise<void> {
   if (to.length === 0) return
+  const n = to.length
+  if (data.tenantId && env.DB_SHARED) {
+    try {
+      await assertEmailQuotaAvailable(env.DB_SHARED, data.tenantId, n)
+    } catch (err) {
+      console.warn('[email] Cota de e-mail atingida; chamado criado sem notificar mesa:', err)
+      return
+    }
+  }
   const link = `${env.SUPPORT_DESK_URL ?? 'https://suporte-staging.siscr.com.br'}/tickets/${data.ticketId}`
   const html = baseTemplate('Novo chamado SISCR', `
     <h1>Novo chamado de suporte</h1>
@@ -219,6 +263,13 @@ export async function sendSupportTicketEmail(
     <a href="${link}" class="btn">Abrir no painel</a>
   `)
   await sendEmail(env, to, `[SISCR] ${data.subject}`, html)
+  if (data.tenantId && env.DB_SHARED) {
+    try {
+      await incrementEmailUsoMes(env.DB_SHARED, data.tenantId, n)
+    } catch (err) {
+      console.error('[email] Falha ao registrar uso de e-mail (ticket):', err)
+    }
+  }
 }
 
 function escapeHtml(value: string): string {
