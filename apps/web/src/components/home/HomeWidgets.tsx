@@ -42,16 +42,59 @@ const QUICK_ACTIONS = [
   { label: 'Abrir OS', to: '/frota/ordens-servico' },
 ];
 
-function WidgetTitle({ title }: { title: string }) {
-  return <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500 mb-2.5">{title}</p>;
+function WidgetTitle({ title, className }: { title: string; className?: string }) {
+  return (
+    <p className={`text-[11px] font-bold uppercase tracking-[0.1em] mb-2.5 ${className ?? 'text-slate-400 dark:text-slate-500'}`}>
+      {title}
+    </p>
+  );
 }
 
-function Kpi({ label, value, sub, subClass }: { label: string; value: string; sub?: string; subClass?: string }) {
+type KpiTone = 'emerald' | 'sky' | 'rose' | 'brand';
+
+const KPI_TONE: Record<KpiTone, { card: string; title: string; value: string; bar: string }> = {
+  emerald: {
+    card: 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800',
+    title: 'text-emerald-700/80 dark:text-emerald-400/80',
+    value: 'text-emerald-800 dark:text-emerald-300',
+    bar: 'bg-emerald-500',
+  },
+  sky: {
+    card: 'bg-sky-50 dark:bg-sky-950/50 border-sky-200 dark:border-sky-800',
+    title: 'text-sky-700/80 dark:text-sky-400/80',
+    value: 'text-sky-800 dark:text-sky-300',
+    bar: 'bg-sky-500',
+  },
+  rose: {
+    card: 'bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800',
+    title: 'text-rose-700/80 dark:text-rose-400/80',
+    value: 'text-rose-800 dark:text-rose-300',
+    bar: 'bg-rose-500',
+  },
+  brand: {
+    card: 'bg-brand-50 dark:bg-brand-950/50 border-brand-200 dark:border-brand-800',
+    title: 'text-brand-700/80 dark:text-brand-400/80',
+    value: 'text-brand-800 dark:text-brand-300',
+    bar: 'bg-brand-500',
+  },
+};
+
+function Kpi({
+  label, value, sub, subClass, tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  subClass?: string;
+  tone: KpiTone;
+}) {
+  const t = KPI_TONE[tone];
   return (
-    <div className="card p-4 h-full">
-      <WidgetTitle title={label} />
-      <p className="text-[25px] font-mono font-bold leading-none text-slate-900 dark:text-slate-100 tabular-nums">{value}</p>
-      {sub && <p className={`text-xs mt-1.5 ${subClass ?? 'text-slate-400 dark:text-slate-500'}`}>{sub}</p>}
+    <div className={`card p-4 h-full relative overflow-hidden ${t.card}`}>
+      <span className={`absolute inset-y-0 left-0 w-1 ${t.bar}`} aria-hidden />
+      <WidgetTitle title={label} className={t.title} />
+      <p className={`text-[25px] font-mono font-bold leading-none tabular-nums ${t.value}`}>{value}</p>
+      {sub && <p className={`text-xs mt-1.5 ${subClass ?? 'text-slate-500 dark:text-slate-400'}`}>{sub}</p>}
     </div>
   );
 }
@@ -69,6 +112,7 @@ export function renderWidget(key: WidgetKey, dash: FinDash | null, loading: bool
           label={temContas ? 'Saldo em caixa' : 'Saldo previsto'}
           value={fmtBRL(saldo)}
           sub={temContas ? `${dash?.contas_bancarias.length} conta(s)` : 'Receber − Pagar'}
+          tone={saldo < 0 ? 'rose' : 'emerald'}
         />
       );
     }
@@ -79,6 +123,7 @@ export function renderWidget(key: WidgetKey, dash: FinDash | null, loading: bool
           value={fmtBRL(dash?.receber?.pendente)}
           sub={dash?.receber?.qtd_vencido ? `${dash.receber.qtd_vencido} vencido(s)` : 'Tudo em dia'}
           subClass={dash?.receber?.qtd_vencido ? 'text-negative font-semibold' : undefined}
+          tone="sky"
         />
       );
     case 'pagar':
@@ -88,6 +133,7 @@ export function renderWidget(key: WidgetKey, dash: FinDash | null, loading: bool
           value={fmtBRL(dash?.pagar?.pendente)}
           sub={dash?.pagar?.qtd_vencido ? `${dash.pagar.qtd_vencido} vencido(s)` : 'Tudo em dia'}
           subClass={dash?.pagar?.qtd_vencido ? 'text-negative font-semibold' : undefined}
+          tone="rose"
         />
       );
     case 'vendas': {
@@ -100,6 +146,7 @@ export function renderWidget(key: WidgetKey, dash: FinDash | null, loading: bool
           value={fmtBRL(atual)}
           sub={variacao === null ? 'Sem dados do mês anterior' : `${variacao >= 0 ? '▲' : '▼'} ${Math.abs(variacao).toFixed(0)}% vs mês anterior`}
           subClass={variacao === null ? undefined : variacao >= 0 ? 'text-positive dark:text-positive-dark font-semibold' : 'text-negative font-semibold'}
+          tone="brand"
         />
       );
     }
