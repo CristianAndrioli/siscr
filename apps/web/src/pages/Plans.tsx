@@ -1,104 +1,75 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import api from '../services/api';
-
-type ApiCaracteristica = { rotulo: string; ordem: number };
-
-type ApiPlan = {
-  id: string;
-  nome: string;
-  preco_mensal: number;
-  preco_anual: number;
-  max_empresas: number;
-  max_filiais: number;
-  max_usuarios: number;
-  max_docs_fiscais_mes?: number;
-  max_emails_mes?: number;
-  caracteristicas: ApiCaracteristica[];
-};
+import {
+  fetchPublicPlans,
+  formatPlanReais,
+  planFeatureLabels,
+  type PlanRow,
+} from '../services/subscriptions';
 
 type DisplayPlan = {
   id: string;
   name: string;
   priceLabel: string;
   period: string;
+  annualHint: string | null;
   description: string;
   color: 'default' | 'brand';
   badge?: string;
   features: string[];
-  missing: string[];
   cta: string;
   ctaLink: string;
 };
 
 const DESCRIPTIONS: Record<string, string> = {
-  free: 'Ideal para testar o sistema e conhecer a plataforma.',
-  basico: 'Para pequenas empresas que precisam de gestão completa.',
-  pro: 'Para empresas em crescimento com múltiplas filiais.',
-  enterprise: 'Para grupos empresariais que precisam de escala e suporte dedicado.',
-  starter: 'Entrada com recursos essenciais.',
-  business: 'Operação com mais empresas e filiais.',
+  free: 'Demo sem cartão. 1 CNPJ, sem emissão de NF-e / NFS-e.',
+  basico: 'PME de 1 CNPJ: gestão completa, 50 notas/mês, suporte por e-mail.',
+  pro: 'Mais filiais e notas. Âncora comercial do SISCR.',
+  enterprise: 'Teto self-serve. Acima disso, cotação.',
 };
 
-const MISSING_BY_ID: Record<string, string[]> = {
-  free: ['NF-e / NFS-e', 'Relatórios avançados', 'SLA garantido'],
-  basico: ['Múltiplas empresas', 'SLA garantido'],
-  pro: ['SLA enterprise'],
-  enterprise: [],
-  starter: [],
-  business: [],
-};
-
-function featuresFromApi(p: ApiPlan): string[] {
-  if (p.caracteristicas?.length) {
-    return [...p.caracteristicas].sort((a, b) => a.ordem - b.ordem).map((c) => c.rotulo);
-  }
-  return [
-    `${p.max_empresas} empresa(s)`,
-    `${p.max_filiais} filial(is)`,
-    `${p.max_usuarios} usuário(s)`,
-    p.max_docs_fiscais_mes
-      ? `${p.max_docs_fiscais_mes} documentos fiscais/mês`
-      : 'Sem emissão de NF-e / NFS-e',
-  ];
-}
-
-function apiPlanToDisplay(p: ApiPlan): DisplayPlan {
+function apiPlanToDisplay(p: PlanRow): DisplayPlan {
   const isPro = p.id === 'pro';
   const preco = p.preco_mensal;
-  const priceLabel = preco <= 0 ? 'R$ 0' : `R$ ${preco.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  const period = preco <= 0 ? 'para sempre' : '/mês';
+  const paid = preco > 0;
   return {
     id: p.id,
     name: p.nome,
-    priceLabel,
-    period,
+    priceLabel: formatPlanReais(preco),
+    period: paid ? '/mês' : 'para sempre',
+    annualHint:
+      paid && p.preco_anual > 0
+        ? `${formatPlanReais(p.preco_anual)}/ano (2 meses grátis)`
+        : null,
     description: DESCRIPTIONS[p.id] ?? 'Plano disponível na plataforma.',
     color: isPro ? 'brand' : 'default',
     badge: isPro ? 'Mais popular' : undefined,
-    features: featuresFromApi(p),
-    missing: MISSING_BY_ID[p.id] ?? [],
-    cta: preco <= 0 ? 'Criar conta grátis' : `Assinar ${p.nome}`,
+    features: planFeatureLabels(p),
+    cta: paid ? `Assinar ${p.nome}` : 'Criar conta grátis',
     ctaLink: `/signup?plan=${encodeURIComponent(p.id)}`,
   };
 }
 
 const faqs = [
   {
-    q: 'Preciso de cartão de crédito no plano Free?',
-    a: 'Não. O plano Free é gratuito para sempre sem dados de pagamento.',
+    q: 'Preciso de cartão no plano Free?',
+    a: 'Não. O Free é demo sem cartão e sem emissão de NF-e / NFS-e.',
+  },
+  {
+    q: 'Os preços incluem impostos?',
+    a: 'Sim. Os valores exibidos são os cobrados no Stripe, com impostos inclusos. Não há “+ ISS” na hora do pagamento.',
   },
   {
     q: 'Posso cancelar a qualquer momento?',
-    a: 'Sim. Cancele quando quiser pelo painel. Sem multas ou fidelidade.',
+    a: 'Sim. O cancelamento vale no fim do ciclo já pago. Sem multa de fidelidade.',
   },
   {
-    q: 'Os dados ficam em servidor brasileiro?',
-    a: 'A plataforma utiliza infraestrutura distribuída para oferecer bom desempenho conforme a região de acesso.',
+    q: 'E se o pagamento falhar?',
+    a: 'O acesso ao ERP é bloqueado até regularizar. Entre, pague a fatura ou atualize o cartão no portal Stripe; o sistema volta sozinho.',
   },
   {
     q: 'Posso migrar de plano depois?',
-    a: 'Sim. Upgrades são imediatos; downgrades no próximo ciclo.',
+    a: 'Sim. Troca de plano atualiza a assinatura existente (com proporcional). Não cria uma segunda cobrança.',
   },
 ];
 
@@ -111,9 +82,8 @@ export default function Plans() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await api.get<{ plans: ApiPlan[] }>('/subscriptions/plans');
+        const list = (await fetchPublicPlans()).map(apiPlanToDisplay);
         if (cancelled) return;
-        const list = (data.plans ?? []).map(apiPlanToDisplay);
         setPlans(list);
         setLoadError(list.length === 0);
       } catch {
@@ -154,7 +124,7 @@ export default function Plans() {
         <div className="relative max-w-2xl mx-auto">
           <h1 className="font-display text-5xl font-extrabold text-white mb-4">Escolha seu plano</h1>
           <p className="text-slate-400 text-lg">
-            Limites e benefícios vêm do cadastro de planos — sempre atualizados na API.
+            Mensalidade da empresa (1 CNPJ). Preços iguais aos do Stripe, impostos inclusos. Trial de 14 dias nos planos pagos.
           </p>
         </div>
       </section>
@@ -194,7 +164,11 @@ export default function Plans() {
                     <div className={`font-display text-4xl font-extrabold ${isBrand ? 'text-white' : 'text-white'}`}>
                       {plan.priceLabel}
                     </div>
-                    <div className={`text-sm mb-3 ${isBrand ? 'text-white/70' : 'text-slate-500'}`}>{plan.period}</div>
+                    <div className={`text-sm mb-1 ${isBrand ? 'text-white/70' : 'text-slate-500'}`}>{plan.period}</div>
+                    {plan.annualHint && (
+                      <div className={`text-xs mb-3 ${isBrand ? 'text-white/60' : 'text-slate-500'}`}>{plan.annualHint}</div>
+                    )}
+                    {!plan.annualHint && <div className="mb-3" />}
                     <p className={`text-sm leading-relaxed mb-6 ${isBrand ? 'text-white/80' : 'text-slate-400'}`}>
                       {plan.description}
                     </p>
@@ -217,19 +191,6 @@ export default function Plans() {
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                            </svg>
-                          </span>
-                          {f}
-                        </li>
-                      ))}
-                      {plan.missing.map((f) => (
-                        <li
-                          key={f}
-                          className={`flex items-center gap-2.5 text-sm opacity-40 ${isBrand ? 'text-white' : 'text-slate-500'}`}
-                        >
-                          <span className="flex-none w-5 h-5 rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                           </span>
                           {f}

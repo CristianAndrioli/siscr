@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { fmtBRL } from '../utils/format';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { authService } from '../services/auth';
 import {
   fetchPublicPlans,
   createTenantCheckout,
+  formatPlanReais,
+  planFeatureLabels,
   type PlanRow,
   type PaidPlanId,
 } from '../services/subscriptions';
@@ -15,20 +16,6 @@ const PAID_IDS: PaidPlanId[] = ['basico', 'pro', 'enterprise'];
 
 function isPaidPlanId(id: string): id is PaidPlanId {
   return PAID_IDS.includes(id as PaidPlanId);
-}
-
-function parseFeatures(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const j = JSON.parse(raw) as unknown;
-    if (Array.isArray(j)) return j.map(String);
-    if (typeof j === 'object' && j !== null && 'items' in j && Array.isArray((j as { items: unknown }).items)) {
-      return (j as { items: string[] }).items.map(String);
-    }
-  } catch {
-    /* texto livre */
-  }
-  return raw.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
 }
 
 export default function Checkout() {
@@ -107,7 +94,7 @@ export default function Checkout() {
     }
   };
 
-  const features = plan ? parseFeatures(plan.features) : [];
+  const features = plan ? planFeatureLabels(plan) : [];
 
   if (loadingPlan) {
     return (
@@ -136,7 +123,7 @@ export default function Checkout() {
     );
   }
 
-  const priceLabel = fmtBRL(plan.preco_mensal);
+  const priceLabel = formatPlanReais(plan.preco_mensal);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -161,11 +148,14 @@ export default function Checkout() {
               {priceLabel}
               <span className="text-base font-normal text-slate-500 dark:text-slate-400"> /mês</span>
             </p>
-            <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-              <li>Até {plan.max_usuarios} usuário{plan.max_usuarios !== 1 ? 's' : ''}</li>
-              <li>Até {plan.max_empresas} empresa{plan.max_empresas !== 1 ? 's' : ''}</li>
-              <li>Até {plan.max_filiais} filial{plan.max_filiais !== 1 ? 'is' : ''}</li>
-            </ul>
+            {plan.preco_anual > 0 && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                ou {formatPlanReais(plan.preco_anual)}/ano (2 meses grátis)
+              </p>
+            )}
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+              Impostos inclusos. Trial de 14 dias nos planos pagos.
+            </p>
             {features.length > 0 && (
               <ul className="mt-4 space-y-1.5 text-sm text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700 pt-4">
                 {features.slice(0, 12).map((f) => (

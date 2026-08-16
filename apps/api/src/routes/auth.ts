@@ -6,7 +6,7 @@ import { PasswordHasher } from '../lib/password'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
 import { checkTenantSlugAvailability, resolveTenantSlug } from '../lib/tenantSlug'
 import { hasEmailBinding, sendEmailVerification, sendPasswordResetEmail } from '../lib/email'
-import { resolvePriceIdForPlan } from '../lib/stripe/stripeApi'
+import { resolvePriceIdForPlan } from '../lib/stripe/planCatalog'
 
 const app = new Hono<{ Bindings: Env }>()
 

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { resolveTenantSlug } from '../lib/tenantSlug'
 import { PasswordHasher } from '../lib/password'
-import { resolvePriceIdForPlan } from '../lib/stripe/stripeApi'
+import { overlayStripePlanPrices, resolvePriceIdForPlan } from '../lib/stripe/planCatalog'
 
 /**
  * Rotas públicas de planos e checkout Stripe (signup pago).
@@ -54,10 +54,11 @@ app.get('/plans', async (c) => {
     byPlan.set(r.plan_id, list)
   }
 
-  const plans = (planRows ?? []).map((p) => ({
+  const withChars = (planRows ?? []).map((p) => ({
     ...p,
     caracteristicas: byPlan.get(p.id) ?? [],
   }))
+  const plans = await overlayStripePlanPrices(c.env, withChars)
 
   return c.json({ plans })
 })

@@ -117,7 +117,7 @@ siscr/
 | `NFE_DEV_MODE` | `"1"` desenvolvimento NF-e; `"0"` produção |
 | `TENANT_HOST_BASE` | *(Opcional)* Host “pai” para tenant por subdomínio (ex.: `app.suaempresa.com.br`) |
 
-**Secrets** (não versionados; `wrangler secret put`): `BETTER_AUTH_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASICO` / `PRO` / `ENTERPRISE`, `CERT_BLOB_SECRET` — lista completa em [`doc/cloudflare-nova-conta-e-dependencias.md`](./doc/cloudflare-nova-conta-e-dependencias.md).
+**Secrets** (não versionados; `wrangler secret put`): `BETTER_AUTH_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASICO` / `PRO` / `ENTERPRISE`, `CERT_BLOB_SECRET` — lista em [`doc/cloudflare-nova-conta-e-dependencias.md`](./doc/cloudflare-nova-conta-e-dependencias.md). Cobrança e produção Stripe: [`doc/billing-stripe.md`](./doc/billing-stripe.md).
 
 ### Frontend (build Vite / Pages)
 

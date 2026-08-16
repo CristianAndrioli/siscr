@@ -46,18 +46,18 @@ Definir com `wrangler secret put <NOME> --env staging` (e `--env production` qua
 | Binding `EMAIL` | Cloudflare Email Service — `[[send_email]]` no `wrangler.toml`, sem secret |
 | `STRIPE_SECRET_KEY` | API Stripe |
 | `STRIPE_WEBHOOK_SECRET` | Validação do webhook em `/api/webhooks/stripe` |
-| `STRIPE_PRICE_BASICO`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE` | Price IDs mensais sandbox: `price_1U59stJcxPm9Lx7vQkyftcVw` (R$ 129), `price_1U59swJcxPm9Lx7vDOkPmykQ` (R$ 249), `price_1U59t0JcxPm9Lx7v0ADoOFfH` (R$ 497) |
+| `STRIPE_PRICE_BASICO`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE` | Fallback dos Price IDs **mensais**. A UI e o checkout preferem lookup keys (`siscr_*_month`). IDs e passo a passo: [billing-stripe.md](./billing-stripe.md). |
 | `CERT_BLOB_SECRET` | Criptografia de certificado A1 no R2 (NF-e) |
 
 Consulte `apps/api/src/index.ts` e `apps/api/wrangler.toml` para nomes exatos.
 
 ## 4. Stripe (fora da Cloudflare)
 
-- No **Dashboard Stripe**, crie produtos/preços novos ou reutilize os mesmos IDs (se mesma conta Stripe).
-- Configure o endpoint de webhook apontando para a **URL pública do Worker**, ex.:  
-  `https://<seu-worker-staging>.<subdomain>.workers.dev/api/webhooks/stripe`  
-  (ou domínio customizado da API, se configurado).
-- Use o **signing secret** correspondente em `STRIPE_WEBHOOK_SECRET`.
+Guia completo (catálogo, lookup keys, bloqueio, Dashboard e **produção**): [billing-stripe.md](./billing-stripe.md).
+
+- Webhook do Worker: `https://api-staging.siscr.com.br/api/webhooks/stripe` (produção: `https://api.siscr.com.br/api/webhooks/stripe`).
+- Signing secret em `STRIPE_WEBHOOK_SECRET` (test e live são **secrets diferentes**).
+- A tela de planos lê valores via API (`GET /api/subscriptions/plans`), não no browser.
 
 ## 5. CI/CD (GitHub Actions)
 

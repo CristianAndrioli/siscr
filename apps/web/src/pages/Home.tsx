@@ -1,5 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  fetchPublicPlans,
+  formatPlanReais,
+  planFeatureLabels,
+  type PlanRow,
+} from '../services/subscriptions';
 
 /* ─── ícones ────────────────────────────────────── */
 
@@ -121,29 +127,6 @@ const testimonials = [
   },
 ];
 
-const plans = [
-  {
-    name: 'Free', price: 'R$ 0', period: 'demonstração',
-    features: ['1 empresa', '2 filiais', '3 usuários', 'Módulos essenciais', 'Suporte comunidade'],
-    cta: 'Criar conta grátis', highlight: false, ctaLink: '/signup?plan=free',
-  },
-  {
-    name: 'Básico', price: 'R$ 99', period: '/mês',
-    features: ['1 empresa', '3 filiais', '5 usuários', 'Todos os módulos', 'NF-e e NFSe', 'Suporte e-mail'],
-    cta: 'Assinar Básico', highlight: false, ctaLink: '/plans',
-  },
-  {
-    name: 'Pro', price: 'R$ 249', period: '/mês',
-    features: ['3 empresas', '10 filiais', '20 usuários', 'Todos os módulos', 'NF-e e NFSe', 'Suporte prioritário', 'API de integração'],
-    cta: 'Assinar Pro', highlight: true, ctaLink: '/plans',
-  },
-  {
-    name: 'Enterprise', price: 'R$ 499', period: '/mês',
-    features: ['Ilimitado', 'Filiais ilimitadas', 'Usuários ilimitados', 'Todos os módulos', 'NF-e e NFSe', 'Suporte 24/7', 'SLA 99.9%', 'Onboarding dedicado'],
-    cta: 'Falar com vendas', highlight: false, ctaLink: '/plans',
-  },
-];
-
 /* ─── mini mockup dashboard ─────────────────────── */
 function DashMock() {
   return (
@@ -224,6 +207,21 @@ function DashMock() {
 /* ─── página principal ───────────────────────────── */
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [publicPlans, setPublicPlans] = useState<PlanRow[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublicPlans()
+      .then((list) => {
+        if (!cancelled) setPublicPlans(list);
+      })
+      .catch(() => {
+        if (!cancelled) setPublicPlans([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-surface font-sans text-white">
@@ -436,24 +434,36 @@ export default function Home() {
             <h2 className="font-display text-4xl font-bold text-white mb-4">
               Preços simples e transparentes
             </h2>
-            <p className="text-slate-400 text-lg">Comece grátis. Pague apenas quando crescer.</p>
+            <p className="text-slate-400 text-lg">Mensalidade da empresa, impostos inclusos. Os valores vêm do Stripe.</p>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {plans.map(plan => (
-              <div key={plan.name} className={`relative flex flex-col rounded-xl p-6 border ${plan.highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30' : 'bg-surface-card border-surface-border hover:border-brand-600/30 transition-colors'}`}>
-                {plan.highlight && (
+            {publicPlans.length === 0 && (
+              <p className="col-span-full text-center text-slate-500 text-sm py-8">Carregando planos…</p>
+            )}
+            {publicPlans.map((plan) => {
+              const highlight = plan.id === 'pro';
+              const paid = plan.preco_mensal > 0;
+              return (
+              <div key={plan.id} className={`relative flex flex-col rounded-xl p-6 border ${highlight ? 'bg-gradient-brand border-brand-400 shadow-2xl shadow-brand-600/30' : 'bg-surface-card border-surface-border hover:border-brand-600/30 transition-colors'}`}>
+                {highlight && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-white text-brand-700 text-xs font-bold rounded-full shadow">
                     MAIS POPULAR
                   </div>
                 )}
-                <div className={`text-xs font-bold uppercase tracking-wide mb-2 ${plan.highlight ? 'text-white/70' : 'text-slate-500'}`}>{plan.name}</div>
-                <div className="font-display text-3xl font-extrabold text-white mb-0.5">{plan.price}</div>
-                <div className={`text-xs mb-5 ${plan.highlight ? 'text-white/60' : 'text-slate-500'}`}>{plan.period}</div>
+                <div className={`text-xs font-bold uppercase tracking-wide mb-2 ${highlight ? 'text-white/70' : 'text-slate-500'}`}>{plan.nome}</div>
+                <div className="font-display text-3xl font-extrabold text-white mb-0.5">{formatPlanReais(plan.preco_mensal)}</div>
+                <div className={`text-xs mb-1 ${highlight ? 'text-white/60' : 'text-slate-500'}`}>{paid ? '/mês' : 'demonstração'}</div>
+                {paid && plan.preco_anual > 0 && (
+                  <div className={`text-[11px] mb-4 ${highlight ? 'text-white/50' : 'text-slate-600'}`}>
+                    {formatPlanReais(plan.preco_anual)}/ano
+                  </div>
+                )}
+                {(!paid || !(plan.preco_anual > 0)) && <div className="mb-4" />}
                 <ul className="space-y-2 mb-6 flex-1">
-                  {plan.features.map(f => (
-                    <li key={f} className={`flex items-center gap-2 text-xs ${plan.highlight ? 'text-white/90' : 'text-slate-300'}`}>
-                      <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-none ${plan.highlight ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}>
+                  {planFeatureLabels(plan).map(f => (
+                    <li key={f} className={`flex items-center gap-2 text-xs ${highlight ? 'text-white/90' : 'text-slate-300'}`}>
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-none ${highlight ? 'bg-white/20 text-white' : 'bg-brand-600/20 text-brand-400'}`}>
                         <CheckIcon className="w-2.5 h-2.5" />
                       </span>
                       {f}
@@ -461,17 +471,18 @@ export default function Home() {
                   ))}
                 </ul>
                 <Link
-                  to={plan.ctaLink}
-                  className={`block w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all ${plan.highlight ? 'bg-white text-brand-700 hover:bg-slate-50' : 'bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 border border-brand-600/30'}`}
+                  to={paid ? `/signup?plan=${plan.id}` : '/signup?plan=free'}
+                  className={`block w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all ${highlight ? 'bg-white text-brand-700 hover:bg-slate-50' : 'bg-brand-600/20 text-brand-300 hover:bg-brand-600/30 border border-brand-600/30'}`}
                 >
-                  {plan.cta}
+                  {paid ? `Assinar ${plan.nome}` : 'Criar conta grátis'}
                 </Link>
               </div>
-            ))}
+            );
+            })}
           </div>
 
           <p className="text-slate-500 text-sm mt-8 text-center">
-            Todos os planos incluem SSL, backups automáticos e infraestrutura em nuvem.
+            Todos os planos pagos incluem trial de 14 dias. Infraestrutura Cloudflare.
           </p>
         </div>
       </section>

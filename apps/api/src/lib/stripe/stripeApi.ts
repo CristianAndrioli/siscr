@@ -114,20 +114,6 @@ export function priceIdForPlan(env: Env, plan: string): string {
   return map[plan] || ''
 }
 
-export async function resolvePriceIdForPlan(
-  env: Env,
-  db: D1Database,
-  plan: string,
-): Promise<string> {
-  const fromEnv = priceIdForPlan(env, plan)
-  if (fromEnv) return fromEnv
-  const row = await db
-    .prepare('SELECT stripe_price_id_mensal FROM plans WHERE id = ? AND ativo = 1')
-    .bind(plan)
-    .first<{ stripe_price_id_mensal: string | null }>()
-  return row?.stripe_price_id_mensal?.trim() || ''
-}
-
 export async function fetchSubscription(env: Env, subscriptionId: string): Promise<StripeSubscription> {
   return stripeRequest<StripeSubscription>(env, 'GET', `subscriptions/${subscriptionId}`)
 }

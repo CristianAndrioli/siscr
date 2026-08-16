@@ -24,9 +24,9 @@ import {
 import {
   fetchSubscription,
   findActiveSubscriptionId,
-  resolvePriceIdForPlan,
   stripeRequest,
 } from '../lib/stripe/stripeApi'
+import { overlayStripePlanPrices, resolvePriceIdForPlan } from '../lib/stripe/planCatalog'
 import { getFiscalDocUsoMes } from '../lib/fiscalDocQuota'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
@@ -824,13 +824,15 @@ app.get('/subscription', async (c) => {
     .bind(plan.id)
     .all<{ rotulo: string; ordem: number }>()
 
+  const [priced] = await overlayStripePlanPrices(c.env, [plan])
+
   return c.json({
     subscription: {
       ...base,
       plan_id_efetivo: plan.id,
       plan_nome: plan.nome,
-      preco_mensal: plan.preco_mensal,
-      preco_anual: plan.preco_anual,
+      preco_mensal: priced?.preco_mensal ?? plan.preco_mensal,
+      preco_anual: priced?.preco_anual ?? plan.preco_anual,
       max_empresas: plan.max_empresas,
       max_filiais: plan.max_filiais,
       max_usuarios: plan.max_usuarios,

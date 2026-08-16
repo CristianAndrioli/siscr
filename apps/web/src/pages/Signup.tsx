@@ -1,20 +1,14 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { authService } from '../services/auth';
+import { fetchPublicPlans, formatPlanReais } from '../services/subscriptions';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
 
 /** Template com `{slug}` para preview; ex.: https://{slug}.app.siscr.com.br */
 const TENANT_URL_TEMPLATE =
   import.meta.env.VITE_TENANT_URL_TEMPLATE || 'https://{slug}.app.siscr.com.br';
-
-const PLAN_LABELS: Record<string, string> = {
-  free:       'Free',
-  basico:     'Básico — R$ 99/mês',
-  pro:        'Pro',
-  enterprise: 'Enterprise — R$ 499/mês',
-};
 
 function slugify(value: string) {
   return value
@@ -29,7 +23,26 @@ export default function Signup() {
   const [searchParams] = useSearchParams();
 
   const plan = searchParams.get('plan') || 'free';
-  const planLabel = PLAN_LABELS[plan] || plan;
+  const [planLabel, setPlanLabel] = useState(plan === 'free' ? 'Free' : plan);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublicPlans()
+      .then((plans) => {
+        if (cancelled) return;
+        const found = plans.find((p) => p.id === plan);
+        if (!found) return;
+        const price =
+          found.preco_mensal > 0 ? ` — ${formatPlanReais(found.preco_mensal)}/mês` : '';
+        setPlanLabel(`${found.nome}${price}`);
+      })
+      .catch(() => {
+        /* mantém o id do plano */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [plan]);
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);

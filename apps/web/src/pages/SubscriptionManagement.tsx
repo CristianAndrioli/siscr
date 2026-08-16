@@ -281,6 +281,11 @@ export default function SubscriptionManagement() {
                   {fmtBRL(subscription.preco_mensal)}
                 </span>
                 <span className="text-sm text-slate-500 dark:text-slate-400">/mês</span>
+                {subscription.preco_anual > 0 && (
+                  <span className="text-xs text-slate-400 dark:text-slate-500 ml-2">
+                    ou {fmtBRL(subscription.preco_anual)}/ano
+                  </span>
+                )}
               </div>
             )}
 

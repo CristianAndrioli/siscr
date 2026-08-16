@@ -6,6 +6,7 @@
 |-----------|----------|
 | [tenant-e-dominios.md](./tenant-e-dominios.md) | Multi-tenant na URL: `?tenant=`, subdomínio real, variáveis `TENANT_HOST_BASE` / `VITE_TENANT_HOST_BASE`, limitações do `*.pages.dev`. |
 | [cloudflare-nova-conta-e-dependencias.md](./cloudflare-nova-conta-e-dependencias.md) | Checklist para instanciar o projeto em **outra conta Cloudflare** (ou clonar ambiente): recursos, IDs, secrets, CI, Stripe, DNS. |
+| [billing-stripe.md](./billing-stripe.md) | Planos, Prices Stripe (lookup keys), bloqueio por inadimplência, checklist de **produção**. |
 | [dominios-ambientes-e-deploy.md](./dominios-ambientes-e-deploy.md) | Domínios, ambientes (staging/produção) e fluxo de deploy. |
 | [multi-tenant.md](./multi-tenant.md) | Arquitetura multi-tenant do sistema. |
 | [padroes-arquitetura.md](./padroes-arquitetura.md) | Padrões de arquitetura adotados no projeto. |
@@ -14,4 +15,4 @@
 | [integracoes-contabilidade.md](./integracoes-contabilidade.md) | Integração com escritórios contábeis: exportação ZIP, Distribuição DFe, APIs Domínio/Alterdata e o modelo de Conexões (named credentials). |
 | [suporte-desk.md](./suporte-desk.md) | Nano IA no ERP, mesa interna de suporte, DNS e passos manuais no Cloudflare. |
 
-Atualize estes arquivos quando alterar fluxos de autenticação, domínio ou infraestrutura.
+Atualize estes arquivos quando alterar fluxos de autenticação, domínio, infraestrutura ou cobrança.
