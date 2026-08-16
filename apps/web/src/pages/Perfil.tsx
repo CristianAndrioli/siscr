@@ -32,7 +32,7 @@ function MoonIcon() {
 }
 
 function Perfil() {
-  const { theme, setTheme, isDark } = useTheme();
+  const { theme, setTheme } = useTheme();
 
   // Dados lidos do localStorage (salvos no login)
   const localUser = authService.getLocalUser();

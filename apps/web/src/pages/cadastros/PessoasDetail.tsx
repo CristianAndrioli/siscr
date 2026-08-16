@@ -429,7 +429,7 @@ export function PessoasDetail() {
                 </label>
                 <MaskedInput
                   mask={form.tipo === 'PJ' ? 'cnpj' : 'cpf'}
-                  value={form.cpfCnpj}
+                  value={form.cpfCnpj ?? ''}
                   onChange={v => set('cpfCnpj', v)}
                   placeholder={form.tipo === 'PJ' ? '00.000.000/0000-00' : '000.000.000-00'}
                   className={INPUT_CLS}
@@ -439,7 +439,7 @@ export function PessoasDetail() {
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Telefone</label>
                 <MaskedInput
                   mask="phone"
-                  value={form.telefone}
+                  value={form.telefone ?? ''}
                   onChange={v => set('telefone', v)}
                   placeholder="(48) 99999-9999"
                   className={INPUT_CLS}
@@ -550,7 +550,7 @@ export function PessoasDetail() {
                 <div className="relative">
                   <MaskedInput
                     mask="cep"
-                    value={form.cep}
+                    value={form.cep ?? ''}
                     onChange={v => set('cep', v)}
                     onBlur={handleCepBlur}
                     placeholder="00000-000"

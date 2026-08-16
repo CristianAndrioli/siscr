@@ -560,7 +560,7 @@ app.get('/relatorios/dre', async (c) => {
 // Livro Caixa (relevante para Simples Nacional)
 app.get('/relatorios/livro-caixa', async (c) => {
   const tenant = c.get('tenant')
-  const { de, ate, empresaId } = c.req.query()
+  const { de, ate } = c.req.query()
 
   // Contas de caixa/banco (tipo ativo, nível 4 no grupo 1.1.01)
   const { results: contasCaixa } = await c.env.DB_SHARED
@@ -604,7 +604,7 @@ app.get('/relatorios/livro-caixa', async (c) => {
 
 app.get('/exportar/csv', async (c) => {
   const tenant = c.get('tenant')
-  const { tipo, de, ate, empresaId } = c.req.query()
+  const { tipo, de, ate } = c.req.query()
 
   let csvContent = ''
   let filename = 'exportacao.csv'

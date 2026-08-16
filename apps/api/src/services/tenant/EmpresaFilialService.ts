@@ -179,8 +179,8 @@ export type EmpresaCreateInput = {
   razaoSocial: string
   nomeFantasia?: string
   cnpj: string
-  inscricaoEstadual?: string
-  inscricaoMunicipal?: string
+  inscricaoEstadual?: string | null
+  inscricaoMunicipal?: string | null
   email?: string
   telefone?: string
   logradouro?: string
@@ -199,7 +199,7 @@ export type EmpresaCreateInput = {
   nfseSerie?: string
   nfseAmbiente?: number
   nfseProximoNumero?: number
-  nfseCodigoServicoPadrao?: string
+  nfseCodigoServicoPadrao?: string | null
 }
 
 export type FilialCreateInput = {

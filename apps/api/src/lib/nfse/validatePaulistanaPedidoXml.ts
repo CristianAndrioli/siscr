@@ -71,7 +71,8 @@ export function validatePaulistanaPedidoXml(xml: string): NfseXmlValidationResul
   if (!cab) {
     push(errors, 'PedidoEnvioLoteRPS', 'Cabecalho obrigatório ausente.')
   } else {
-    if (!text(firstChild(firstChild(cab, 'CPFCNPJRemetente'), 'CNPJ'))) {
+    const remetente = firstChild(cab, 'CPFCNPJRemetente')
+    if (!remetente || !text(firstChild(remetente, 'CNPJ'))) {
       push(errors, 'Cabecalho/CPFCNPJRemetente/CNPJ', 'CNPJ do remetente obrigatório.')
     }
     for (const tag of ['dtInicio', 'dtFim', 'QtdRPS', 'ValorTotalServicos', 'ValorTotalDeducoes'] as const) {

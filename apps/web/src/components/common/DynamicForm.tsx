@@ -125,7 +125,7 @@ function DynamicForm({
             options={field.options || []}
             required={field.required}
             error={error}
-            readOnly={field.readOnly}
+            disabled={field.readOnly}
           />
         );
       

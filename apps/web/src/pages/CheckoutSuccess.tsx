@@ -25,9 +25,12 @@ export default function CheckoutSuccess() {
     }
   };
 
-  const doAutoLogin = (data: { token: string; user: { id: string; email: string; nome: string; role: string }; tenant: { id: string; slug: string } }) => {
+  const doAutoLogin = (data: { token: string; user: { id: string; email: string; nome: string; role: string }; tenant: { id: string; slug: string; status?: string } }) => {
     setPhase('logging-in');
-    authService.saveSession(data);
+    authService.saveSession({
+      ...data,
+      tenant: { ...data.tenant, status: data.tenant.status ?? 'active' },
+    });
     const slug = data.tenant.slug;
     setTimeout(() => {
       setPhase('done');

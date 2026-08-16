@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   obrasService, maquinasService, ordensServicoService,
   type Obra, type ObraForm, type ObraMaquina, type ObraResumo, type Medicao, type Maquina, type OrdemServico,
+  type ApontamentoLinha,
 } from '../../services/frota';
 import { pessoasService, type Pessoa } from '../../services/cadastros/pessoas';
 import { fmtBRL, fmtDateISO } from '../../utils/format';

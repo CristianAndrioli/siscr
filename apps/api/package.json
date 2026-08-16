@@ -7,6 +7,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:staging": "wrangler deploy --env staging",
+    "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types",
     "db:migrate:shared": "wrangler d1 migrations apply siscr-shared-staging --local",
     "db:migrate:shared:remote": "wrangler d1 migrations apply siscr-shared-staging --remote",

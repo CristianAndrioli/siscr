@@ -24,7 +24,6 @@ function reg(...fields: (string | number | null | undefined)[]): string {
 }
 
 function pad2(n: number) { return String(n).padStart(2, '0') }
-function pad3(n: number) { return String(n).padStart(3, '0') }
 
 function fmtData(iso: string) {
   // "YYYY-MM-DD" → "DDMMAAAA"
@@ -311,8 +310,6 @@ export async function gerarEcd(
 
   // ── BLOCO 9 — Encerramento ────────────────────────────────────────────────
   out += reg('9001', '0')
-
-  const totalLinhas = out.split('\n').filter(l => l.trim()).length
 
   out += reg('9900', '0000', '1')
   out += reg('9900', '0001', '1')

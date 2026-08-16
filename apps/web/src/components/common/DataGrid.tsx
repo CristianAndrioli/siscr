@@ -6,7 +6,7 @@ import type { GridColumn, Pagination } from '../../types';
 
 interface DataGridProps<T = unknown> {
   data?: T[];
-  columns?: GridColumn[];
+  columns?: GridColumn<T>[];
   onRowClick?: (record: T) => void;
   onSearch?: (searchTerm: string) => void;
   onCreate?: () => void;

@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { authService } from '../services/auth';
 
@@ -27,12 +27,11 @@ function slugify(value: string) {
 
 export default function Signup() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   const plan = searchParams.get('plan') || 'free';
   const planLabel = PLAN_LABELS[plan] || plan;
 
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [slugChecking, setSlugChecking] = useState(false);

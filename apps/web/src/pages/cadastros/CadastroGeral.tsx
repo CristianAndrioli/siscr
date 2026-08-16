@@ -1,14 +1,13 @@
 import { useEffect, useState, useCallback, ChangeEvent, FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { pessoasService } from '../../services/cadastros/pessoas';
+import { pessoasService, type PessoaForm } from '../../services/cadastros/pessoas';
 import { Input, Select, Textarea, Button, Alert } from '../../components/common';
 import { useForm } from '../../hooks/useForm';
 import { formatCPFCNPJ, formatCEP, formatPhone } from '../../utils/formatters';
 import { formatApiError } from '../../utils/helpers';
 import { ESTADOS, TIPO_CADASTRO, TIPO_PESSOA } from '../../utils/constants';
-import type { Pessoa } from '../../types';
 
-interface FormData extends Partial<Pessoa> {
+type CadastroGeralForm = {
   codigo_cadastro: string | number;
   tipo: 'cliente' | 'fornecedor' | 'funcionario';
   tipo_classificacao: 'PF' | 'PJ';
@@ -33,6 +32,28 @@ interface FormData extends Partial<Pessoa> {
   cargo: string;
   comissoes: string;
   observacoes: string;
+};
+
+function toPessoaForm(data: CadastroGeralForm): PessoaForm {
+  const nome = data.tipo_classificacao === 'PJ' && data.tipo !== 'funcionario'
+    ? data.razao_social
+    : data.nome_completo;
+  return {
+    tipo: data.tipo_classificacao,
+    tipoCadastro: data.tipo,
+    nome,
+    cpfCnpj: data.cpf_cnpj,
+    email: data.email,
+    telefone: data.telefone_celular || data.telefone_fixo,
+    cep: data.cep,
+    logradouro: data.logradouro,
+    numero: data.numero,
+    complemento: [data.letra, data.complemento].filter(Boolean).join(' ') || undefined,
+    bairro: data.bairro,
+    cidade: data.cidade,
+    uf: data.estado,
+    inscricaoEstadual: data.inscricao_estadual,
+  };
 }
 
 function CadastroGeral() {
@@ -40,7 +61,7 @@ function CadastroGeral() {
   const { codigo } = useParams<{ codigo?: string }>();
   const editando = !!codigo;
 
-  const initialValues: FormData = {
+  const initialValues: CadastroGeralForm = {
     codigo_cadastro: '',
     tipo: 'cliente',
     tipo_classificacao: 'PF',
@@ -67,7 +88,7 @@ function CadastroGeral() {
     observacoes: '',
   };
 
-  const { formData, handleChange, setFormData, resetForm } = useForm<FormData>(initialValues);
+  const { formData, handleChange, setFormData, resetForm } = useForm<CadastroGeralForm>(initialValues);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -78,10 +99,28 @@ function CadastroGeral() {
       setLoading(true);
       setError('');
       const dados = await pessoasService.get(codigo);
+      const tipoCadastro = dados.tipo_cadastro === 'fornecedor' || dados.tipo_cadastro === 'funcionario'
+        ? dados.tipo_cadastro
+        : 'cliente';
       setFormData({
-        ...dados,
-        tipo_classificacao: dados.tipo === 'PF' ? 'PF' : 'PJ',
-      } as FormData);
+        ...initialValues,
+        codigo_cadastro: dados.codigo ?? '',
+        tipo: tipoCadastro,
+        tipo_classificacao: dados.tipo,
+        cpf_cnpj: dados.cpf_cnpj ?? '',
+        nome_completo: dados.tipo === 'PF' ? dados.nome : '',
+        razao_social: dados.tipo === 'PJ' ? dados.nome : '',
+        inscricao_estadual: dados.inscricao_estadual ?? '',
+        cep: dados.cep ?? '',
+        logradouro: dados.logradouro ?? '',
+        numero: dados.numero ?? '',
+        complemento: dados.complemento ?? '',
+        bairro: dados.bairro ?? '',
+        cidade: dados.cidade ?? '',
+        estado: dados.uf ?? 'SC',
+        telefone_celular: dados.telefone ?? '',
+        email: dados.email ?? '',
+      });
     } catch (error) {
       console.error('Erro ao carregar dados do cadastro:', error);
       setError('Erro ao carregar dados do cadastro');
@@ -126,10 +165,11 @@ function CadastroGeral() {
     setError('');
 
     try {
+      const payload = toPessoaForm(formData);
       if (editando && codigo) {
-        await pessoasService.update(codigo, formData);
+        await pessoasService.update(codigo, payload);
       } else {
-        await pessoasService.create(formData);
+        await pessoasService.create(payload);
       }
       navigate('/cadastros/geral/lista');
     } catch (err: unknown) {
@@ -141,7 +181,6 @@ function CadastroGeral() {
 
   const limparFormulario = () => {
     resetForm(initialValues);
-    carregarProximoCodigo();
   };
 
   // Determina quais campos mostrar baseado no tipo e classificação

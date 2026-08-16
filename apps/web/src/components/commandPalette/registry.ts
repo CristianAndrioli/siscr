@@ -3,7 +3,7 @@
  * `module` + `action` opcionais alinham com usePermissions / sidebar.
  */
 
-export type ModuleCode = 'cadastros' | 'financeiro' | 'faturamento' | 'estoque' | 'configuracoes'
+export type ModuleCode = 'cadastros' | 'financeiro' | 'faturamento' | 'estoque' | 'frota' | 'configuracoes'
 
 export type CommandPaletteItem = {
   id: string

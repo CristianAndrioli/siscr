@@ -55,7 +55,7 @@ function DashboardPreview() {
       {/* tabela fake */}
       <div className="bg-white/10 border border-white/10 rounded-xl p-4">
         <div className="text-white/60 text-xs mb-2">Últimos pedidos</div>
-        {['Cliente A — R$ 1.200', 'Cliente B — R$ 890', 'Cliente C — R$ 3.450'].map((row, i) => (
+        {['Cliente A — R$ 1.200', 'Cliente B — R$ 890', 'Cliente C — R$ 3.450'].map((_, i) => (
           <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0">
             <div className="h-2.5 bg-white/20 rounded w-32" style={{ width: `${50 + i * 10}%` }} />
             <div className="h-2 bg-brand-400/40 rounded w-12" />

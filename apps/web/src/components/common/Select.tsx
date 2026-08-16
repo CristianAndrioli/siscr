@@ -10,7 +10,7 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onC
   name?: string;
   value?: string | number;
   onChange?: (e: ChangeEvent<HTMLSelectElement>) => void;
-  options?: SelectOption[];
+  options?: readonly SelectOption[];
   required?: boolean;
   className?: string;
   error?: string;

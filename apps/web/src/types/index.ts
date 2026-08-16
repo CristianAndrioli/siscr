@@ -149,13 +149,14 @@ export interface FormField {
 // ============================================
 // GRID
 // ============================================
-export interface GridColumn {
+export interface GridColumn<T = unknown> {
   key: string;
   label: string;
   width?: number;
   required?: boolean;
   fixed?: boolean;
-  render?: (value: unknown, record?: unknown) => React.ReactNode;
+  sortable?: boolean;
+  render?: (value: unknown, record?: T) => React.ReactNode;
 }
 
 // ============================================

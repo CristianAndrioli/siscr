@@ -25,7 +25,9 @@ export interface EmailEnv {
 
 const DEFAULT_FROM: EmailAddress = { name: 'SISCR', email: 'noreply@siscr.com.br' }
 
-export function hasEmailBinding(env: { EMAIL?: SendEmailBinding }): env is { EMAIL: SendEmailBinding } {
+export function hasEmailBinding<T extends { EMAIL?: SendEmailBinding }>(
+  env: T,
+): env is T & { EMAIL: SendEmailBinding } {
   return typeof env.EMAIL?.send === 'function'
 }
 

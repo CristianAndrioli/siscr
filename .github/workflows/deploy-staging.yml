@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Typecheck
+        run: pnpm run typecheck
+
       # ─── Etapa 1: Aplicar migrations no D1 staging (remoto) ─────
       - name: Apply D1 Migrations (staging)
         uses: cloudflare/wrangler-action@v3
