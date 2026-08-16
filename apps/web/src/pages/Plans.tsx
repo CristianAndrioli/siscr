@@ -50,6 +50,16 @@ function apiPlanToDisplay(p: PlanRow): DisplayPlan {
   };
 }
 
+const CONTACT_MAILTO =
+  'mailto:contato@siscr.com.br?subject=' + encodeURIComponent('Plano personalizado — SISCR');
+
+const CUSTOM_PLAN_FEATURES = [
+  'Limites e módulos sob medida',
+  'Integrações específicas do seu negócio',
+  'Onboarding acompanhado pelo time',
+  'SLA e suporte dedicado',
+];
+
 const faqs = [
   {
     q: 'Preciso de cartão no plano Free?',
@@ -139,7 +149,7 @@ export default function Plans() {
           </div>
         )}
         {!loading && plans.length > 0 && (
-          <div className="max-w-6xl mx-auto grid sm:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch">
+          <div className="max-w-6xl mx-auto grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5 items-stretch">
             {plans.map((plan) => {
               const isBrand = plan.color === 'brand';
               return (
@@ -222,6 +232,38 @@ export default function Plans() {
                 </div>
               );
             })}
+            <div className="relative flex flex-col rounded-xl border border-dashed border-brand-500/40 bg-surface-card/80 p-8 hover:border-brand-400/60 transition-all duration-200">
+              <div>
+                <div className="text-sm font-semibold mb-2 text-brand-400">Personalizado</div>
+                <div className="font-display text-4xl font-extrabold text-white">Sob consulta</div>
+                <div className="text-sm mb-1 text-slate-500">para o seu cenário</div>
+                <div className="mb-3" />
+                <p className="text-sm leading-relaxed mb-6 text-slate-400">
+                  Precisa de limites, módulos ou integrações que os planos prontos não cobrem? Fale com a gente.
+                </p>
+              </div>
+              <div className="flex-1 mb-8">
+                <div className="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-500">Incluído</div>
+                <ul className="space-y-2.5">
+                  {CUSTOM_PLAN_FEATURES.map((f) => (
+                    <li key={f} className="flex items-center gap-2.5 text-sm text-slate-300">
+                      <span className="flex-none w-5 h-5 rounded-full flex items-center justify-center bg-brand-600/20 text-brand-400">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <a
+                href={CONTACT_MAILTO}
+                className="block w-full text-center py-3.5 rounded-xl font-semibold text-sm transition-all bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-600/20"
+              >
+                Falar com o time
+              </a>
+            </div>
           </div>
         )}
       </section>

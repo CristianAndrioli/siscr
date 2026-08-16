@@ -25,6 +25,16 @@ const ArrowRightIcon = ({ className = 'w-4 h-4' }: { className?: string }) => (
   </svg>
 );
 
+const CONTACT_MAILTO =
+  'mailto:contato@siscr.com.br?subject=' + encodeURIComponent('Plano personalizado — SISCR');
+
+const CUSTOM_PLAN_FEATURES = [
+  'Limites e módulos sob medida',
+  'Integrações específicas do seu negócio',
+  'Onboarding acompanhado pelo time',
+  'SLA e suporte dedicado',
+];
+
 /* ─── dados ─────────────────────────────────────── */
 
 const segments = [
@@ -437,7 +447,7 @@ export default function Home() {
             <p className="text-slate-400 text-lg">Mensalidade da empresa, impostos inclusos. Os valores vêm do Stripe.</p>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
             {publicPlans.length === 0 && (
               <p className="col-span-full text-center text-slate-500 text-sm py-8">Carregando planos…</p>
             )}
@@ -479,6 +489,28 @@ export default function Home() {
               </div>
             );
             })}
+            <div className="relative flex flex-col rounded-xl p-6 border border-dashed border-brand-500/40 bg-surface-card/80 hover:border-brand-400/60 transition-colors">
+              <div className="text-xs font-bold uppercase tracking-wide mb-2 text-brand-400">Personalizado</div>
+              <div className="font-display text-3xl font-extrabold text-white mb-0.5">Sob consulta</div>
+              <div className="text-xs mb-1 text-slate-500">para o seu cenário</div>
+              <div className="mb-4" />
+              <ul className="space-y-2 mb-6 flex-1">
+                {CUSTOM_PLAN_FEATURES.map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-xs text-slate-300">
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center flex-none bg-brand-600/20 text-brand-400">
+                      <CheckIcon className="w-2.5 h-2.5" />
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <a
+                href={CONTACT_MAILTO}
+                className="block w-full text-center py-2.5 rounded-xl font-semibold text-sm transition-all bg-brand-600 text-white hover:bg-brand-500 border border-brand-500/40"
+              >
+                Falar com o time
+              </a>
+            </div>
           </div>
 
           <p className="text-slate-500 text-sm mt-8 text-center">
