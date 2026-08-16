@@ -140,6 +140,19 @@ app.patch(
   },
 )
 
+app.get('/clients', async (c) => {
+  const service = createSupportDeskService(c.env.DB_SHARED)
+  const clients = await service.listClients()
+  return c.json({ clients })
+})
+
+app.get('/clients/:id', async (c) => {
+  const service = createSupportDeskService(c.env.DB_SHARED)
+  const client = await service.getClient(c.req.param('id'))
+  if (!client) return c.json({ error: 'Cliente não encontrado.' }, 404)
+  return c.json({ client })
+})
+
 app.get('/tickets', async (c) => {
   const kind = c.req.query('kind') as 'support' | 'development' | undefined
   const status = c.req.query('status') as

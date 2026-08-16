@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import DeskLayout from './components/Layout'
 import AgentsPage from './pages/Agents'
 import ChangePasswordPage from './pages/ChangePassword'
+import ClientDetailPage from './pages/ClientDetail'
+import ClientsPage from './pages/Clients'
 import InboxPage from './pages/Inbox'
 import LoginPage from './pages/Login'
 import TicketDetailPage from './pages/TicketDetail'
@@ -32,6 +34,8 @@ export default function App() {
             <Route path="/" element={<InboxPage kind="support" />} />
             <Route path="/desenvolvimento" element={<InboxPage kind="development" />} />
             <Route path="/tickets/:id" element={<TicketDetailPage />} />
+            <Route path="/clientes" element={<ClientsPage />} />
+            <Route path="/clientes/:id" element={<ClientDetailPage />} />
             <Route element={<RequireMaster />}>
               <Route path="/usuarios" element={<AgentsPage />} />
             </Route>

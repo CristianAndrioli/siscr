@@ -41,7 +41,8 @@ export default function AgentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Usuários do suporte</h1>
+      <h1 className="text-2xl font-bold">Equipe interna</h1>
+      <p className="mt-1 text-sm text-slate-500">Agentes do painel de suporte SISCR — não são usuários dos clientes.</p>
       <form onSubmit={(e) => void create(e)} className="mt-4 grid max-w-xl gap-2 rounded-xl border border-slate-200 bg-white p-4">
         <div className="font-semibold text-sm">Novo usuário</div>
         <input className="input" placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} required />

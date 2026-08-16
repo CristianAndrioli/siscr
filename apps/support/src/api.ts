@@ -64,6 +64,55 @@ export type SupportAgentRow = {
   created_at: string
 }
 
+export type DeskEmpresa = {
+  tenant_id: string
+  id: string
+  razao_social: string
+  nome_fantasia: string | null
+  cnpj: string
+  cnae: string | null
+  crt: string | null
+  regime_tributario: string | null
+  cidade: string | null
+  uf: string | null
+  email: string | null
+  telefone: string | null
+  inscricao_estadual: string | null
+}
+
+export type DeskClient = {
+  id: string
+  slug: string
+  nome: string
+  status: string
+  plan_id: string | null
+  plan_nome: string
+  subscription_expires_at: string | null
+  created_at: string
+  has_stripe: boolean
+  limites: {
+    max_empresas: number
+    max_filiais: number
+    max_usuarios: number
+    max_docs_fiscais_mes: number
+  }
+  uso: {
+    empresas: number
+    filiais: number
+    usuarios: number
+    tickets_abertos: number
+  }
+  empresas: DeskEmpresa[]
+  usuarios?: Array<{
+    id: string
+    nome: string
+    email: string
+    role: string
+    ativo: number
+    created_at: string
+  }>
+}
+
 export function ticketWsUrl(ticketId: string) {
   const token = deskSession.getToken() ?? ''
   const base = import.meta.env.VITE_API_URL || 'http://localhost:8787'

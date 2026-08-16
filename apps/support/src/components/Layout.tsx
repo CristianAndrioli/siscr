@@ -35,9 +35,12 @@ export default function DeskLayout() {
           <NavLink to="/desenvolvimento" className={linkClass}>
             Desenvolvimento
           </NavLink>
+          <NavLink to="/clientes" className={linkClass}>
+            Clientes
+          </NavLink>
           {agent?.role === 'master' && (
             <NavLink to="/usuarios" className={linkClass}>
-              Usuários
+              Equipe
             </NavLink>
           )}
         </nav>

@@ -193,6 +193,139 @@ export class SupportDeskService {
       .bind(tenantId)
       .first()
   }
+
+  async listClients() {
+    const [tenants, empresas, users, filiais, tickets] = await Promise.all([
+      this.db
+        .prepare(
+          `SELECT t.id, t.slug, t.nome, t.status, t.plan_id, t.subscription_expires_at, t.created_at,
+                  t.stripe_subscription_id,
+                  p.nome as plan_nome,
+                  p.max_empresas, p.max_filiais, p.max_usuarios, p.max_docs_fiscais_mes
+           FROM tenants t
+           LEFT JOIN plans p ON p.id = t.plan_id
+           ORDER BY t.created_at DESC`,
+        )
+        .all<DeskTenantRow>(),
+      this.db
+        .prepare(
+          `SELECT tenant_id, id, razao_social, nome_fantasia, cnpj, cnae, crt, regime_tributario,
+                  cidade, uf, email, telefone, inscricao_estadual
+           FROM empresas
+           ORDER BY razao_social`,
+        )
+        .all<DeskEmpresaRow>(),
+      this.db.prepare(`SELECT tenant_id, COUNT(*) as n FROM users WHERE ativo = 1 GROUP BY tenant_id`).all<{ tenant_id: string; n: number }>(),
+      this.db.prepare(`SELECT tenant_id, COUNT(*) as n FROM filiais GROUP BY tenant_id`).all<{ tenant_id: string; n: number }>(),
+      this.db
+        .prepare(
+          `SELECT tenant_id, COUNT(*) as n FROM support_tickets
+           WHERE status NOT IN ('resolved', 'closed')
+           GROUP BY tenant_id`,
+        )
+        .all<{ tenant_id: string; n: number }>(),
+    ])
+
+    const countMap = (rows: { tenant_id: string; n: number }[] | undefined) => {
+      const map = new Map<string, number>()
+      for (const row of rows ?? []) map.set(row.tenant_id, row.n)
+      return map
+    }
+    const userMap = countMap(users.results)
+    const filialMap = countMap(filiais.results)
+    const ticketMap = countMap(tickets.results)
+    const empresasByTenant = new Map<string, DeskEmpresaRow[]>()
+    for (const emp of empresas.results ?? []) {
+      const list = empresasByTenant.get(emp.tenant_id) ?? []
+      list.push(emp)
+      empresasByTenant.set(emp.tenant_id, list)
+    }
+
+    return (tenants.results ?? []).map((t) => {
+      const empresasTenant = empresasByTenant.get(t.id) ?? []
+      return {
+        id: t.id,
+        slug: t.slug,
+        nome: t.nome,
+        status: t.status,
+        plan_id: t.plan_id,
+        plan_nome: t.plan_nome ?? 'Sem plano',
+        subscription_expires_at: t.subscription_expires_at,
+        created_at: t.created_at,
+        has_stripe: Boolean(t.stripe_subscription_id),
+        limites: {
+          max_empresas: t.max_empresas ?? 0,
+          max_filiais: t.max_filiais ?? 0,
+          max_usuarios: t.max_usuarios ?? 0,
+          max_docs_fiscais_mes: t.max_docs_fiscais_mes ?? 0,
+        },
+        uso: {
+          empresas: empresasTenant.length,
+          filiais: filialMap.get(t.id) ?? 0,
+          usuarios: userMap.get(t.id) ?? 0,
+          tickets_abertos: ticketMap.get(t.id) ?? 0,
+        },
+        empresas: empresasTenant,
+      }
+    })
+  }
+
+  async getClient(tenantId: string) {
+    const clients = await this.listClients()
+    const client = clients.find((c) => c.id === tenantId)
+    if (!client) return null
+    const { results: usuarios } = await this.db
+      .prepare(
+        `SELECT id, nome, email, role, ativo, created_at
+         FROM users
+         WHERE tenant_id = ?
+         ORDER BY nome`,
+      )
+      .bind(tenantId)
+      .all<DeskClientUserRow>()
+    return { ...client, usuarios: usuarios ?? [] }
+  }
+}
+
+type DeskTenantRow = {
+  id: string
+  slug: string
+  nome: string
+  status: string
+  plan_id: string | null
+  subscription_expires_at: string | null
+  created_at: string
+  stripe_subscription_id: string | null
+  plan_nome: string | null
+  max_empresas: number | null
+  max_filiais: number | null
+  max_usuarios: number | null
+  max_docs_fiscais_mes: number | null
+}
+
+export type DeskEmpresaRow = {
+  tenant_id: string
+  id: string
+  razao_social: string
+  nome_fantasia: string | null
+  cnpj: string
+  cnae: string | null
+  crt: string | null
+  regime_tributario: string | null
+  cidade: string | null
+  uf: string | null
+  email: string | null
+  telefone: string | null
+  inscricao_estadual: string | null
+}
+
+type DeskClientUserRow = {
+  id: string
+  nome: string
+  email: string
+  role: string
+  ativo: number
+  created_at: string
 }
 
 export function createSupportDeskService(db: D1Database) {
