@@ -28,8 +28,8 @@ export function FiliaisPage() {
     setError('');
     try {
       const [eRes, fRes] = await Promise.all([
-        api.get('/tenant/info/empresas'),
-        api.get('/tenant/info/filiais'),
+        api.get('/tenant/info/empresas?include_inactive=1'),
+        api.get('/tenant/info/filiais?include_inactive=1'),
       ]);
       setEmpresas((eRes.data.empresas ?? []).map(normalizeEmpresaRow));
       setFiliais((fRes.data.filiais ?? []).map(normalizeFilialRow));
@@ -133,7 +133,9 @@ export function FiliaisPage() {
             return (
               <div
                 key={empresa.id}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden"
+                className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden ${
+                  empresa.ativo === 0 ? 'opacity-75' : ''
+                }`}
               >
                 <div
                   className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
@@ -156,8 +158,13 @@ export function FiliaisPage() {
                       </svg>
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                        {empresa.razao_social}
+                      <p className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 min-w-0">
+                        <span className="truncate">{empresa.razao_social}</span>
+                        {empresa.ativo === 0 && (
+                          <span className="flex-none text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-semibold">
+                            Desativada
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-slate-400 dark:text-slate-500 flex flex-wrap items-center gap-2">
                         <span>
@@ -235,6 +242,7 @@ export function FiliaisPage() {
                         <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                           Filiais ({filiaisE.length})
                         </p>
+                        {empresa.ativo !== 0 && (
                         <button
                           onClick={() =>
                             navigate(`/configuracoes/filiais/filiais/novo?empresaId=${empresa.id}`)
@@ -252,6 +260,7 @@ export function FiliaisPage() {
                           </svg>
                           Nova Filial
                         </button>
+                        )}
                       </div>
                       {filiaisE.length === 0 ? (
                         <p className="text-xs text-slate-400 dark:text-slate-500 italic">

@@ -64,6 +64,17 @@ export type SupportAgentRow = {
   created_at: string
 }
 
+export type DeskFilial = {
+  tenant_id: string
+  empresa_id: string
+  id: string
+  nome: string
+  cnpj: string | null
+  cidade: string | null
+  uf: string | null
+  ativa: number
+}
+
 export type DeskEmpresa = {
   tenant_id: string
   id: string
@@ -78,6 +89,8 @@ export type DeskEmpresa = {
   email: string | null
   telefone: string | null
   inscricao_estadual: string | null
+  ativo: number
+  filiais: DeskFilial[]
 }
 
 export type DeskClient = {

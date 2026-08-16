@@ -31,8 +31,8 @@ export class EmpresaFilialService {
     private readonly filiais: FilialRepository,
   ) {}
 
-  listEmpresas() {
-    return this.empresas.listWithFilialCount()
+  listEmpresas(includeInactive = false) {
+    return this.empresas.listWithFilialCount(includeInactive)
   }
 
   async createEmpresa(
@@ -135,8 +135,8 @@ export class EmpresaFilialService {
     return id
   }
 
-  listAllFiliais() {
-    return this.filiais.listAllWithEmpresa()
+  listAllFiliais(includeInactive = false) {
+    return this.filiais.listAllWithEmpresa(includeInactive)
   }
 
   /**

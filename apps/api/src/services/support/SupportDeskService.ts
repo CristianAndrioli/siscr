@@ -210,13 +210,19 @@ export class SupportDeskService {
       this.db
         .prepare(
           `SELECT tenant_id, id, razao_social, nome_fantasia, cnpj, cnae, crt, regime_tributario,
-                  cidade, uf, email, telefone, inscricao_estadual
+                  cidade, uf, email, telefone, inscricao_estadual, COALESCE(ativo, 1) as ativo
            FROM empresas
            ORDER BY razao_social`,
         )
         .all<DeskEmpresaRow>(),
       this.db.prepare(`SELECT tenant_id, COUNT(*) as n FROM users WHERE ativo = 1 GROUP BY tenant_id`).all<{ tenant_id: string; n: number }>(),
-      this.db.prepare(`SELECT tenant_id, COUNT(*) as n FROM filiais GROUP BY tenant_id`).all<{ tenant_id: string; n: number }>(),
+      this.db
+        .prepare(
+          `SELECT tenant_id, empresa_id, id, nome, cnpj, cidade, uf, ativa
+           FROM filiais
+           ORDER BY nome`,
+        )
+        .all<DeskFilialRow>(),
       this.db
         .prepare(
           `SELECT tenant_id, COUNT(*) as n FROM support_tickets
@@ -232,12 +238,19 @@ export class SupportDeskService {
       return map
     }
     const userMap = countMap(users.results)
-    const filialMap = countMap(filiais.results)
     const ticketMap = countMap(tickets.results)
-    const empresasByTenant = new Map<string, DeskEmpresaRow[]>()
+    const filiaisByEmpresa = new Map<string, DeskFilialRow[]>()
+    const filialCountByTenant = new Map<string, number>()
+    for (const filial of filiais.results ?? []) {
+      const list = filiaisByEmpresa.get(filial.empresa_id) ?? []
+      list.push(filial)
+      filiaisByEmpresa.set(filial.empresa_id, list)
+      filialCountByTenant.set(filial.tenant_id, (filialCountByTenant.get(filial.tenant_id) ?? 0) + 1)
+    }
+    const empresasByTenant = new Map<string, DeskEmpresa[]>()
     for (const emp of empresas.results ?? []) {
       const list = empresasByTenant.get(emp.tenant_id) ?? []
-      list.push(emp)
+      list.push({ ...emp, filiais: filiaisByEmpresa.get(emp.id) ?? [] })
       empresasByTenant.set(emp.tenant_id, list)
     }
 
@@ -261,7 +274,7 @@ export class SupportDeskService {
         },
         uso: {
           empresas: empresasTenant.length,
-          filiais: filialMap.get(t.id) ?? 0,
+          filiais: filialCountByTenant.get(t.id) ?? 0,
           usuarios: userMap.get(t.id) ?? 0,
           tickets_abertos: ticketMap.get(t.id) ?? 0,
         },
@@ -285,6 +298,52 @@ export class SupportDeskService {
       .all<DeskClientUserRow>()
     return { ...client, usuarios: usuarios ?? [] }
   }
+
+  async setTenantStatus(tenantId: string, status: 'active' | 'suspended') {
+    const row = await this.db
+      .prepare('SELECT id, slug FROM tenants WHERE id = ?')
+      .bind(tenantId)
+      .first<{ id: string; slug: string }>()
+    if (!row) return { error: 'Cliente não encontrado.', status: 404 as const }
+    await this.db.prepare('UPDATE tenants SET status = ? WHERE id = ?').bind(status, tenantId).run()
+    return { slug: row.slug }
+  }
+
+  async setEmpresaAtivo(tenantId: string, empresaId: string, ativo: boolean) {
+    const row = await this.db
+      .prepare('SELECT id FROM empresas WHERE id = ? AND tenant_id = ?')
+      .bind(empresaId, tenantId)
+      .first<{ id: string }>()
+    if (!row) return { error: 'Empresa não encontrada.', status: 404 as const }
+    const now = new Date().toISOString()
+    await this.db
+      .prepare('UPDATE empresas SET ativo = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+      .bind(ativo ? 1 : 0, now, empresaId, tenantId)
+      .run()
+    return { ok: true as const }
+  }
+
+  async setFilialAtiva(tenantId: string, filialId: string, ativa: boolean) {
+    const row = await this.db
+      .prepare(
+        `SELECT f.id, COALESCE(e.ativo, 1) as empresa_ativo
+         FROM filiais f
+         JOIN empresas e ON e.id = f.empresa_id AND e.tenant_id = f.tenant_id
+         WHERE f.id = ? AND f.tenant_id = ?`,
+      )
+      .bind(filialId, tenantId)
+      .first<{ id: string; empresa_ativo: number }>()
+    if (!row) return { error: 'Filial não encontrada.', status: 404 as const }
+    if (ativa && row.empresa_ativo !== 1) {
+      return { error: 'Reative a empresa antes de ativar a filial.', status: 400 as const }
+    }
+    const now = new Date().toISOString()
+    await this.db
+      .prepare('UPDATE filiais SET ativa = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
+      .bind(ativa ? 1 : 0, now, filialId, tenantId)
+      .run()
+    return { ok: true as const }
+  }
 }
 
 type DeskTenantRow = {
@@ -303,6 +362,17 @@ type DeskTenantRow = {
   max_docs_fiscais_mes: number | null
 }
 
+export type DeskFilialRow = {
+  tenant_id: string
+  empresa_id: string
+  id: string
+  nome: string
+  cnpj: string | null
+  cidade: string | null
+  uf: string | null
+  ativa: number
+}
+
 export type DeskEmpresaRow = {
   tenant_id: string
   id: string
@@ -317,7 +387,10 @@ export type DeskEmpresaRow = {
   email: string | null
   telefone: string | null
   inscricao_estadual: string | null
+  ativo: number
 }
+
+type DeskEmpresa = DeskEmpresaRow & { filiais: DeskFilialRow[] }
 
 type DeskClientUserRow = {
   id: string

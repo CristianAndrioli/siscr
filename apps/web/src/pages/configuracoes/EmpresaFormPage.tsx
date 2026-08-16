@@ -53,7 +53,7 @@ export default function EmpresaFormPage() {
     setLoading(true);
     setFormError('');
     try {
-      const eRes = await api.get('/tenant/info/empresas');
+      const eRes = await api.get('/tenant/info/empresas?include_inactive=1');
       const list = (eRes.data.empresas ?? []).map(normalizeEmpresaRow);
       const found = list.find((x: Empresa) => x.id === id);
       if (!found) {

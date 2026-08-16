@@ -108,6 +108,7 @@ export interface Empresa {
   nfe_ambiente?: number | null;
   nfe_proximo_numero?: number | null;
   total_filiais?: number;
+  ativo?: number;
   created_at: string;
   a1_cert_uploaded_at?: string | null;
   a1_cert_meta?: string | null;
@@ -141,6 +142,7 @@ export function normalizeEmpresaRow(row: unknown): Empresa {
   const meta = r.a1_cert_meta ?? r.a1CertMeta;
   return {
     ...(r as Empresa),
+    ativo: r.ativo === 0 ? 0 : 1,
     a1_cert_uploaded_at: up != null && String(up) !== '' ? String(up) : null,
     a1_cert_meta:
       meta == null || meta === ''

@@ -56,7 +56,14 @@ export default function ClientsPage() {
         c.nome,
         c.slug,
         c.plan_nome,
-        ...c.empresas.flatMap((e) => [e.razao_social, e.nome_fantasia, e.cnpj, e.cidade, e.cnae]),
+        ...c.empresas.flatMap((e) => [
+          e.razao_social,
+          e.nome_fantasia,
+          e.cnpj,
+          e.cidade,
+          e.cnae,
+          ...(e.filiais ?? []).flatMap((f) => [f.nome, f.cnpj, f.cidade]),
+        ]),
       ]
         .filter(Boolean)
         .join(' ')
@@ -95,7 +102,7 @@ export default function ClientsPage() {
           <p className="p-4 text-sm text-slate-500">Nenhum cliente encontrado.</p>
         )}
         {filtered.map((c) => {
-          const principal = c.empresas[0]
+          const principal = c.empresas.find((e) => e.ativo !== 0) ?? c.empresas[0]
           return (
             <Link
               key={c.id}

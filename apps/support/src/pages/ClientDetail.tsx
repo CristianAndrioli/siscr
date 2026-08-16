@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, type DeskClient } from '../api'
+import { api, type DeskClient, type DeskEmpresa, type DeskFilial } from '../api'
 import { crtLabel, formatCnpj } from './Clients'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -23,39 +23,91 @@ function fmtDate(value: string | null) {
   return d.toLocaleDateString('pt-BR')
 }
 
+function apiError(err: unknown, fallback: string) {
+  return (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? fallback
+}
+
+function isOn(value: number | boolean | undefined) {
+  return value !== 0 && value !== false
+}
+
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [client, setClient] = useState<DeskClient | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    if (!id) return
+    const { data } = await api.get<{ client: DeskClient }>(`/clients/${id}`)
+    setClient(data.client)
+  }, [id])
 
   useEffect(() => {
-    if (!id) return
     let cancelled = false
-    api
-      .get<{ client: DeskClient }>(`/clients/${id}`)
-      .then(({ data }) => {
-        if (!cancelled) setClient(data.client)
-      })
+    load()
       .catch(() => {
         if (!cancelled) setError('Cliente não encontrado.')
       })
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [load])
+
+  async function runAction(key: string, confirmMsg: string, request: () => Promise<{ data: { client: DeskClient } }>) {
+    if (!window.confirm(confirmMsg)) return
+    setBusy(key)
+    setActionError(null)
+    try {
+      const { data } = await request()
+      setClient(data.client)
+    } catch (err) {
+      setActionError(apiError(err, 'Não foi possível aplicar a ação.'))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   if (error) return <p className="text-sm text-red-600">{error}</p>
   if (!client) return <p className="text-sm text-slate-500">Carregando…</p>
+
+  const tenantActive = client.status === 'active'
 
   return (
     <div>
       <Link to="/clientes" className="text-sm text-brand-600 hover:underline">
         ← Clientes
       </Link>
-      <h1 className="mt-2 text-2xl font-bold">{client.nome}</h1>
-      <p className="text-sm text-slate-500">
-        @{client.slug} · {STATUS_LABEL[client.status] ?? client.status} · desde {fmtDate(client.created_at)}
-      </p>
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">{client.nome}</h1>
+          <p className="text-sm text-slate-500">
+            @{client.slug} · {STATUS_LABEL[client.status] ?? client.status} · desde {fmtDate(client.created_at)}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={busy !== null}
+          onClick={() =>
+            void runAction(
+              'tenant',
+              tenantActive
+                ? 'Suspender a conta bloqueia o login no ERP até reativar. Confirma?'
+                : 'Reativar a conta libera o ERP para este cliente. Confirma?',
+              () =>
+                api.patch(`/clients/${client.id}`, {
+                  status: tenantActive ? 'suspended' : 'active',
+                }),
+            )
+          }
+        >
+          {tenantActive ? 'Suspender conta' : 'Reativar conta'}
+        </button>
+      </div>
+
+      {actionError && <p className="mt-3 text-sm text-red-600">{actionError}</p>}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <InfoCard label="Plano" value={client.plan_nome} hint={client.has_stripe ? 'Assinatura Stripe' : 'Sem Stripe'} />
@@ -71,28 +123,36 @@ export default function ClientDetailPage() {
         />
       </div>
 
-      <h2 className="mt-8 text-lg font-semibold">Empresas (CNPJ)</h2>
+      <h2 className="mt-8 text-lg font-semibold">Empresas e filiais</h2>
+      <p className="mt-1 text-sm text-slate-500">
+        Desativar esconde a empresa/filial nas operações do ERP. O cadastro continua na conta e não libera vaga do plano.
+      </p>
       <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {client.empresas.length === 0 && <p className="p-4 text-sm text-slate-500">Nenhuma empresa cadastrada.</p>}
         {client.empresas.map((e) => (
-          <div key={e.id} className="border-b border-slate-100 px-4 py-3 last:border-0">
-            <div className="font-medium">{e.razao_social}</div>
-            <div className="text-xs text-slate-500">
-              {e.nome_fantasia ? `${e.nome_fantasia} · ` : ''}
-              {formatCnpj(e.cnpj)}
-              {e.inscricao_estadual ? ` · IE ${e.inscricao_estadual}` : ''}
-            </div>
-            <div className="mt-1 text-xs text-slate-600">
-              {crtLabel(e.crt, e.regime_tributario)}
-              {e.cnae ? ` · CNAE ${e.cnae}` : ''}
-              {e.cidade ? ` · ${e.cidade}/${e.uf ?? ''}` : ''}
-            </div>
-            {(e.email || e.telefone) && (
-              <div className="mt-1 text-xs text-slate-500">
-                {[e.email, e.telefone].filter(Boolean).join(' · ')}
-              </div>
-            )}
-          </div>
+          <EmpresaBlock
+            key={e.id}
+            empresa={e}
+            busy={busy}
+            onToggleEmpresa={() =>
+              void runAction(
+                `empresa:${e.id}`,
+                isOn(e.ativo)
+                  ? `Desativar ${e.razao_social}? Ela deixa de aparecer em NFe, pedidos e demais telas operacionais.`
+                  : `Reativar ${e.razao_social}?`,
+                () => api.patch(`/clients/${client.id}/empresas/${e.id}`, { ativo: !isOn(e.ativo) }),
+              )
+            }
+            onToggleFilial={(f) =>
+              void runAction(
+                `filial:${f.id}`,
+                isOn(f.ativa)
+                  ? `Desativar a filial ${f.nome}?`
+                  : `Reativar a filial ${f.nome}?`,
+                () => api.patch(`/clients/${client.id}/filiais/${f.id}`, { ativa: !isOn(f.ativa) }),
+              )
+            }
+          />
         ))}
       </div>
 
@@ -119,6 +179,104 @@ export default function ClientDetailPage() {
         Ver tickets deste cliente
       </Link>
     </div>
+  )
+}
+
+function EmpresaBlock({
+  empresa,
+  busy,
+  onToggleEmpresa,
+  onToggleFilial,
+}: {
+  empresa: DeskEmpresa
+  busy: string | null
+  onToggleEmpresa: () => void
+  onToggleFilial: (filial: DeskFilial) => void
+}) {
+  const empresaAtiva = isOn(empresa.ativo)
+  const filiais = empresa.filiais ?? []
+
+  return (
+    <div className={`border-b border-slate-100 px-4 py-3 last:border-0 ${empresaAtiva ? '' : 'bg-slate-50'}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{empresa.razao_social}</span>
+            <StatusPill on={empresaAtiva} />
+          </div>
+          <div className="text-xs text-slate-500">
+            {empresa.nome_fantasia ? `${empresa.nome_fantasia} · ` : ''}
+            {formatCnpj(empresa.cnpj)}
+            {empresa.inscricao_estadual ? ` · IE ${empresa.inscricao_estadual}` : ''}
+          </div>
+          <div className="mt-1 text-xs text-slate-600">
+            {crtLabel(empresa.crt, empresa.regime_tributario)}
+            {empresa.cnae ? ` · CNAE ${empresa.cnae}` : ''}
+            {empresa.cidade ? ` · ${empresa.cidade}/${empresa.uf ?? ''}` : ''}
+          </div>
+          {(empresa.email || empresa.telefone) && (
+            <div className="mt-1 text-xs text-slate-500">
+              {[empresa.email, empresa.telefone].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={busy !== null}
+          onClick={onToggleEmpresa}
+        >
+          {empresaAtiva ? 'Desativar empresa' : 'Ativar empresa'}
+        </button>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-slate-100 bg-white">
+        {filiais.length === 0 && (
+          <p className="px-3 py-2 text-xs text-slate-500">Nenhuma filial cadastrada.</p>
+        )}
+        {filiais.map((f) => {
+          const filialAtiva = isOn(f.ativa)
+          return (
+            <div
+              key={f.id}
+              className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 last:border-0"
+            >
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium">{f.nome}</span>
+                  <StatusPill on={filialAtiva} />
+                </div>
+                <div className="text-xs text-slate-500">
+                  {f.cnpj ? formatCnpj(f.cnpj) : 'Sem CNPJ próprio'}
+                  {f.cidade ? ` · ${f.cidade}/${f.uf ?? ''}` : ''}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary h-8 px-3 text-xs"
+                disabled={busy !== null || (!filialAtiva && !empresaAtiva)}
+                title={!filialAtiva && !empresaAtiva ? 'Reative a empresa antes de ativar a filial.' : undefined}
+                onClick={() => onToggleFilial(f)}
+              >
+                {filialAtiva ? 'Desativar filial' : 'Ativar filial'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function StatusPill({ on }: { on: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+        on ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+      }`}
+    >
+      {on ? 'Ativa' : 'Inativa'}
+    </span>
   )
 }
 

@@ -108,7 +108,7 @@ export class EmpresaRepository extends BaseTenantRepository {
     super(db, tenantId)
   }
 
-  async listWithFilialCount(): Promise<unknown[]> {
+  async listWithFilialCount(includeInactive = false): Promise<unknown[]> {
     const { results } = await this.prepareTenant(
       `
       SELECT e.id, e.razao_social, e.nome_fantasia, e.cnpj, e.inscricao_estadual, e.inscricao_municipal,
@@ -116,10 +116,10 @@ export class EmpresaRepository extends BaseTenantRepository {
              e.logradouro, e.numero, e.complemento, e.bairro, e.cidade, e.uf, e.cep,
              e.codigo_municipio, e.crt, e.cnae, e.nfe_serie, e.nfe_ambiente, e.nfe_proximo_numero,
              e.nfse_serie, e.nfse_ambiente, e.nfse_proximo_numero, e.nfse_codigo_servico_padrao,
-             e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta,
+             e.created_at, e.a1_cert_uploaded_at, e.a1_cert_meta, COALESCE(e.ativo, 1) as ativo,
              (SELECT COUNT(*) FROM filiais f WHERE f.empresa_id = e.id AND f.tenant_id = e.tenant_id) as total_filiais
       FROM empresas e
-      WHERE e.tenant_id = ?
+      WHERE e.tenant_id = ?${includeInactive ? '' : ' AND COALESCE(e.ativo, 1) = 1'}
       ORDER BY e.razao_social
       `,
     ).all()

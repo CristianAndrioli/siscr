@@ -61,7 +61,7 @@ export default function FilialFormPage() {
     setLoading(true);
     setFormError('');
     try {
-      const fRes = await api.get('/tenant/info/filiais');
+      const fRes = await api.get('/tenant/info/filiais?include_inactive=1');
       const list = (fRes.data.filiais ?? []).map(normalizeFilialRow);
       const found = list.find((x: Filial) => x.id === id);
       if (!found) {

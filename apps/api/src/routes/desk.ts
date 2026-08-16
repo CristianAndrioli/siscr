@@ -153,6 +153,46 @@ app.get('/clients/:id', async (c) => {
   return c.json({ client })
 })
 
+app.patch(
+  '/clients/:id',
+  zValidator('json', z.object({ status: z.enum(['active', 'suspended']) })),
+  async (c) => {
+    const service = createSupportDeskService(c.env.DB_SHARED)
+    const tenantId = c.req.param('id')
+    const result = await service.setTenantStatus(tenantId, c.req.valid('json').status)
+    if ('error' in result) return c.json({ error: result.error }, result.status)
+    await c.env.KV_TENANT_CACHE.delete(`tenant:${result.slug}`)
+    const client = await service.getClient(tenantId)
+    return c.json({ client })
+  },
+)
+
+app.patch(
+  '/clients/:id/empresas/:empresaId',
+  zValidator('json', z.object({ ativo: z.boolean() })),
+  async (c) => {
+    const service = createSupportDeskService(c.env.DB_SHARED)
+    const tenantId = c.req.param('id')
+    const result = await service.setEmpresaAtivo(tenantId, c.req.param('empresaId'), c.req.valid('json').ativo)
+    if ('error' in result) return c.json({ error: result.error }, result.status)
+    const client = await service.getClient(tenantId)
+    return c.json({ client })
+  },
+)
+
+app.patch(
+  '/clients/:id/filiais/:filialId',
+  zValidator('json', z.object({ ativa: z.boolean() })),
+  async (c) => {
+    const service = createSupportDeskService(c.env.DB_SHARED)
+    const tenantId = c.req.param('id')
+    const result = await service.setFilialAtiva(tenantId, c.req.param('filialId'), c.req.valid('json').ativa)
+    if ('error' in result) return c.json({ error: result.error }, result.status)
+    const client = await service.getClient(tenantId)
+    return c.json({ client })
+  },
+)
+
 app.get('/tickets', async (c) => {
   const kind = c.req.query('kind') as 'support' | 'development' | undefined
   const status = c.req.query('status') as

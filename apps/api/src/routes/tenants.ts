@@ -65,7 +65,7 @@ app.get('/onboarding', async (c) => {
 app.get('/empresas', async (c) => {
   const tenant = c.get('tenant')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  const empresas = await svc.listEmpresas()
+  const empresas = await svc.listEmpresas(c.req.query('include_inactive') === '1')
   return c.json({ empresas })
 })
 
@@ -340,7 +340,7 @@ app.delete('/empresas/:id', async (c) => {
 app.get('/filiais', async (c) => {
   const tenant = c.get('tenant')
   const svc = createEmpresaFilialService(c.env.DB_SHARED, tenant.tenantId)
-  const filiais = await svc.listAllFiliais()
+  const filiais = await svc.listAllFiliais(c.req.query('include_inactive') === '1')
   return c.json({ filiais })
 })
 

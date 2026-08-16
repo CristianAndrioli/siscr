@@ -102,11 +102,13 @@ export const empresas = sqliteTable('empresas', {
   nfseAmbiente: integer('nfse_ambiente'),
   nfseProximoNumero: integer('nfse_proximo_numero'),
   nfseCodigoServicoPadrao: text('nfse_codigo_servico_padrao'),
+  ativo: integer('ativo', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at'),
 }, (t) => [
   index('idx_empresas_tenant').on(t.tenantId),
   uniqueIndex('idx_empresas_cnpj_tenant').on(t.cnpj, t.tenantId),
+  index('idx_empresas_ativo').on(t.tenantId, t.ativo),
 ])
 
 // ─── Filiais ──────────────────────────────────────────────────────

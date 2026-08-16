@@ -79,7 +79,7 @@ export class FilialRepository extends BaseTenantRepository {
     return results ?? []
   }
 
-  async listAllWithEmpresa(): Promise<unknown[]> {
+  async listAllWithEmpresa(includeInactive = false): Promise<unknown[]> {
     const { results } = await this.prepareTenant(
       `
       SELECT f.id, f.nome, f.cnpj, f.uf, f.cidade, f.logradouro, f.numero, f.complemento, f.bairro, f.cep,
@@ -87,7 +87,7 @@ export class FilialRepository extends BaseTenantRepository {
              e.id as empresa_id, e.razao_social as empresa_nome
       FROM filiais f
       LEFT JOIN empresas e ON e.id = f.empresa_id AND e.tenant_id = f.tenant_id
-      WHERE f.tenant_id = ?
+      WHERE f.tenant_id = ?${includeInactive ? '' : ' AND f.ativa = 1 AND COALESCE(e.ativo, 1) = 1'}
       ORDER BY e.razao_social, f.nome
       `,
     ).all()
