@@ -59,11 +59,12 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
         return Promise.reject(error)
       }
 
-      const data = error.response?.data as { error?: string } | undefined
+      const data = error.response?.data as { error?: string; code?: string } | undefined
       const msg = data?.error ?? ''
+      const code = data?.code
       if (
-        (error.response?.status === 404 || error.response?.status === 403) &&
-        (msg.includes('inativo') || msg.includes('suspenso') || msg.includes('suspensa'))
+        (error.response?.status === 404 || error.response?.status === 403 || error.response?.status === 402) &&
+        (msg.includes('inativo') || msg.includes('suspenso') || msg.includes('suspensa') || code === 'TENANT_INACTIVE')
       ) {
         sessionStore.setTenantStatus('suspended')
         if (!window.location.pathname.startsWith('/subscription-expired')) {
@@ -71,7 +72,6 @@ export function createSiscrHttpClient(options: CreateSiscrHttpClientOptions): Ax
         }
       }
 
-      const code = (error.response?.data as { code?: string } | undefined)?.code
       if (
         error.response?.status === 403 &&
         (code === 'FORBIDDEN_MODULE' || code === 'FORBIDDEN_EDIT')

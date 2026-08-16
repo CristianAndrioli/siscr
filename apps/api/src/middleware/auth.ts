@@ -14,6 +14,7 @@ export type SessionUser = {
   empresaId: string | null
   filialId: string | null
   modules?: ModuleMatrix
+  billingOnly?: boolean
 }
 
 declare module 'hono' {
@@ -84,9 +85,9 @@ export const authMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next
         tenantSlug: sessionData.tenantSlug,
         customRoleId: row.custom_role_id,
       })
-      sessionData = full
+      sessionData = { ...full, billingOnly: sessionData.billingOnly }
       await c.env.KV_SESSIONS.put(`session:${token}`, JSON.stringify(sessionData), {
-        expirationTtl: 60 * 60 * 24 * 7,
+        expirationTtl: sessionData.billingOnly ? 60 * 60 * 24 : 60 * 60 * 24 * 7,
       })
     }
   }

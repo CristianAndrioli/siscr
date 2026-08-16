@@ -40,6 +40,21 @@ function parseFrom(raw?: string): EmailAddress {
   return { email: raw.trim() }
 }
 
+async function incrementEmailUsoMes(db: D1Database, tenantId: string): Promise<void> {
+  const now = new Date()
+  const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+  await db
+    .prepare(
+      `INSERT INTO email_envio_uso (tenant_id, ym, qtd, updated_at)
+       VALUES (?, ?, 1, datetime('now'))
+       ON CONFLICT(tenant_id, ym) DO UPDATE SET
+         qtd = qtd + 1,
+         updated_at = datetime('now')`,
+    )
+    .bind(tenantId, ym)
+    .run()
+}
+
 function htmlToText(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -130,11 +145,12 @@ export async function sendEmailVerification(
 // ─── Boas-vindas (pós-pagamento) ───────────────────────────────
 
 export async function sendWelcomeEmail(
-  env: EmailEnv,
+  env: EmailEnv & { DB_SHARED?: D1Database },
   to: string,
   nome: string,
   tenantSlug: string,
   plan: string,
+  tenantId?: string,
 ): Promise<void> {
   const link = `${env.FRONTEND_URL}/login`
   const planLabel: Record<string, string> = {
@@ -151,6 +167,13 @@ export async function sendWelcomeEmail(
     <p>Se tiver qualquer dúvida, responda este e-mail que nossa equipe te ajuda.</p>
   `)
   await sendEmail(env, to, 'Bem-vindo ao SISCR!', html)
+  if (tenantId && env.DB_SHARED) {
+    try {
+      await incrementEmailUsoMes(env.DB_SHARED, tenantId)
+    } catch (err) {
+      console.error('[email] Falha ao registrar uso de e-mail:', err)
+    }
+  }
 }
 
 // ─── Recuperação de senha ──────────────────────────────────────

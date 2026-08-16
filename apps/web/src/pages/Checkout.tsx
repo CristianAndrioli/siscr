@@ -89,8 +89,17 @@ export default function Checkout() {
     setLoadingCheckout(true);
     setError('');
     try {
-      const { url } = await createTenantCheckout(plan.id);
-      window.location.href = url;
+      const result = await createTenantCheckout(plan.id);
+      if (result.updated) {
+        navigate('/subscription-management');
+        return;
+      }
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      setError('Não foi possível iniciar o pagamento.');
+      setLoadingCheckout(false);
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { error?: string } } };
       setError(ax.response?.data?.error || 'Erro ao iniciar pagamento. Tente novamente.');

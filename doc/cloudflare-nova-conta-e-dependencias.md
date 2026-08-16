@@ -46,7 +46,7 @@ Definir com `wrangler secret put <NOME> --env staging` (e `--env production` qua
 | Binding `EMAIL` | Cloudflare Email Service — `[[send_email]]` no `wrangler.toml`, sem secret |
 | `STRIPE_SECRET_KEY` | API Stripe |
 | `STRIPE_WEBHOOK_SECRET` | Validação do webhook em `/api/webhooks/stripe` |
-| `STRIPE_PRICE_BASICO`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE` | Price IDs dos planos (checkout) |
+| `STRIPE_PRICE_BASICO`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE` | Price IDs mensais sandbox: `price_1U59stJcxPm9Lx7vQkyftcVw` (R$ 129), `price_1U59swJcxPm9Lx7vDOkPmykQ` (R$ 249), `price_1U59t0JcxPm9Lx7v0ADoOFfH` (R$ 497) |
 | `CERT_BLOB_SECRET` | Criptografia de certificado A1 no R2 (NF-e) |
 
 Consulte `apps/api/src/index.ts` e `apps/api/wrangler.toml` para nomes exatos.

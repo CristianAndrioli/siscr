@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../index'
 import { resolveTenantSlug } from '../lib/tenantSlug'
 import { PasswordHasher } from '../lib/password'
+import { resolvePriceIdForPlan } from '../lib/stripe/stripeApi'
 
 /**
  * Rotas públicas de planos e checkout Stripe (signup pago).
@@ -24,7 +25,9 @@ const app = new Hono<{ Bindings: Env }>()
 app.get('/plans', async (c) => {
   const { results: planRows } = await c.env.DB_SHARED
     .prepare(
-      `SELECT id, nome, preco_mensal, preco_anual, max_empresas, max_filiais, max_usuarios, features
+      `SELECT id, nome, preco_mensal, preco_anual, max_empresas, max_filiais, max_usuarios,
+              COALESCE(max_docs_fiscais_mes, 0) AS max_docs_fiscais_mes,
+              COALESCE(max_emails_mes, 0) AS max_emails_mes, features
        FROM plans WHERE ativo = 1 ORDER BY preco_mensal`,
     )
     .all<{
@@ -35,6 +38,8 @@ app.get('/plans', async (c) => {
       max_empresas: number
       max_filiais: number
       max_usuarios: number
+      max_docs_fiscais_mes: number
+      max_emails_mes: number
       features: string | null
     }>()
 
@@ -91,14 +96,7 @@ app.post('/checkout', zValidator('json', checkoutBodySchema), async (c) => {
     return c.json({ error: 'Esse e-mail já está cadastrado.' }, 409)
   }
 
-  // Mapear plano para Price ID do Stripe
-  const STRIPE_PRICE_IDS: Record<string, string> = {
-    basico:     c.env.STRIPE_PRICE_BASICO || '',
-    pro:        c.env.STRIPE_PRICE_PRO || '',
-    enterprise: c.env.STRIPE_PRICE_ENTERPRISE || '',
-  }
-
-  const priceId = STRIPE_PRICE_IDS[plan]
+  const priceId = await resolvePriceIdForPlan(c.env, c.env.DB_SHARED, plan)
   if (!priceId) {
     return c.json({ error: 'Plano inválido para checkout.' }, 400)
   }
@@ -137,6 +135,9 @@ app.post('/checkout', zValidator('json', checkoutBodySchema), async (c) => {
     'cancel_url': `${frontendUrl}/checkout/cancel`,
     'metadata[tenantSlug]': finalSlug,
     'metadata[plan]': plan,
+    'subscription_data[metadata][tenantSlug]': finalSlug,
+    'subscription_data[metadata][plan]': plan,
+    'subscription_data[trial_period_days]': '14',
     'allow_promotion_codes': 'true',
   })
 
@@ -157,6 +158,39 @@ app.post('/checkout', zValidator('json', checkoutBodySchema), async (c) => {
 
   const session = await stripeRes.json() as { url: string; id: string }
   return c.json({ url: session.url, sessionId: session.id })
+})
+
+// GET /api/subscriptions/billing-status — status do tenant pela sessão (inclui suspenso)
+app.get('/billing-status', async (c) => {
+  const authHeader = c.req.header('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json({ error: 'Não autenticado.' }, 401)
+  }
+
+  const token = authHeader.slice(7)
+  const session = await c.env.KV_SESSIONS.get(`session:${token}`, 'json') as {
+    tenantId?: string
+    billingOnly?: boolean
+  } | null
+
+  if (!session?.tenantId) {
+    return c.json({ error: 'Sessão inválida ou expirada.' }, 401)
+  }
+
+  const tenant = await c.env.DB_SHARED
+    .prepare('SELECT status, slug FROM tenants WHERE id = ?')
+    .bind(session.tenantId)
+    .first<{ status: string; slug: string }>()
+
+  if (!tenant) {
+    return c.json({ error: 'Tenant não encontrado.' }, 404)
+  }
+
+  return c.json({
+    status: tenant.status,
+    slug: tenant.slug,
+    billingOnly: session.billingOnly === true,
+  })
 })
 
 // ─── Portal de reativação (público — funciona mesmo para tenants suspensos) ──
@@ -191,7 +225,7 @@ app.post('/reactivation-portal', async (c) => {
 
   const params = new URLSearchParams({
     customer: tenant.stripe_customer_id,
-    return_url: `${frontendUrl}/subscription-management`,
+    return_url: `${frontendUrl}/subscription-expired`,
   })
 
   const portalRes = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {

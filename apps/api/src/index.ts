@@ -78,7 +78,7 @@ export type Env = {
    * Produção/staging: use "0".
    */
   NFE_DEV_MODE?: string
-  /** Limite mensal de NF-e autorizadas por tenant (default 50). Gancho para pacotes. */
+  /** Limite mensal legado (fallback). A cota efetiva vem do plano (`max_docs_fiscais_mes`). */
   NFE_QUOTA_MENSAL?: string
   /**
    * Host “pai” do app (sem esquema), ex.: app.suaempresa.com.br
@@ -239,10 +239,24 @@ export default {
   },
 
   // Handler de Queue (tarefas assíncronas)
-  async queue(batch: MessageBatch, _env: Env, _ctx: ExecutionContext) {
+  async queue(batch: MessageBatch, env: Env, _ctx: ExecutionContext) {
     for (const message of batch.messages) {
       try {
-        console.log(`Processando task: ${message.id}`, message.body)
+        const body = message.body as {
+          type?: string
+          tenantSlug?: string
+          stripeSubscriptionId?: string
+          stripeCustomerId?: string
+        }
+        if (body.type === 'reconciliar_assinatura' || body.type === 'renovar_assinatura') {
+          const { reconcileTenantSubscription } = await import('./routes/cron')
+          await reconcileTenantSubscription(env, {
+            stripeSubscriptionId: body.stripeSubscriptionId,
+            stripeCustomerId: body.stripeCustomerId,
+          })
+        } else {
+          console.log(`Processando task: ${message.id}`, message.body)
+        }
         message.ack()
       } catch (err) {
         console.error(`Falha na task ${message.id}:`, err)

@@ -10,7 +10,11 @@ import { buildNfsePreviewHtml } from '../lib/nfse/nfsePreviewHtml'
 import { verificarAssinaturaNfeXml } from '../lib/nfe/verifyNfeSignature'
 import { validateNfeXmlDocumento } from '../lib/nfe/validateNfeXmlDocumento'
 import { enviarNfeAutorizacao } from '../lib/nfe/autorizacaoNfe'
-import { assertNfeQuotaAvailable, incrementNfeUsoMes } from '../lib/nfe/nfeQuota'
+import {
+  assertFiscalDocQuotaAvailable,
+  FiscalQuotaExceededError,
+  incrementFiscalDocUsoMes,
+} from '../lib/fiscalDocQuota'
 import { prepareNfseEnvio } from '../lib/nfse/prepareNfseEnvio'
 import { getNfseAdapter } from '../lib/nfse'
 import {
@@ -960,6 +964,14 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
     return c.json({ error: 'CERT_BLOB_SECRET não configurado — impossível usar o certificado A1.' }, 503)
   }
 
+  try {
+    await assertFiscalDocQuotaAvailable(c.env.DB_SHARED, tenant.tenantId)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Cota mensal esgotada.'
+    const code = e instanceof FiscalQuotaExceededError ? e.code : 'NFE_QUOTA_EXCEEDED'
+    return c.json({ error: msg, code }, 403)
+  }
+
   const cMun = onlyDigits(nota.filial_cmun || nota.empresa_cmun || '')
   let adapter
   try {
@@ -1125,6 +1137,8 @@ app.post('/notas/:id/transmitir-nfse', async (c) => {
         400,
       )
     }
+
+    await incrementFiscalDocUsoMes(c.env.DB_SHARED, tenant.tenantId)
 
     return c.json({
       message: 'NFS-e autorizada pela prefeitura.',
@@ -1296,10 +1310,11 @@ app.post('/notas/:id/transmitir', async (c) => {
   }
 
   try {
-    await assertNfeQuotaAvailable(c.env, tenant.tenantId)
+    await assertFiscalDocQuotaAvailable(c.env.DB_SHARED, tenant.tenantId)
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Cota mensal esgotada.'
-    return c.json({ error: msg, code: 'NFE_QUOTA_EXCEEDED' }, 403)
+    const code = e instanceof FiscalQuotaExceededError ? e.code : 'NFE_QUOTA_EXCEEDED'
+    return c.json({ error: msg, code }, 403)
   }
 
   const obj = await c.env.R2_STORAGE.get(nota.xml_path)
@@ -1384,7 +1399,7 @@ app.post('/notas/:id/transmitir', async (c) => {
     let nextStatus = nota.status
     if (r.autorizada) {
       if (nota.status !== 'emitida') nextStatus = 'autorizada'
-      await incrementNfeUsoMes(c.env.DB_SHARED, tenant.tenantId)
+      await incrementFiscalDocUsoMes(c.env.DB_SHARED, tenant.tenantId)
     }
 
     await c.env.DB_SHARED

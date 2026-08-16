@@ -16,10 +16,13 @@ interface SubscriptionData {
   max_empresas: number;
   max_filiais: number;
   max_usuarios: number;
+  max_docs_fiscais_mes?: number;
+  max_emails_mes?: number;
   uso?: {
     empresas: number;
     filiais: number;
     usuarios: number;
+    docs_fiscais_mes?: number;
   };
   caracteristicas?: { rotulo: string; ordem: number }[];
 }
@@ -247,6 +250,13 @@ export default function SubscriptionManagement() {
                 />
                 <UsoBar label="Filiais" uso={subscription.uso.filiais} max={subscription.max_filiais} />
                 <UsoBar label="Usuários ativos" uso={subscription.uso.usuarios} max={subscription.max_usuarios} />
+                {typeof subscription.max_docs_fiscais_mes === 'number' && (
+                  <UsoBar
+                    label="Documentos fiscais neste mês"
+                    uso={subscription.uso.docs_fiscais_mes ?? 0}
+                    max={subscription.max_docs_fiscais_mes}
+                  />
+                )}
               </div>
             )}
 

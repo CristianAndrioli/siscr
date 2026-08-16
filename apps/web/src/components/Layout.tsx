@@ -145,7 +145,7 @@ export default function Layout({ children }: LayoutProps) {
   useEffect(() => {
     const status = localStorage.getItem('tenant_status');
     if (status && status !== 'active') {
-      const exempt = ['/subscription-expired', '/perfil', '/subscription-management'];
+      const exempt = ['/subscription-expired'];
       if (!exempt.some(p => location.pathname.startsWith(p))) {
         navigate('/subscription-expired');
       }

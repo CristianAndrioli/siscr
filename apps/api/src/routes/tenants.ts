@@ -18,6 +18,16 @@ import {
   resolvePlanForTenant,
 } from '../lib/planLimits'
 import { createEmpresaFilialService, createTenantInfoService } from '../services/tenant/factory'
+import {
+  applyStripeSubscriptionId,
+} from '../lib/stripe/tenantBilling'
+import {
+  fetchSubscription,
+  findActiveSubscriptionId,
+  resolvePriceIdForPlan,
+  stripeRequest,
+} from '../lib/stripe/stripeApi'
+import { getFiscalDocUsoMes } from '../lib/fiscalDocQuota'
 
 function jsonHttpError(c: { json: (b: unknown, s?: number) => Response }, e: unknown) {
   if (e instanceof Error && typeof (e as Error & { status?: number }).status === 'number') {
@@ -645,20 +655,15 @@ app.post('/subscription/checkout', zValidator('json', subscriptionCheckoutSchema
   const user = c.get('user')
   const { plan } = c.req.valid('json')
 
-  const STRIPE_PRICE_IDS: Record<string, string> = {
-    basico: c.env.STRIPE_PRICE_BASICO || '',
-    pro: c.env.STRIPE_PRICE_PRO || '',
-    enterprise: c.env.STRIPE_PRICE_ENTERPRISE || '',
-  }
-  const priceId = STRIPE_PRICE_IDS[plan]
+  const priceId = await resolvePriceIdForPlan(c.env, c.env.DB_SHARED, plan)
   if (!priceId) {
     return c.json({ error: 'Este plano não está configurado para checkout (Stripe).' }, 400)
   }
 
   const row = await c.env.DB_SHARED
-    .prepare('SELECT slug, stripe_customer_id FROM tenants WHERE id = ?')
+    .prepare('SELECT slug, stripe_customer_id, stripe_subscription_id FROM tenants WHERE id = ?')
     .bind(tenant.tenantId)
-    .first<{ slug: string; stripe_customer_id: string | null }>()
+    .first<{ slug: string; stripe_customer_id: string | null; stripe_subscription_id: string | null }>()
 
   if (!row) return c.json({ error: 'Tenant não encontrado.' }, 404)
 
@@ -669,6 +674,46 @@ app.post('/subscription/checkout', zValidator('json', subscriptionCheckoutSchema
 
   const frontendUrl = c.env.FRONTEND_URL || 'http://localhost:5173'
 
+  let subscriptionId = row.stripe_subscription_id
+  if (!subscriptionId && row.stripe_customer_id) {
+    try {
+      subscriptionId = await findActiveSubscriptionId(c.env, row.stripe_customer_id)
+    } catch (err) {
+      console.error('[SubscriptionCheckout] list subscriptions:', err)
+    }
+  }
+
+  if (subscriptionId) {
+    try {
+      const current = await fetchSubscription(c.env, subscriptionId)
+      const itemId = current.items?.data?.[0]?.id
+      if (!itemId) {
+        return c.json({ error: 'Assinatura Stripe sem item para atualizar.' }, 500)
+      }
+      const params = new URLSearchParams({
+        'items[0][id]': itemId,
+        'items[0][price]': priceId,
+        proration_behavior: 'create_prorations',
+        'metadata[plan]': plan,
+        'metadata[tenantSlug]': row.slug,
+      })
+      await stripeRequest(c.env, 'POST', `subscriptions/${subscriptionId}`, params)
+      await applyStripeSubscriptionId(c.env, subscriptionId, { planHint: plan, customerHint: row.stripe_customer_id })
+      return c.json({ updated: true, plan })
+    } catch (err) {
+      console.error('[SubscriptionCheckout] update subscription:', err)
+      if (!row.stripe_customer_id) {
+        return c.json({ error: err instanceof Error ? err.message : 'Erro ao trocar de plano.' }, 500)
+      }
+      const portalParams = new URLSearchParams({
+        customer: row.stripe_customer_id,
+        return_url: `${frontendUrl}/subscription-management`,
+      })
+      const portal = await stripeRequest<{ url: string }>(c.env, 'POST', 'billing_portal/sessions', portalParams)
+      return c.json({ url: portal.url, via: 'portal' })
+    }
+  }
+
   const params = new URLSearchParams({
     mode: 'subscription',
     'line_items[0][price]': priceId,
@@ -678,6 +723,8 @@ app.post('/subscription/checkout', zValidator('json', subscriptionCheckoutSchema
     'metadata[tenantSlug]': row.slug,
     'metadata[plan]': plan,
     'metadata[flow]': 'tenant_upgrade',
+    'subscription_data[metadata][tenantSlug]': row.slug,
+    'subscription_data[metadata][plan]': plan,
     'allow_promotion_codes': 'true',
   })
 
@@ -768,6 +815,7 @@ app.get('/subscription', async (c) => {
 
   const plan = await resolvePlanForTenant(c.env.DB_SHARED, tenant.tenantId)
   const uso = await getTenantUsage(c.env.DB_SHARED, tenant.tenantId)
+  const docsMes = await getFiscalDocUsoMes(c.env.DB_SHARED, tenant.tenantId)
 
   const { results: caracteristicas } = await c.env.DB_SHARED
     .prepare(
@@ -786,7 +834,9 @@ app.get('/subscription', async (c) => {
       max_empresas: plan.max_empresas,
       max_filiais: plan.max_filiais,
       max_usuarios: plan.max_usuarios,
-      uso,
+      max_docs_fiscais_mes: plan.max_docs_fiscais_mes,
+      max_emails_mes: plan.max_emails_mes,
+      uso: { ...uso, docs_fiscais_mes: docsMes },
       caracteristicas: caracteristicas ?? [],
     },
   })

@@ -8,6 +8,8 @@ export type PlanRow = {
   max_empresas: number
   max_filiais: number
   max_usuarios: number
+  max_docs_fiscais_mes: number
+  max_emails_mes: number
   preco_mensal: number
   preco_anual: number
 }
@@ -21,7 +23,10 @@ export type TenantUsage = {
 export async function fetchPlanById(db: D1Database, planId: string): Promise<PlanRow | null> {
   return db
     .prepare(
-      `SELECT id, nome, max_empresas, max_filiais, max_usuarios, preco_mensal, preco_anual
+      `SELECT id, nome, max_empresas, max_filiais, max_usuarios,
+              COALESCE(max_docs_fiscais_mes, 0) AS max_docs_fiscais_mes,
+              COALESCE(max_emails_mes, 0) AS max_emails_mes,
+              preco_mensal, preco_anual
        FROM plans WHERE id = ? AND ativo = 1`,
     )
     .bind(planId)
@@ -42,8 +47,10 @@ export async function resolvePlanForTenant(db: D1Database, tenantId: string): Pr
       id: DEFAULT_PLAN_ID,
       nome: 'Free',
       max_empresas: 1,
-      max_filiais: 2,
-      max_usuarios: 3,
+      max_filiais: 1,
+      max_usuarios: 2,
+      max_docs_fiscais_mes: 0,
+      max_emails_mes: 50,
       preco_mensal: 0,
       preco_anual: 0,
     }

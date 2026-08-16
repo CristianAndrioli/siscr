@@ -16,6 +16,8 @@ export interface PlanRow {
   max_empresas: number;
   max_filiais: number;
   max_usuarios: number;
+  max_docs_fiscais_mes?: number;
+  max_emails_mes?: number;
   features: string | null;
 }
 
@@ -26,7 +28,12 @@ export async function fetchPublicPlans(): Promise<PlanRow[]> {
 }
 
 /** Sessão Stripe para upgrade (usuário logado + tenant ativo). */
-export async function createTenantCheckout(plan: PaidPlanId): Promise<{ url: string }> {
-  const { data } = await api.post<{ url: string }>('/tenant/info/subscription/checkout', { plan });
-  return data;
+export async function createTenantCheckout(
+  plan: PaidPlanId,
+): Promise<{ url?: string; updated?: boolean; via?: string }> {
+  const { data } = await api.post<{ url?: string; updated?: boolean; via?: string }>(
+    '/tenant/info/subscription/checkout',
+    { plan },
+  )
+  return data
 }

@@ -13,6 +13,8 @@ declare module 'hono' {
   }
 }
 
+type CachedTenant = TenantContext & { status: string }
+
 export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, next) => {
   const CACHE_TTL = 300 // 5 minutos
 
@@ -48,33 +50,53 @@ export const tenantMiddleware = createMiddleware<{ Bindings: Env }>(async (c, ne
     return c.json({ error: 'Tenant não identificado. Informe o header X-Tenant-Slug ou faça login.' }, 400)
   }
 
-  // 4. Verificar cache KV
   const cacheKey = `tenant:${slug}`
-  const cached = await c.env.KV_TENANT_CACHE.get(cacheKey, 'json') as TenantContext | null
+  const raw = await c.env.KV_TENANT_CACHE.get(cacheKey, 'json') as CachedTenant | TenantContext | null
+  const cached: CachedTenant | null =
+    raw && 'status' in raw && raw.status ? raw : null
 
-  if (cached) {
-    c.set('tenant', cached)
+  if (cached && cached.status !== 'active') {
+    return c.json(
+      {
+        error: `Tenant "${slug}" não encontrado ou inativo.`,
+        code: 'TENANT_INACTIVE',
+      },
+      402,
+    )
+  }
+
+  if (cached && cached.status === 'active') {
+    c.set('tenant', { tenantId: cached.tenantId, tenantSlug: cached.tenantSlug })
     return next()
   }
 
-  // 5. Buscar no banco
   const result = await c.env.DB_SHARED
-    .prepare('SELECT id, slug FROM tenants WHERE slug = ? AND status = ?')
-    .bind(slug, 'active')
-    .first<{ id: string; slug: string }>()
+    .prepare('SELECT id, slug, status FROM tenants WHERE slug = ?')
+    .bind(slug)
+    .first<{ id: string; slug: string; status: string }>()
 
   if (!result) {
     return c.json({ error: `Tenant "${slug}" não encontrado ou inativo.` }, 404)
   }
 
-  const tenant: TenantContext = {
+  const tenant: CachedTenant = {
     tenantId: result.id,
     tenantSlug: result.slug,
+    status: result.status,
   }
 
-  // 6. Salvar no cache KV
   await c.env.KV_TENANT_CACHE.put(cacheKey, JSON.stringify(tenant), { expirationTtl: CACHE_TTL })
 
-  c.set('tenant', tenant)
+  if (result.status !== 'active') {
+    return c.json(
+      {
+        error: `Tenant "${slug}" não encontrado ou inativo.`,
+        code: 'TENANT_INACTIVE',
+      },
+      402,
+    )
+  }
+
+  c.set('tenant', { tenantId: tenant.tenantId, tenantSlug: tenant.tenantSlug })
   return next()
 })

@@ -6,6 +6,7 @@ import { PasswordHasher } from '../lib/password'
 import { buildSessionUserPayload } from '../lib/modulePermissions'
 import { checkTenantSlugAvailability, resolveTenantSlug } from '../lib/tenantSlug'
 import { hasEmailBinding, sendEmailVerification, sendPasswordResetEmail } from '../lib/email'
+import { resolvePriceIdForPlan } from '../lib/stripe/stripeApi'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -57,14 +58,6 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
       return c.json({ error: 'Identificador da empresa não encontrado.' }, 404)
     }
 
-    if (tenant.status !== 'active') {
-      return c.json({
-        error: 'Sua assinatura está suspensa ou cancelada.',
-        tenantStatus: tenant.status,
-        tenant: { id: tenant.id, slug: tenant.slug, nome: tenant.nome, status: tenant.status },
-      }, 403)
-    }
-
     const user = await c.env.DB_SHARED
       .prepare(`
         SELECT u.id as user_id, u.email, u.nome, u.password_hash, u.role, u.custom_role_id,
@@ -102,36 +95,26 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
 
   const matches: LoginRow[] = []
   for (const row of rows) {
-    if (row.tenant_status !== 'active') continue
     if (await PasswordHasher.verify(password, row.password_hash)) matches.push(row)
   }
 
   if (matches.length === 0) {
-    const suspended = rows.find(r => r.tenant_status !== 'active')
-    if (suspended && rows.every(r => r.tenant_status !== 'active')) {
-      return c.json({
-        error: 'Sua assinatura está suspensa ou cancelada.',
-        tenantStatus: suspended.tenant_status,
-        tenant: {
-          id: suspended.tenant_id,
-          slug: suspended.tenant_slug,
-          nome: suspended.tenant_nome,
-          status: suspended.tenant_status,
-        },
-      }, 403)
-    }
     return c.json({ error: 'E-mail ou senha incorretos.' }, 401)
   }
 
-  if (matches.length > 1) {
+  const activeMatches = matches.filter((r) => r.tenant_status === 'active')
+  const pool = activeMatches.length > 0 ? activeMatches : matches
+
+  if (pool.length > 1) {
     return c.json({
       error: 'Este e-mail está vinculado a mais de uma empresa. Informe o identificador da empresa.',
       code: 'MULTIPLE_TENANTS',
-      tenants: matches.map(m => ({ slug: m.tenant_slug, nome: m.tenant_nome })),
+      tenants: pool.map(m => ({ slug: m.tenant_slug, nome: m.tenant_nome })),
     }, 409)
   }
 
-  const row = matches[0]!
+  const row = pool[0]!
+  const billingOnly = row.tenant_status !== 'active'
 
   // Rehash transparente: se o hash armazenado estiver em formato legado
   // ou com iterações abaixo do alvo atual, gera um novo e atualiza.
@@ -149,7 +132,7 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
   }
 
   const sessionToken = crypto.randomUUID()
-  const SESSION_TTL = 60 * 60 * 24 * 7
+  const SESSION_TTL = billingOnly ? 60 * 60 * 24 : 60 * 60 * 24 * 7
 
   const sessionData = await buildSessionUserPayload(c.env.DB_SHARED, {
     userId: row.user_id,
@@ -161,10 +144,15 @@ app.post('/login', zValidator('json', loginSchema), async (c) => {
     customRoleId: row.custom_role_id,
   })
 
-  await c.env.KV_SESSIONS.put(`session:${sessionToken}`, JSON.stringify(sessionData), { expirationTtl: SESSION_TTL })
+  await c.env.KV_SESSIONS.put(
+    `session:${sessionToken}`,
+    JSON.stringify({ ...sessionData, billingOnly }),
+    { expirationTtl: SESSION_TTL },
+  )
 
   return c.json({
     token: sessionToken,
+    billingOnly,
     user: {
       id: row.user_id,
       email: row.email,
@@ -379,12 +367,7 @@ app.get('/verify-email', async (c) => {
   }
 
   // Plano pago: criar sessão Stripe
-  const STRIPE_PRICE_IDS: Record<string, string> = {
-    basico: c.env.STRIPE_PRICE_BASICO || '',
-    pro: c.env.STRIPE_PRICE_PRO || '',
-    enterprise: c.env.STRIPE_PRICE_ENTERPRISE || '',
-  }
-  const priceId = STRIPE_PRICE_IDS[data.plan]
+  const priceId = await resolvePriceIdForPlan(c.env, c.env.DB_SHARED, data.plan)
   if (!priceId) return c.json({ error: 'Plano inválido.' }, 400)
 
   const resolvedPaid = await resolveTenantSlug(c.env.DB_SHARED, data.tenantNome, data.tenantSlug)
@@ -419,6 +402,9 @@ app.get('/verify-email', async (c) => {
     cancel_url: `${frontendUrl}/checkout/cancel`,
     'metadata[tenantSlug]': finalSlug,
     'metadata[plan]': data.plan,
+    'subscription_data[metadata][tenantSlug]': finalSlug,
+    'subscription_data[metadata][plan]': data.plan,
+    'subscription_data[trial_period_days]': '14',
     allow_promotion_codes: 'true',
   })
 

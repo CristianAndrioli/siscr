@@ -15,8 +15,8 @@ app.post('/process', async (c) => {
       break
 
     case 'renovar_assinatura':
-      console.log(`[Queue] Renovando assinatura do tenant ${task.tenantSlug}`)
-      // TODO: chamar Stripe API para renovação
+    case 'reconciliar_assinatura':
+      console.log(`[Queue] Reconciliando assinatura do tenant ${task.tenantSlug}`)
       break
 
     case 'gerar_relatorio':

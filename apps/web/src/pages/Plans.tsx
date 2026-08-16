@@ -12,6 +12,8 @@ type ApiPlan = {
   max_empresas: number;
   max_filiais: number;
   max_usuarios: number;
+  max_docs_fiscais_mes?: number;
+  max_emails_mes?: number;
   caracteristicas: ApiCaracteristica[];
 };
 
@@ -39,7 +41,7 @@ const DESCRIPTIONS: Record<string, string> = {
 };
 
 const MISSING_BY_ID: Record<string, string[]> = {
-  free: ['NF-e / NFSe', 'Relatórios avançados', 'SLA garantido'],
+  free: ['NF-e / NFS-e', 'Relatórios avançados', 'SLA garantido'],
   basico: ['Múltiplas empresas', 'SLA garantido'],
   pro: ['SLA enterprise'],
   enterprise: [],
@@ -55,6 +57,9 @@ function featuresFromApi(p: ApiPlan): string[] {
     `${p.max_empresas} empresa(s)`,
     `${p.max_filiais} filial(is)`,
     `${p.max_usuarios} usuário(s)`,
+    p.max_docs_fiscais_mes
+      ? `${p.max_docs_fiscais_mes} documentos fiscais/mês`
+      : 'Sem emissão de NF-e / NFS-e',
   ];
 }
 

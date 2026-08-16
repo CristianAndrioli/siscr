@@ -22,6 +22,8 @@ export const plans = sqliteTable('plans', {
   maxEmpresas: integer('max_empresas').notNull().default(1),
   maxFiliais: integer('max_filiais').notNull().default(3),
   maxUsuarios: integer('max_usuarios').notNull().default(5),
+  maxDocsFiscaisMes: integer('max_docs_fiscais_mes').notNull().default(0),
+  maxEmailsMes: integer('max_emails_mes').notNull().default(0),
   features: text('features'), // JSON array de features
   ativo: integer('ativo', { mode: 'boolean' }).notNull().default(true),
   stripePriceIdMensal: text('stripe_price_id_mensal'),
@@ -47,6 +49,7 @@ export const tenants = sqliteTable('tenants', {
   planId: text('plan_id').references(() => plans.id),
   status: text('status').notNull().default('active'), // active | suspended | cancelled
   stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
   subscriptionExpiresAt: text('subscription_expires_at'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at'),
