@@ -5,25 +5,34 @@ import { SupportAgentRepository } from '../../repositories/SupportAgentRepositor
 import { SUPPORT_AI_TOOL_DEFS, SupportAiTools } from './SupportAiTools'
 import { sendSupportTicketEmail } from '../../lib/email'
 
-const AI_MODEL = '@cf/meta/llama-3.1-8b-instruct'
+const AI_MODELS = [
+  '@cf/meta/llama-4-scout-17b-16e-instruct',
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+] as const
 const MAX_TOOL_ROUNDS = 5
 
 const SYSTEM_PROMPT = `Você é a nano IA de suporte do SISCR, um ERP SaaS brasileiro (vendas, financeiro, estoque, NF-e, frota).
 Responda em português, de forma curta e prática.
-Use as ferramentas para consultar dados REAIS do tenant logado. Nunca invente números, pedidos ou notas.
-Se não souber, se o usuário pedir um humano, ou se o caso exigir o time SISCR (bug, cobrança, certificado A1, SEFAZ fora), chame criar_ticket.
+SEMPRE use as ferramentas antes de falar de cadastros, pedidos, notas ou financeiro. Nunca invente números, nomes, pedidos ou notas.
+- Perguntas sobre cobrança, inadimplência ou “como está o financeiro” → resumo_financeiro.
+- Busca por nome/e-mail/CPF/CNPJ em cadastros → buscar_pessoa.
+Se não souber, se o usuário pedir um humano, ou se o caso exigir o time SISCR (bug, certificado A1, SEFAZ fora), chame criar_ticket.
 Não execute alterações no ERP — só leitura e abertura de chamado.
 Quando criar um ticket, confirme ao usuário que um atendente vai assumir.`
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant' | 'tool'; content: string; name?: string }
 
+type AiToolCall = {
+  name?: string
+  arguments?: Record<string, unknown> | string
+  function?: { name: string; arguments?: Record<string, unknown> | string }
+}
+
 type AiRunResult = {
   response?: string
-  tool_calls?: Array<{
-    name?: string
-    arguments?: Record<string, unknown> | string
-    function?: { name: string; arguments?: Record<string, unknown> | string }
-  }>
+  result?: { response?: string; tool_calls?: AiToolCall[] }
+  tool_calls?: AiToolCall[]
+  choices?: Array<{ message?: { content?: string; tool_calls?: AiToolCall[] } }>
 }
 
 export class SupportAiService {
@@ -251,7 +260,7 @@ export class SupportAiService {
     ai: Ai | undefined,
   ): Promise<{ reply: string; ticketCreated: boolean; subject?: string }> {
     if (!ai) {
-      return this.fallbackReply(history)
+      return this.fallbackReply(history, tools)
     }
 
     const messages: ChatMessage[] = [
@@ -265,25 +274,37 @@ export class SupportAiService {
     let ticketCreated = false
     let subject: string | undefined
     let lastText = ''
+    let model: string = AI_MODELS[0]
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      let raw: AiRunResult
-      try {
-        raw = (await (ai.run as (model: string, input: unknown) => Promise<AiRunResult>)(AI_MODEL, {
-          messages,
-          tools: SUPPORT_AI_TOOL_DEFS,
-          max_tokens: 700,
-        })) as AiRunResult
-      } catch (err) {
-        console.error('[support.ai] run:', err)
-        return this.fallbackReply(history)
+      let raw: AiRunResult | null = null
+      for (const candidate of round === 0 ? AI_MODELS : [model]) {
+        try {
+          raw = (await (ai.run as (model: string, input: unknown) => Promise<AiRunResult>)(candidate, {
+            messages,
+            tools: SUPPORT_AI_TOOL_DEFS,
+            max_tokens: 700,
+          })) as AiRunResult
+          model = candidate
+          break
+        } catch (err) {
+          console.error('[support.ai] run', candidate, err)
+        }
+      }
+      if (!raw) {
+        return this.fallbackReply(history, tools)
       }
 
       const calls = normalizeToolCalls(raw)
       if (calls.length === 0) {
-        lastText = (raw.response ?? '').trim()
+        lastText = extractText(raw)
         break
       }
+
+      messages.push({
+        role: 'assistant',
+        content: JSON.stringify(calls),
+      })
 
       for (const call of calls) {
         if (call.name === 'criar_ticket') {
@@ -310,18 +331,22 @@ export class SupportAiService {
         'Abri um chamado para o time SISCR com o histórico desta conversa. Um atendente entra aqui em seguida.'
     }
     if (!lastText) {
-      lastText = 'Não consegui resolver sozinha. Se quiser, posso abrir um chamado para um humano.'
+      return this.fallbackReply(history, tools)
     }
     return { reply: lastText, ticketCreated, subject }
   }
 
-  private fallbackReply(history: Array<{ author_type: string; body: string }>): {
+  private async fallbackReply(
+    history: Array<{ author_type: string; body: string }>,
+    tools: SupportAiTools,
+  ): Promise<{
     reply: string
     ticketCreated: boolean
     subject?: string
-  } {
-    const last = [...history].reverse().find((m) => m.author_type === 'client')?.body.toLowerCase() ?? ''
-    const wantsHuman = /humano|atendente|suporte|pessoa|ticket|chamado/.test(last)
+  }> {
+    const last = [...history].reverse().find((m) => m.author_type === 'client')?.body ?? ''
+    const lower = last.toLowerCase()
+    const wantsHuman = /falar com (humano|atendente)|quero (um )?atendente|abrir (um )?(chamado|ticket)/.test(lower)
     if (wantsHuman) {
       return {
         reply: 'Vou abrir um chamado para o time SISCR. Um atendente assume esta conversa.',
@@ -329,16 +354,40 @@ export class SupportAiService {
         subject: last.slice(0, 80) || 'Ajuda no SISCR',
       }
     }
+
+    if (/financeiro|cobrar|inadimpl|vencid|a receber|contas? a receber/.test(lower)) {
+      const result = await tools.execute('resumo_financeiro', {})
+      return { reply: formatToolFallback('financeiro', result), ticketCreated: false }
+    }
+
+    if (/cadastro|cliente|fornecedor|funcion[aá]rio|pessoa|cpf|cnpj/.test(lower)) {
+      const q = inferSearchQuery(last)
+      if (q) {
+        const result = await tools.execute('buscar_pessoa', { q })
+        return { reply: formatToolFallback(`cadastro "${q}"`, result), ticketCreated: false }
+      }
+    }
+
     return {
       reply:
-        'Posso ajudar a localizar cadastros, pedidos, notas e contas. Descreva o que você procura. Se preferir um humano, diga “falar com atendente”.',
+        'Posso consultar cadastros, pedidos, notas e o financeiro desta empresa. Diga o nome, número ou o que precisa cobrar. Se preferir um humano, diga “falar com atendente”.',
       ticketCreated: false,
     }
   }
 }
 
+function extractText(raw: AiRunResult): string {
+  const fromChoices = raw.choices?.[0]?.message?.content
+  const text = raw.response ?? raw.result?.response ?? (typeof fromChoices === 'string' ? fromChoices : '')
+  return (text ?? '').trim()
+}
+
 function normalizeToolCalls(raw: AiRunResult): Array<{ name: string; args: Record<string, unknown> }> {
-  const calls = raw.tool_calls ?? []
+  const calls = [
+    ...(raw.tool_calls ?? []),
+    ...(raw.result?.tool_calls ?? []),
+    ...(raw.choices?.[0]?.message?.tool_calls ?? []),
+  ]
   const out: Array<{ name: string; args: Record<string, unknown> }> = []
   for (const call of calls) {
     const name = call.name ?? call.function?.name
@@ -357,6 +406,89 @@ function normalizeToolCalls(raw: AiRunResult): Array<{ name: string; args: Recor
     out.push({ name, args })
   }
   return out
+}
+
+function inferSearchQuery(text: string): string {
+  const stop = new Set([
+    'consulta',
+    'consulte',
+    'consultar',
+    'busca',
+    'buscar',
+    'procura',
+    'procurar',
+    'existe',
+    'existem',
+    'tem',
+    'nos',
+    'nas',
+    'cadastros',
+    'cadastro',
+    'cliente',
+    'clientes',
+    'pessoa',
+    'pessoas',
+    'preciso',
+    'saber',
+    'como',
+    'esta',
+    'está',
+    'veja',
+    'ver',
+  ])
+  return text
+    .replace(/[?,.!]+/g, ' ')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 2 && !stop.has(t.toLowerCase()))
+    .join(' ')
+    .trim()
+}
+
+function formatToolFallback(label: string, result: { ok: boolean; data?: unknown; error?: string }): string {
+  if (!result.ok) {
+    return `Não consegui consultar ${label} agora. Se quiser, posso abrir um chamado para um atendente.`
+  }
+
+  if (label === 'financeiro' && result.data && typeof result.data === 'object') {
+    const data = result.data as {
+      totais?: Record<string, unknown>
+      contas_vencidas?: Array<{ pessoa_nome?: string; descricao?: string; valor?: number; vencimento?: string }>
+    }
+    const t = data.totais ?? {}
+    const vencidas = data.contas_vencidas ?? []
+    const lines = [
+      `Em aberto: ${Number(t.qtd_em_aberto ?? 0)} conta(s), ${brl(t.total_em_aberto)}.`,
+      `Já vencidas (cobrar): ${Number(t.qtd_vencidas ?? 0)} conta(s), ${brl(t.total_vencido)}.`,
+      `Vencem em 7 dias: ${Number(t.qtd_vence_7d ?? 0)} conta(s), ${brl(t.total_vence_7d)}.`,
+    ]
+    if (vencidas.length > 0) {
+      lines.push('Contas atrasadas:')
+      for (const c of vencidas) {
+        lines.push(
+          `- ${c.pessoa_nome || 'sem nome'} · ${c.descricao || ''} · ${brl(c.valor)} · venc. ${c.vencimento}`,
+        )
+      }
+    } else {
+      lines.push('Não há contas vencidas no momento.')
+    }
+    return lines.join('\n')
+  }
+
+  if (Array.isArray(result.data)) {
+    if (result.data.length === 0) return `Não encontrei ${label} nesta empresa.`
+    const lines = result.data.map((row) => {
+      const r = row as { nome?: string; cpf_cnpj?: string; email?: string; tipo_cadastro?: string }
+      return `- ${r.nome || 'sem nome'}${r.tipo_cadastro ? ` (${r.tipo_cadastro})` : ''}${r.cpf_cnpj ? ` · ${r.cpf_cnpj}` : ''}${r.email ? ` · ${r.email}` : ''}`
+    })
+    return `Encontrei ${result.data.length} registro(s) em ${label}:\n${lines.join('\n')}`
+  }
+
+  return `Consulta de ${label}:\n${JSON.stringify(result.data, null, 2)}`
+}
+
+function brl(n: unknown) {
+  return Number(n ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
 export function createSupportAiService(db: D1Database) {

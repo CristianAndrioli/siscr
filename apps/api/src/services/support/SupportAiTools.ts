@@ -19,6 +19,8 @@ export class SupportAiTools {
       switch (name) {
         case 'contexto_tenant':
           return { ok: true, data: await this.contextoTenant() }
+        case 'resumo_financeiro':
+          return { ok: true, data: await this.resumoFinanceiro() }
         case 'buscar_pessoa':
           if (!q) return { ok: false, error: 'Informe q (nome, e-mail ou CPF/CNPJ).' }
           return { ok: true, data: await this.buscarPessoa(q) }
@@ -29,8 +31,7 @@ export class SupportAiTools {
           if (!q) return { ok: false, error: 'Informe q (número ou chave).' }
           return { ok: true, data: await this.buscarNotaFiscal(q) }
         case 'buscar_conta_receber':
-          if (!q) return { ok: false, error: 'Informe q (descrição ou nome).' }
-          return { ok: true, data: await this.buscarContaReceber(q) }
+          return { ok: true, data: q ? await this.buscarContaReceber(q) : await this.resumoFinanceiro() }
         case 'buscar_produto':
           if (!q) return { ok: false, error: 'Informe q (código ou descrição).' }
           return { ok: true, data: await this.buscarProduto(q) }
@@ -131,6 +132,44 @@ export class SupportAiTools {
     return results ?? []
   }
 
+  private async resumoFinanceiro() {
+    const today = new Date().toISOString().slice(0, 10)
+    const week = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    const totals = await this.db
+      .prepare(
+        `SELECT
+           COALESCE(SUM(CASE WHEN status = 'pendente' AND vencimento < ? THEN 1 ELSE 0 END), 0) AS qtd_vencidas,
+           COALESCE(SUM(CASE WHEN status = 'pendente' AND vencimento < ? THEN valor ELSE 0 END), 0) AS total_vencido,
+           COALESCE(SUM(CASE WHEN status = 'pendente' AND vencimento >= ? AND vencimento <= ? THEN 1 ELSE 0 END), 0) AS qtd_vence_7d,
+           COALESCE(SUM(CASE WHEN status = 'pendente' AND vencimento >= ? AND vencimento <= ? THEN valor ELSE 0 END), 0) AS total_vence_7d,
+           COALESCE(SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END), 0) AS qtd_em_aberto,
+           COALESCE(SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END), 0) AS total_em_aberto
+         FROM contas_receber
+         WHERE tenant_id = ?`,
+      )
+      .bind(today, today, today, week, today, week, this.tenantId)
+      .first()
+
+    const { results: vencidas } = await this.db
+      .prepare(
+        `SELECT cr.id, cr.descricao, cr.valor, cr.vencimento, cr.status, p.nome as pessoa_nome
+         FROM contas_receber cr
+         LEFT JOIN pessoas p ON p.id = cr.pessoa_id AND p.tenant_id = cr.tenant_id
+         WHERE cr.tenant_id = ? AND cr.status = 'pendente' AND cr.vencimento < ?
+         ORDER BY cr.vencimento ASC
+         LIMIT ?`,
+      )
+      .bind(this.tenantId, today, LIMIT)
+      .all()
+
+    return {
+      hoje: today,
+      totais: totals ?? {},
+      contas_vencidas: vencidas ?? [],
+    }
+  }
+
   private async buscarContaReceber(q: string) {
     const like = `%${q}%`
     const { results } = await this.db
@@ -164,89 +203,75 @@ export class SupportAiTools {
   }
 }
 
+/** Formato tradicional do Workers AI (`env.AI.run` + function calling). */
 export const SUPPORT_AI_TOOL_DEFS = [
   {
-    type: 'function' as const,
-    function: {
-      name: 'contexto_tenant',
-      description: 'Retorna dados da empresa contratante: plano, status, CNPJs cadastrados e quantidade de usuários.',
-      parameters: { type: 'object', properties: {}, additionalProperties: false },
+    name: 'contexto_tenant',
+    description: 'Retorna dados da empresa contratante: plano, status, CNPJs cadastrados e quantidade de usuários.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'resumo_financeiro',
+    description:
+      'Resumo do contas a receber do tenant: totais em aberto, vencidos e o que vence em 7 dias, com lista das contas atrasadas. Use quando o usuário perguntar se precisa cobrar, inadimplência ou como está o financeiro.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'buscar_pessoa',
+    description: 'Busca clientes, fornecedores ou funcionários por nome, e-mail ou CPF/CNPJ.',
+    parameters: {
+      type: 'object',
+      properties: { q: { type: 'string', description: 'Texto de busca' } },
+      required: ['q'],
     },
   },
   {
-    type: 'function' as const,
-    function: {
-      name: 'buscar_pessoa',
-      description: 'Busca clientes, fornecedores ou funcionários por nome, e-mail ou CPF/CNPJ.',
-      parameters: {
-        type: 'object',
-        properties: { q: { type: 'string', description: 'Texto de busca' } },
-        required: ['q'],
-      },
+    name: 'buscar_pedido',
+    description: 'Busca pedidos de venda pelo número ou nome do cliente.',
+    parameters: {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+      required: ['q'],
     },
   },
   {
-    type: 'function' as const,
-    function: {
-      name: 'buscar_pedido',
-      description: 'Busca pedidos de venda pelo número ou nome do cliente.',
-      parameters: {
-        type: 'object',
-        properties: { q: { type: 'string' } },
-        required: ['q'],
-      },
+    name: 'buscar_nota_fiscal',
+    description: 'Busca notas fiscais pelo número ou chave de acesso.',
+    parameters: {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+      required: ['q'],
     },
   },
   {
-    type: 'function' as const,
-    function: {
-      name: 'buscar_nota_fiscal',
-      description: 'Busca notas fiscais pelo número ou chave de acesso.',
-      parameters: {
-        type: 'object',
-        properties: { q: { type: 'string' } },
-        required: ['q'],
-      },
+    name: 'buscar_conta_receber',
+    description:
+      'Busca contas a receber por descrição ou nome da pessoa. Sem q, devolve o mesmo resumo de contas vencidas.',
+    parameters: {
+      type: 'object',
+      properties: { q: { type: 'string' } },
     },
   },
   {
-    type: 'function' as const,
-    function: {
-      name: 'buscar_conta_receber',
-      description: 'Busca contas a receber por descrição ou nome da pessoa.',
-      parameters: {
-        type: 'object',
-        properties: { q: { type: 'string' } },
-        required: ['q'],
-      },
+    name: 'buscar_produto',
+    description: 'Busca produtos por código ou descrição.',
+    parameters: {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+      required: ['q'],
     },
   },
   {
-    type: 'function' as const,
-    function: {
-      name: 'buscar_produto',
-      description: 'Busca produtos por código ou descrição.',
-      parameters: {
-        type: 'object',
-        properties: { q: { type: 'string' } },
-        required: ['q'],
+    name: 'criar_ticket',
+    description:
+      'Abre um chamado humano quando você não souber resolver, o usuário pedir um atendente, ou o problema exigir o time SISCR.',
+    parameters: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', description: 'Assunto curto do chamado' },
+        summary: { type: 'string', description: 'Resumo do que já foi tentado' },
       },
-    },
-  },
-  {
-    type: 'function' as const,
-    function: {
-      name: 'criar_ticket',
-      description:
-        'Abre um chamado humano quando você não souber resolver, o usuário pedir um atendente, ou o problema exigir o time SISCR.',
-      parameters: {
-        type: 'object',
-        properties: {
-          subject: { type: 'string', description: 'Assunto curto do chamado' },
-          summary: { type: 'string', description: 'Resumo do que já foi tentado' },
-        },
-        required: ['subject'],
-      },
+      required: ['subject'],
     },
   },
 ]
